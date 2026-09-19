@@ -1,0 +1,9 @@
+{"snapshots":
+ [{"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "432a5d0e0b330987cf87fb77f38c558be77594f9",
+   "file": "data/432a5d0e0b330987cf87fb77f38c558be77594f9.json",
+   "date": "2026-09-19"}]}
