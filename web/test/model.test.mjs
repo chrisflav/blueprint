@@ -589,6 +589,187 @@ check('topLevel', () => {
   has(tl, TYCH_ULTRA, 'edge roots are top level too');
 });
 
+// --- precomputed ancestor chains --------------------------------------------
+//
+// `collapseOrder` computes every object's ancestors once, topologically.  These
+// check it against the obvious breadth-first walk, which is what the rest of
+// the module used to do object by object.
+
+function walkAncestors(ord, id) {
+  const out = new Set();
+  let frontier = M.parentsOf(ord, id);
+  const seen = new Set([id]);
+  while (frontier.length) {
+    const next = [];
+    for (const p of frontier) {
+      if (seen.has(p)) continue;
+      seen.add(p);
+      out.add(p);
+      for (const q of M.parentsOf(ord, p)) if (!seen.has(q)) next.push(q);
+    }
+    frontier = next;
+  }
+  return out;
+}
+
+check('ancestors are precomputed for every object and agree with the walk', () => {
+  for (const kind of model.collapseKinds) {
+    const ord = M.collapseOrder(model, kind);
+    eq(ord.cyclic.size, 0, `no cycles in ${kind}`);
+    eq(ord.ancestors.size, model.objects.length, `${kind}: a chain per object`);
+    for (const o of model.objects) {
+      sameSet(M.ancestorsOf(ord, o.id), walkAncestors(ord, o.id), `${kind} ancestors of ${o.id}`);
+      sameSet(
+        M.expandableAncestorsOf(ord, o.id),
+        [...walkAncestors(ord, o.id)].filter((x) => ord.expandable.has(x)),
+        `${kind} expandable ancestors of ${o.id}`,
+      );
+    }
+  }
+  // The multi-parent lemma sees both branches, all the way up.
+  sameSet(M.ancestorsOf(order, 'lem-diagonal'),
+    ['sec-main-induction', 'sec-main', 'sec-applications'], 'both branches');
+});
+
+check('descendants are memoised without changing the answer', () => {
+  const first = M.descendantsOf(order, 'sec-main');
+  const second = M.descendantsOf(order, 'sec-main');
+  eq(first === second, true, 'the memo hands back the same array');
+  sameSet(second,
+    ['sec-main-induction', 'thm-tychonoff', 'lem-finite-subcover', 'lem-diagonal'],
+    'and it is still right');
+});
+
+check('a cycle in the collapse kind does not hang or poison the cache', () => {
+  // Nothing `build` emits looks like this, but a hand-edited snapshot might.
+  const cyc = M.buildModel({
+    version: 1,
+    schema: {
+      defaultCollapse: 'refines',
+      kinds: {
+        section: { boundary: {}, countable: false, collapse: false },
+        refines: {
+          boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } },
+          collapse: true, countable: false,
+        },
+      },
+    },
+    objects: [
+      { id: 'a', kind: 'section', boundary: [], attrs: {}, body: '', depth: 0 },
+      { id: 'b', kind: 'section', boundary: [], attrs: {}, body: '', depth: 0 },
+      { id: 'out', kind: 'section', boundary: [], attrs: {}, body: '', depth: 0 },
+      { id: 'r1', kind: 'refines', depth: 1, attrs: {}, body: '',
+        boundary: [{ role: 'src', id: 'a' }, { role: 'tgt', id: 'b' }] },
+      { id: 'r2', kind: 'refines', depth: 1, attrs: {}, body: '',
+        boundary: [{ role: 'src', id: 'b' }, { role: 'tgt', id: 'a' }] },
+    ],
+    derived: {},
+  });
+  const ord = M.collapseOrder(cyc, 'refines');
+  sameSet(ord.cyclic, ['a', 'b'], 'both ends of the cycle are flagged');
+  sameSet(M.ancestorsOf(ord, 'a'), ['b'], 'ancestors still terminate');
+  const v = M.makeView(cyc, 'refines', []);
+  // Neither `a` nor `b` is a root, so nothing represents them; the point is
+  // that asking does not loop forever.
+  eq(v.rep('a').size, 0, 'rep of a cyclic object is empty rather than infinite');
+  has(v.visible, 'out', 'the rest of the snapshot is unaffected');
+});
+
+// --- caches ------------------------------------------------------------------
+//
+// Views and quotients are memoised.  The bug to guard against is a *stale*
+// cache: expanding or collapsing must never hand back an answer computed for a
+// different expanded set.
+
+check('views are memoised on the normalised expanded set', () => {
+  const a = M.makeView(model, 'refines', []);
+  const b = M.makeView(model, 'refines', []);
+  eq(a === b, true, 'the same view comes back');
+  // Normalisation happens before the lookup, so these name the same view.
+  const c = M.makeView(model, 'refines', ['sec-main-induction']);
+  const d = M.makeView(model, 'refines', ['sec-main', 'sec-main-induction']);
+  const e = M.makeView(model, 'refines', ['sec-main-induction', 'sec-main', 'nonsense']);
+  eq(c === d, true, 'upward closure lands on one view');
+  eq(c === e, true, 'order and junk in the parameter do not matter');
+  eq(a === c, false, 'a different expanded set is a different view');
+  // Different collapse kinds never collide.
+  eq(M.makeView(model, 'instance_of', []) === a, false, 'keyed by kind too');
+});
+
+check('expand then collapse returns the original view, not a stale one', () => {
+  const v0 = M.makeView(model, 'refines', []);
+  const q0 = M.quotient(v0);
+  const v1 = v0.expand('sec-main');
+  const q1 = M.quotient(v1);
+  if (q1 === q0) throw new Error('the expanded view reused the collapsed quotient');
+  has(v1.visible, 'thm-tychonoff', 'expanded contents are visible');
+  hasNot(q1.dropped, 'uses/sec-main/sec-foundations', 'the coarse edge still has one end');
+
+  const v2 = v1.collapse('sec-main');
+  eq(v2 === v0, true, 'back to the very same view object');
+  const q2 = M.quotient(v2);
+  eq(q2 === q0, true, 'and to the very same quotient');
+  // ... and it really is the collapsed answer, not whatever the detour left.
+  sameSet(v2.visible, order.roots, 'visible = roots again');
+  sameSet(
+    q2.items.map((it) => it.id).filter((id) => id === TYCH_ULTRA),
+    [TYCH_ULTRA],
+    'the prose edge is drawn again',
+  );
+});
+
+check('the quotient cache is keyed by its options as well as by the view', () => {
+  const v = M.makeView(model, 'refines', []);
+  const plain = M.quotient(v);
+  eq(M.quotient(v) === plain, true, 'memoised');
+  const withK = M.quotient(v, { includeCollapseKind: true });
+  if (withK === plain) throw new Error('different options returned the cached answer');
+  const drawsRefines = (q) => q.items.some((it) => it.kind === 'refines');
+  eq(drawsRefines(plain), false, 'the collapse kind is normally hidden');
+  eq(drawsRefines(withK), true, 'and drawn when asked for');
+  const excluded = M.quotient(v, { excludeKinds: ['uses'] });
+  eq(excluded.items.some((it) => it.kind === 'uses'), false, 'excludeKinds is honoured');
+  eq(M.quotient(v) === plain, true, 'and the plain answer survived all that');
+});
+
+check('the view cache evicts without going stale', () => {
+  // More distinct views than the cache holds, then back to the first one.
+  const ids = [...order.expandable];
+  const seen = [];
+  for (let i = 0; i < 40; i += 1) {
+    const pick = ids.filter((_, j) => ((i >> j) & 1) === 1);
+    seen.push(M.makeView(model, 'refines', pick));
+  }
+  for (let i = 0; i < 40; i += 1) {
+    const pick = ids.filter((_, j) => ((i >> j) & 1) === 1);
+    const again = M.makeView(model, 'refines', pick);
+    sameSet(again.expanded, seen[i].expanded, `expanded set of view ${i}`);
+    sameSet(again.visible, seen[i].visible, `visible set of view ${i}`);
+    const q = M.quotient(again);
+    sameSet(
+      q.edges.map((e) => e.id).sort(),
+      M.quotient(seen[i]).edges.map((e) => e.id).sort(),
+      `quotient of view ${i}`,
+    );
+  }
+});
+
+check('search is indexed once and memoised per query', () => {
+  const naive = (q) => model.objects.filter((o) => {
+    const s = q.toLowerCase();
+    return o.id.toLowerCase().includes(s) ||
+      M.titleOf(o).toLowerCase().includes(s) ||
+      (o.body || '').toLowerCase().includes(s);
+  }).map((o) => o.id);
+  for (const q of ['compact', 'Tychonoff', 'ULTRAFILTER', 'tube lemma', 'zzz']) {
+    sameSet(M.searchIds(model, q), naive(q), `search "${q}"`);
+  }
+  const a = M.searchIds(model, 'compact');
+  eq(M.searchIds(model, 'compact') === a, true, 'the same query is memoised');
+  eq(M.searchIds(model, '  COMPACT ') === a, true, 'and normalised before the lookup');
+  eq(M.searchIds(model, '').size, 0, 'the empty query still finds nothing');
+});
+
 // ---------------------------------------------------------------------------
 
 if (failures.length) {

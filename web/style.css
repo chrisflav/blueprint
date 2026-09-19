@@ -392,6 +392,32 @@ table.grid tr:last-child td { border-bottom: 0; }
   pointer-events: none;
 }
 
+/* While ELK is thinking — in a worker, so panning and zooming still work, but
+   the drawing on screen is the previous view until it answers. */
+.graph-stage.laying-out .glayer { opacity: .55; }
+.graph-stage.laying-out .graph-status {
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+.graph-stage.laying-out .graph-status::after {
+  content: "";
+  display: inline-block;
+  width: .55em;
+  height: .55em;
+  margin-left: .45em;
+  vertical-align: baseline;
+  border-radius: 50%;
+  background: currentColor;
+  animation: bp-pulse 1s ease-in-out infinite;
+}
+@keyframes bp-pulse {
+  0%, 100% { opacity: .25; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .graph-stage.laying-out .graph-status::after { animation: none; opacity: .7; }
+}
+
 .legend {
   position: absolute;
   right: .75rem;

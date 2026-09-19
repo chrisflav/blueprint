@@ -115,7 +115,7 @@ function graphHref(app, id) {
   const kind = app.model.defaultCollapse;
   if (!kind) return '#/graph';
   const order = M.collapseOrder(app.model, kind);
-  const expand = M.ancestorsOf(order, id).filter((x) => order.expandable.has(x));
+  const expand = M.expandableAncestorsOf(order, id);
   const p = new URLSearchParams();
   p.set('collapse', kind);
   if (expand.length) p.set('expand', expand.join(','));

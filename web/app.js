@@ -102,12 +102,27 @@ function escapeHtml(s) {
 // markdown + KaTeX
 // ---------------------------------------------------------------------------
 
+// Both the TeX-ish and the LaTeX-ish delimiters, display forms first so that
+// `$$` is not mistaken for two empty inline formulas.
 const KATEX_DELIMS = [
   { left: '$$', right: '$$', display: true },
   { left: '\\[', right: '\\]', display: true },
   { left: '$', right: '$', display: false },
   { left: '\\(', right: '\\)', display: false },
 ];
+
+// `project.katexMacros` from the snapshot: macro name (with its backslash) to
+// KaTeX definition, for instance {"\\Fbar": "\\overline{\\mathbf F}_q"}.  A
+// copy is kept per loaded snapshot rather than the snapshot's own object,
+// because KaTeX rewrites the values it is given into its internal form.
+let katexMacros = {};
+
+function setKatexMacros(project) {
+  const declared = project && project.katexMacros;
+  katexMacros = declared && typeof declared === 'object' && !Array.isArray(declared)
+    ? Object.assign(Object.create(null), declared)
+    : Object.create(null);
+}
 
 const SKIP_TAGS = new Set(['CODE', 'PRE', 'A', 'SCRIPT', 'STYLE', 'TEXTAREA']);
 const SLUG_PATTERN = '\\[([A-Za-z0-9][A-Za-z0-9._~/-]*)\\](?!\\()';
@@ -144,14 +159,32 @@ export function renderBody(target, text, known) {
   return target;
 }
 
+/**
+ * The options every call to KaTeX auto-render gets, anywhere on the site.
+ * Exported so the tests can look at them without a browser.
+ *
+ * `throwOnError: false` plus `errorCallback` is what keeps one broken formula
+ * from taking a page with it: KaTeX leaves that formula as red source text and
+ * carries on with the rest of the element.
+ */
+export function katexOptions() {
+  return {
+    delimiters: KATEX_DELIMS,
+    macros: katexMacros,
+    throwOnError: false,
+    errorCallback: (msg) => {
+      // A formula the project's macros do not cover is a blueprint bug, not a
+      // site bug: say so once in the console and leave the source on the page.
+      if (typeof console !== 'undefined' && console.warn) console.warn('KaTeX:', msg);
+    },
+    ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+  };
+}
+
 export function renderMath(root) {
   if (typeof window.renderMathInElement !== 'function') return;
   try {
-    window.renderMathInElement(root, {
-      delimiters: KATEX_DELIMS,
-      throwOnError: false,
-      ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
-    });
+    window.renderMathInElement(root, katexOptions());
   } catch (e) {
     /* KaTeX unavailable or unhappy: leave the raw text alone. */
   }
@@ -300,6 +333,7 @@ const app = {
   clear,
   renderBody,
   renderMath,
+  katexOptions,
   linkifySlugs,
   objLink,
   objectHref,
@@ -372,6 +406,7 @@ async function loadInto(url, { sha = null, keepBase = false, entry = null } = {}
   }
   app.snapshot = snapshot;
   app.model = model.buildModel(snapshot);
+  setKatexMacros(app.model.project);
   app.dataUrl = url;
   if (!keepBase) app.baseUrl = new URL('.', new URL(url, location.href)).href;
   app.viewingSha = sha;

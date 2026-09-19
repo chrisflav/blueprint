@@ -4,7 +4,11 @@
   "project": {
     "name": "Compact",
     "title": "Compactness: a sample blueprint",
-    "docgen": "https://example.github.io/compact/docs/"
+    "docgen": "https://example.github.io/compact/docs/",
+    "katexMacros": {
+      "\\Opens": "\\mathrm{Open}",
+      "\\cover": "\\mathcal{#1}"
+    }
   },
 
   "schema": {
@@ -147,7 +151,7 @@
         "tags": ["core"],
         "order": 1
       },
-      "body": "A space $X$ is **compact** when every open cover of $X$ admits a finite subcover:\n\n$$\\forall\\, \\mathcal{U} \\subseteq \\mathrm{Open}(X),\\quad X = \\bigcup \\mathcal{U} \\;\\Rightarrow\\; \\exists\\, F \\subseteq \\mathcal{U} \\text{ finite},\\ X = \\bigcup F.$$\n\nWe do not assume Hausdorff. The filter-theoretic reformulation is [def-filter].",
+      "body": "A space $X$ is **compact** when every open cover of $X$ admits a finite subcover:\n\n\\[\\forall\\, \\cover{U} \\subseteq \\Opens(X),\\quad X = \\bigcup \\cover{U} \\;\\Rightarrow\\; \\exists\\, F \\subseteq \\cover{U} \\text{ finite},\\ X = \\bigcup F.\\]\n\nThe macros \\(\\Opens\\) and \\(\\cover{U}\\) come from `project.katexMacros`. We do not assume Hausdorff; the filter-theoretic reformulation is [def-filter].",
       "source": { "file": "blueprint/foundations/def-compact.md", "anonymous": false },
       "depth": 0
     },

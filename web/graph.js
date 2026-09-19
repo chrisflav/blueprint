@@ -2,6 +2,23 @@
 //
 // The view state (collapse kind, expanded ids, filters, search, selection)
 // lives in the URL hash query, so every graph is a shareable link.
+//
+// Size.  The default view is the fully collapsed one — a handful of chapters —
+// and the reader expands into it, so the page normally lays out tens of nodes.
+// A reader who asks for "Expand all" on a few-thousand-object blueprint gets
+// what they asked for, and that costs seconds of ELK time, so:
+//
+//   * the graph handed to ELK carries no back-references into the model (see
+//     `plainGraph`); the metadata is looked up again by id after layout;
+//   * layout runs in a Web Worker built from a Blob URL that `importScripts`
+//     the same pinned elk.bundled.js the page already loads, so the main thread
+//     keeps panning, zooming and responding while ELK thinks.  If a worker
+//     cannot be created — a Content-Security-Policy with a `worker-src` that
+//     forbids `blob:`, say — the layout falls back to the main thread and
+//     yields to the event loop between phases so the status line is painted
+//     before the browser freezes;
+//   * the status line says how many nodes are being laid out, and the
+//     "Expand all" button says so up front.
 
 import * as M from './model.js';
 
@@ -10,7 +27,7 @@ import * as M from './model.js';
 // ---------------------------------------------------------------------------
 
 let ui = null;          // {stage, svg, layer, side, ...} for the mounted page
-let elk = null;         // ELK instance
+let elk = null;         // main-thread ELK instance, used only as a fallback
 let layoutToken = 0;    // guards against out-of-order async layouts
 let prevPos = new Map(); // id -> {x, y} from the previous layout, for transitions
 let lastSignature = null;
@@ -19,6 +36,13 @@ const NODE_H = 36;
 const NODE_H2 = 46;
 const JUNCTION_R = 8;
 const CHAR_W = 6.9;
+
+// Above this many nodes plus edges, layout quality is traded for speed: ELK's
+// model-order pass and its full crossing-minimisation thoroughness together
+// cost about four times the layout time on a graph of a few hundred nodes, and
+// on a graph that large nobody can see the difference.  Below it, the layout is
+// exactly what it always was.
+const BIG_GRAPH = 120;
 
 // ---------------------------------------------------------------------------
 // state <-> URL
@@ -175,8 +199,15 @@ function renderToolbar(app, st) {
   bar.appendChild(el('div.group', el('span.lbl', 'collapse'), kindSel));
 
   const order = M.collapseOrder(m, st.collapse);
+  // Expanding everything is the one action that can put thousands of nodes on
+  // screen, so the button says so rather than springing it on the reader.
+  const whenExpanded = drawnNodeCount(m);
+  const big = whenExpanded >= BIG_GRAPH;
   bar.appendChild(el('div.group',
-    el('button', { onclick: () => writeState(app, { expand: [...order.expandable] }) }, 'Expand all'),
+    el('button', {
+      onclick: () => writeState(app, { expand: [...order.expandable] }),
+      title: `lay out all ${whenExpanded.toLocaleString()} objects at once`,
+    }, big ? `Expand all (${whenExpanded.toLocaleString()})` : 'Expand all'),
     el('button', { onclick: () => writeState(app, { expand: [] }) }, 'Collapse all')));
 
   bar.appendChild(el('div.sep'));
@@ -229,6 +260,14 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => fitToView(app) , title: 'fit the graph into the viewport' }, 'Fit'),
     el('button', { onclick: () => zoomBy(app, 1.25) }, '+'),
     el('button', { onclick: () => zoomBy(app, 1 / 1.25) }, '\u2212')));
+}
+
+/** How many nodes the fully expanded view would draw: every object that is
+ *  drawn as a box rather than as an arc. */
+function drawnNodeCount(m) {
+  let n = 0;
+  for (const kind of M.nodeKinds(m)) n += M.objectsOfKind(m, kind).length;
+  return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,24 +422,65 @@ export function buildElk(app, st, view, quot) {
 
   const graph = {
     id: 'root',
-    layoutOptions: {
-      'elk.algorithm': 'layered',
-      'elk.direction': 'DOWN',
-      'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
-      'elk.edgeRouting': 'ORTHOGONAL',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '48',
-      'elk.spacing.nodeNode': '30',
-      'elk.spacing.edgeNode': '18',
-      'elk.spacing.edgeEdge': '12',
-      'elk.layered.mergeEdges': 'true',
-      'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-      'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
-      'elk.padding': '[top=24,left=24,bottom=24,right=24]',
-    },
+    layoutOptions: layoutOptions(nodes.size + edges.length),
     children: rootChildren,
     edges,
   };
-  return { graph, nodes };
+  const edgeMeta = new Map(edges.map((e) => [e.id, e.bp]));
+  return { graph, nodes, edgeMeta };
+}
+
+/**
+ * ELK's options for a graph of this size.  `BIG_GRAPH` and above drops the
+ * model-order pass and the crossing-minimisation thoroughness; everything else
+ * is the same drawing.
+ */
+export function layoutOptions(cost) {
+  const opts = {
+    'elk.algorithm': 'layered',
+    'elk.direction': 'DOWN',
+    'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+    'elk.edgeRouting': 'ORTHOGONAL',
+    'elk.layered.spacing.nodeNodeBetweenLayers': '48',
+    'elk.spacing.nodeNode': '30',
+    'elk.spacing.edgeNode': '18',
+    'elk.spacing.edgeEdge': '12',
+    'elk.layered.mergeEdges': 'true',
+    'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+    'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+    'elk.padding': '[top=24,left=24,bottom=24,right=24]',
+  };
+  if (cost >= BIG_GRAPH) {
+    opts['elk.layered.considerModelOrder.strategy'] = 'NONE';
+    opts['elk.layered.thoroughness'] = '1';
+  }
+  return opts;
+}
+
+/**
+ * The same graph with the `bp` back-references removed: what actually goes to
+ * the layouter, and what a worker can structured-clone.  Without this, ELK (and
+ * `postMessage`) would walk the whole model through every node.
+ */
+export function plainGraph(graph) {
+  const node = (n) => {
+    const out = { id: n.id };
+    if (n.width !== undefined) out.width = n.width;
+    if (n.height !== undefined) out.height = n.height;
+    if (n.layoutOptions) out.layoutOptions = n.layoutOptions;
+    if (n.children) out.children = n.children.map(node);
+    return out;
+  };
+  return {
+    id: graph.id,
+    layoutOptions: graph.layoutOptions,
+    children: (graph.children || []).map(node),
+    edges: (graph.edges || []).map((e) => ({
+      id: e.id,
+      sources: e.sources.slice(),
+      targets: e.targets.slice(),
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -413,33 +493,39 @@ function signatureOf(st) {
 
 async function scheduleLayout(app, st, view, quot) {
   const status = ui.stage.querySelector('#graph-status');
-  if (!window.ELK) {
+  if (!window.ELK && !elkScriptUrl()) {
     status.textContent = 'ELK could not be loaded from the CDN; the graph needs it.';
     return;
   }
-  if (!elk) elk = new window.ELK();
 
   const sig = signatureOf(st);
   const structureChanged = sig !== lastSignature;
   lastSignature = sig;
 
-  const { graph, nodes } = buildElk(app, st, view, quot);
+  const { graph, nodes, edgeMeta } = buildElk(app, st, view, quot);
   const token = ++layoutToken;
-  status.textContent = 'laying out\u2026';
+
+  const n = countNodes(graph);
+  status.textContent = `laying out ${n.toLocaleString()} node${n === 1 ? '' : 's'}\u2026`;
+  ui.stage.classList.add('laying-out');
 
   let laid;
   try {
-    laid = await elk.layout(graph);
+    laid = await layoutGraph(plainGraph(graph));
   } catch (e) {
     console.error(e);
-    status.textContent = 'layout failed: ' + (e && e.message ? e.message : e);
+    if (token === layoutToken) {
+      ui.stage.classList.remove('laying-out');
+      status.textContent = 'layout failed: ' + (e && e.message ? e.message : e);
+    }
     return;
   }
   if (token !== layoutToken) return; // superseded
 
-  draw(app, st, view, quot, laid, nodes, structureChanged);
+  ui.stage.classList.remove('laying-out');
+  draw(app, st, view, quot, laid, nodes, edgeMeta, structureChanged);
   const nCount = countNodes(laid);
-  status.textContent = `${nCount} nodes, ${(laid.edges || []).length} links \u2014 ` +
+  status.textContent = `${nCount.toLocaleString()} nodes, ${(laid.edges || []).length} links \u2014 ` +
     `${view.expanded.size} expanded, collapse kind \u201c${st.collapse}\u201d`;
 }
 
@@ -448,6 +534,121 @@ function countNodes(n) {
   const walk = (x) => { for (const ch of x.children || []) { c += 1; walk(ch); } };
   walk(n);
   return c;
+}
+
+// ---------------------------------------------------------------------------
+// running ELK: in a worker when the browser lets us, on the main thread if not
+// ---------------------------------------------------------------------------
+
+let worker = null;          // the Blob worker, or null
+let workerBroken = false;   // it could not be created, or it died
+let workerSeq = 0;
+const pending = new Map();  // request id -> {resolve, reject}
+
+/** The pinned elk.bundled.js URL, taken from the tag index.html already has. */
+function elkScriptUrl() {
+  if (typeof document === 'undefined' || !document.querySelector) return null;
+  const tag = document.querySelector('script[src*="elk"]');
+  return tag ? tag.getAttribute('src') : null;
+}
+
+/**
+ * A worker whose whole program is "load ELK, lay out what you are sent".  It is
+ * built from a Blob so the deployment stays a directory of static files: no
+ * extra worker script to serve, and no build step.  The site is served plainly,
+ * without a Content-Security-Policy, so `blob:` workers and the cross-origin
+ * `importScripts` of the CDN bundle are both allowed; if a deployment does add
+ * a CSP that forbids either, worker creation throws and we fall back.
+ */
+function ensureWorker() {
+  if (worker || workerBroken) return worker;
+  const url = elkScriptUrl();
+  if (!url || typeof Worker !== 'function' || typeof Blob !== 'function' ||
+      typeof URL === 'undefined' || !URL.createObjectURL) {
+    workerBroken = true;
+    return null;
+  }
+  const absolute = new URL(url, location.href).href;
+  const source =
+    `importScripts(${JSON.stringify(absolute)});\n` +
+    'const elk = new ELK();\n' +
+    'self.onmessage = function (ev) {\n' +
+    '  var id = ev.data.id;\n' +
+    '  elk.layout(ev.data.graph).then(\n' +
+    '    function (laid) { self.postMessage({ id: id, laid: laid }); },\n' +
+    '    function (err) { self.postMessage({ id: id, error: String((err && err.message) || err) }); });\n' +
+    '};\n';
+  let objectUrl = null;
+  try {
+    objectUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+    worker = new Worker(objectUrl);
+  } catch (e) {
+    workerBroken = true;
+    worker = null;
+    if (objectUrl && URL.revokeObjectURL) URL.revokeObjectURL(objectUrl);
+    return null;
+  }
+  worker.onmessage = (ev) => {
+    const msg = ev.data || {};
+    const req = pending.get(msg.id);
+    if (!req) return;
+    pending.delete(msg.id);
+    if (msg.error) req.reject(new Error(msg.error));
+    else req.resolve(msg.laid);
+  };
+  worker.onerror = (ev) => {
+    // The worker could not even start (a blocked import, most likely).  Every
+    // outstanding request falls back to the main thread, and so does every
+    // later one.
+    workerBroken = true;
+    const waiting = [...pending.values()];
+    pending.clear();
+    try { worker.terminate(); } catch (e) { /* already gone */ }
+    worker = null;
+    for (const req of waiting) req.fallback(ev && ev.message);
+  };
+  return worker;
+}
+
+function layoutGraph(graph) {
+  const w = ensureWorker();
+  if (!w) return layoutOnMainThread(graph);
+  return new Promise((resolve, reject) => {
+    const id = (workerSeq += 1);
+    pending.set(id, {
+      resolve,
+      reject,
+      fallback: () => layoutOnMainThread(graph).then(resolve, reject),
+    });
+    try {
+      w.postMessage({ id, graph });
+    } catch (e) {
+      pending.delete(id);
+      workerBroken = true;
+      layoutOnMainThread(graph).then(resolve, reject);
+    }
+  });
+}
+
+/**
+ * The fallback.  ELK itself is synchronous here, so the best we can do is let
+ * the browser paint the "laying out N nodes" status before we take the thread
+ * away, and let it paint again before we draw.
+ */
+async function layoutOnMainThread(graph) {
+  if (!window.ELK) throw new Error('ELK could not be loaded from the CDN; the graph needs it');
+  if (!elk) elk = new window.ELK();
+  await nextFrame();
+  const laid = await elk.layout(graph);
+  await nextFrame();
+  return laid;
+}
+
+function nextFrame() {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
 }
 
 /**
@@ -485,7 +686,7 @@ function edgeOffset(abs, chain, srcId, tgtId) {
   return box ? { x: box.x, y: box.y } : { x: 0, y: 0 };
 }
 
-function draw(app, st, view, quot, laid, nodes, animate) {
+function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
   const { svgEl, clear } = app;
   const layer = clear(ui.layer);
   const { abs, chain } = absolutePositions(laid);
@@ -500,9 +701,12 @@ function draw(app, st, view, quot, laid, nodes, animate) {
   layer.appendChild(gNodes);
 
   // --- nodes, shallowest first so compounds sit behind their children ------
+  // What ELK sends back is a plain graph, so the model-side metadata is looked
+  // up again by id from what `buildElk` kept.
   const ordered = [...abs.entries()].sort((a, b) => a[1].depth - b[1].depth);
   for (const [id, box] of ordered) {
-    const meta = box.node.bp;
+    const source = nodes.get(id);
+    const meta = source && source.bp;
     if (!meta) continue;
     if (meta.kind === 'junction') {
       gNodes.appendChild(drawJunction(app, box, meta, view));
@@ -515,7 +719,7 @@ function draw(app, st, view, quot, laid, nodes, animate) {
 
   // --- edges ---------------------------------------------------------------
   for (const e of laid.edges || []) {
-    const meta = e.bp;
+    const meta = edgeMeta.get(e.id);
     if (!meta) continue;
     const srcId = e.sources[0];
     const tgtId = e.targets[0];

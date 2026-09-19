@@ -14,8 +14,36 @@
 //     a coarse object carrying its own prose, and its details nest under it.
 //
 // Edges of the collapse kind itself are never shown: they *are* the structure.
+//
+// Size.  A real blueprint is a few thousand objects, and turning all of their
+// prose into HTML — marked, then KaTeX, then the `[slug]` pass — takes tens of
+// seconds.  So the page is built lazily, in two ways:
+//
+//   * the section headings are appended in chunks, the first chunk
+//     synchronously (so there is something to read straight away) and the rest
+//     a frame at a time;
+//   * a section's prose is rendered only when it comes near the viewport, via
+//     an IntersectionObserver.  Scrolling through the whole document therefore
+//     costs exactly as much as reading all of it would, spread over the
+//     reading, and jumping to one section costs one section.
+//
+// Both degrade: without an IntersectionObserver every body is rendered as it is
+// appended, which is what the page used to do.
 
 import * as M from './model.js';
+
+// How much is built before the first paint, and how much per frame afterwards.
+const FIRST_CHUNK = 40;
+const CHUNK = 120;
+// Above this many entries the contents list is restricted to objects that
+// actually contain something; a thousand-line table of contents helps nobody.
+const TOC_STRUCTURE_ONLY = 400;
+
+// Guards the chunked append and the observer against a route change landing
+// mid-build.
+let buildToken = 0;
+let observer = null;
+let deferred = new Map(); // placeholder element -> the render to run when seen
 
 export function render(root, app) {
   const { el, clear } = app;
@@ -28,6 +56,9 @@ export function render(root, app) {
       el('p', 'The document view needs a kind with ', el('code', 'collapse = true'), '.')));
     return;
   }
+
+  const token = ++buildToken;
+  resetDeferred();
 
   const order = M.collapseOrder(m, kind);
   const known = app.knownIds();
@@ -87,8 +118,13 @@ export function render(root, app) {
   toc.appendChild(tocList);
 
   // ------------------------------------------------------------------ body
+  //
+  // The numbering has to run over the whole list up front — an entry's number
+  // depends on everything before it — but building the sections is chunked and
+  // the prose inside them is deferred until it is scrolled to.
+  const tocStructureOnly = entries.length > TOC_STRUCTURE_ONLY;
   const numbering = [];
-  for (const entry of entries) {
+  const build = (entry) => {
     const o = entry.object;
 
     numbering.length = entry.depth + 1;
@@ -129,7 +165,7 @@ export function render(root, app) {
       if (hasProse(o)) {
         const prose = el('div.prose.body-prose');
         section.appendChild(prose);
-        app.renderBody(prose, o.body, known);
+        defer(prose, () => app.renderBody(prose, o.body, known));
       }
       for (const step of stepsFor.get(o.id) || []) {
         section.appendChild(stepBlock(app, step, known));
@@ -138,7 +174,7 @@ export function render(root, app) {
 
     body.appendChild(section);
 
-    if (entry.depth <= 2 && !entry.duplicate) {
+    if (entry.depth <= 2 && !entry.duplicate && !(tocStructureOnly && !hasKids(o.id))) {
       tocList.appendChild(el('li', { class: 'lvl-' + entry.depth },
         el('a', {
           // A real route, so the link survives middle-click and reload; the
@@ -147,12 +183,75 @@ export function render(root, app) {
           onclick: scrollTo(anchor),
         }, el('span.muted', num + ' '), M.titleOf(o))));
     }
-  }
+  };
 
-  if (focus) {
-    const target = document.getElementById('doc-' + cssId(focus));
-    if (target) requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
+  const eager = Math.min(entries.length, FIRST_CHUNK);
+  for (let i = 0; i < eager; i += 1) build(entries[i]);
+
+  // Scrolling to a focused section has to wait until that section has been
+  // built.  Sections are appended in order, so rather than building the whole
+  // document up front we try after every chunk, and hurry the chunks along
+  // until the target turns up.
+  let wanted = focus || null;
+  const tryScroll = () => {
+    if (!wanted) return;
+    const target = document.getElementById('doc-' + cssId(wanted));
+    if (!target) return;
+    wanted = null;
+    requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
+  };
+  tryScroll();
+
+  if (eager < entries.length) {
+    const step = (from) => {
+      if (token !== buildToken) return; // the reader went somewhere else
+      const to = Math.min(entries.length, from + (wanted ? CHUNK * 4 : CHUNK));
+      for (let i = from; i < to; i += 1) build(entries[i]);
+      tryScroll();
+      if (to < entries.length) schedule(() => step(to));
+    };
+    schedule(() => step(eager));
   }
+}
+
+function schedule(fn) {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => fn());
+  else setTimeout(fn, 0);
+}
+
+// ---------------------------------------------------------------------------
+// deferred prose
+// ---------------------------------------------------------------------------
+
+function resetDeferred() {
+  if (observer) observer.disconnect();
+  observer = null;
+  deferred = new Map();
+}
+
+/**
+ * Render `fn` into `node` when `node` is about to come into view.  Without an
+ * IntersectionObserver there is no honest way to know, so everything is
+ * rendered immediately, exactly as the page used to behave.
+ */
+function defer(node, fn) {
+  if (typeof IntersectionObserver !== 'function') {
+    fn();
+    return;
+  }
+  if (!observer) {
+    observer = new IntersectionObserver((records, obs) => {
+      for (const r of records) {
+        if (!r.isIntersecting) continue;
+        const run = deferred.get(r.target);
+        obs.unobserve(r.target);
+        deferred.delete(r.target);
+        if (run) run();
+      }
+    }, { rootMargin: '800px 0px' });
+  }
+  deferred.set(node, fn);
+  observer.observe(node);
 }
 
 function scrollTo(anchor) {
@@ -179,7 +278,7 @@ function stepBlock(app, o, known) {
   if (o.body && o.body.trim()) {
     const prose = el('div.body-prose.step-prose');
     block.appendChild(prose);
-    app.renderBody(prose, o.body, known);
+    defer(prose, () => app.renderBody(prose, o.body, known));
   }
   return block;
 }

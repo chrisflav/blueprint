@@ -127,28 +127,49 @@ function miniStack(app, counts) {
   return bar;
 }
 
+// A few thousand rows of badges and progress bars is a slow page and an
+// unreadable one; the rest is one click away.
+const FIRST_ROWS = 300;
+
 function objectTable(app, kind) {
   const { el } = app;
   const m = app.model;
-  const rows = m.objects
+  const objects = m.objects
     .filter((o) => m.kinds[o.kind] && m.kinds[o.kind].countable)
-    .sort((a, b) => (M.titleOf(a) < M.titleOf(b) ? -1 : 1))
-    .map((o) => {
-      const s = M.statusOf(m, o.id);
-      const p = M.progressOf(m, kind, o.id);
-      const chains = M.ancestorChains(M.collapseOrder(m, kind), o.id);
-      const where = chains.length && chains[0].length ? chains[0][chains[0].length - 1] : null;
-      return el('tr',
-        el('td', app.objLink(m, o.id)),
-        el('td', app.kindBadge(o.kind)),
-        el('td', s === null ? el('span.muted', '—') : app.statusBadge(s)),
-        el('td', where ? app.objLink(m, where) : el('span.muted', '—')),
-        el('td', p ? app.progressBar(p) : el('span.muted', '—')));
-    });
-  return el('div.table-wrap', el('table.grid',
+    .sort((a, b) => (M.titleOf(a) < M.titleOf(b) ? -1 : 1));
+
+  const order = M.collapseOrder(m, kind);
+  const row = (o) => {
+    const s = M.statusOf(m, o.id);
+    const p = M.progressOf(m, kind, o.id);
+    const chains = M.ancestorChains(order, o.id);
+    const where = chains.length && chains[0].length ? chains[0][chains[0].length - 1] : null;
+    return el('tr',
+      el('td', app.objLink(m, o.id)),
+      el('td', app.kindBadge(o.kind)),
+      el('td', s === null ? el('span.muted', '—') : app.statusBadge(s)),
+      el('td', where ? app.objLink(m, where) : el('span.muted', '—')),
+      el('td', p ? app.progressBar(p) : el('span.muted', '—')));
+  };
+
+  const shown = objects.slice(0, FIRST_ROWS);
+  const rest = objects.slice(FIRST_ROWS);
+  const tbody = el('tbody', ...shown.map(row));
+  const table = el('div.table-wrap', el('table.grid',
     el('thead', el('tr',
       el('th', 'Object'), el('th', 'Kind'), el('th', 'Status'), el('th', 'Under'), el('th', 'Progress'))),
-    el('tbody', ...rows)));
+    tbody));
+  if (!rest.length) return table;
+
+  const more = el('p.muted.small',
+    `Showing the first ${FIRST_ROWS} of ${objects.length} objects. `,
+    el('button', {
+      onclick: () => {
+        for (const o of rest) tbody.appendChild(row(o));
+        more.textContent = `All ${objects.length} objects.`;
+      },
+    }, `Show all ${objects.length}`));
+  return el('div', table, more);
 }
 
 // ---------------------------------------------------------------------------
