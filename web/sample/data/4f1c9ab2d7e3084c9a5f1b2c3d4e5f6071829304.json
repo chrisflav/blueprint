@@ -1,0 +1,878 @@
+{
+ "version": 1,
+ "generated": "2026-06-02T09:00:00Z",
+ "project": {
+  "name": "Compact",
+  "title": "Compactness: a sample blueprint",
+  "docgen": "https://example.github.io/compact/docs/"
+ },
+ "schema": {
+  "defaultCollapse": "refines",
+  "kinds": {
+   "section": {
+    "boundary": {},
+    "kinds": {},
+    "attrs": [
+     "title",
+     "order",
+     "aliases"
+    ],
+    "constraints": [],
+    "collapse": false,
+    "countable": false,
+    "sugar": false,
+    "color": "#7a8aa0"
+   },
+   "definition": {
+    "boundary": {},
+    "kinds": {},
+    "attrs": [
+     "title",
+     "lean",
+     "review",
+     "tags",
+     "order",
+     "aliases"
+    ],
+    "constraints": [],
+    "collapse": false,
+    "countable": true,
+    "sugar": false,
+    "color": "#5b8def"
+   },
+   "theorem": {
+    "boundary": {},
+    "kinds": {},
+    "attrs": [
+     "title",
+     "lean",
+     "review",
+     "tags",
+     "order",
+     "aliases"
+    ],
+    "constraints": [],
+    "collapse": false,
+    "countable": true,
+    "sugar": false,
+    "color": "#4a7"
+   },
+   "lemma": {
+    "boundary": {},
+    "kinds": {},
+    "attrs": [
+     "title",
+     "lean",
+     "review",
+     "tags",
+     "order",
+     "aliases"
+    ],
+    "constraints": [],
+    "collapse": false,
+    "countable": true,
+    "sugar": false,
+    "color": "#59a"
+   },
+   "uses": {
+    "boundary": {
+     "src": {
+      "min": 1,
+      "max": 1
+     },
+     "tgt": {
+      "min": 1,
+      "max": 1
+     }
+    },
+    "kinds": {
+     "src": [],
+     "tgt": []
+    },
+    "attrs": [
+     "title"
+    ],
+    "constraints": [],
+    "collapse": false,
+    "countable": false,
+    "sugar": true
+   },
+   "refines": {
+    "boundary": {
+     "src": {
+      "min": 1,
+      "max": 1
+     },
+     "tgt": {
+      "min": 1,
+      "max": 1
+     }
+    },
+    "kinds": {},
+    "attrs": [
+     "title"
+    ],
+    "constraints": [
+     "acyclic"
+    ],
+    "collapse": true,
+    "countable": false,
+    "sugar": true
+   },
+   "instance_of": {
+    "boundary": {
+     "src": {
+      "min": 1,
+      "max": 1
+     },
+     "tgt": {
+      "min": 1,
+      "max": 1
+     }
+    },
+    "kinds": {},
+    "attrs": [
+     "title"
+    ],
+    "constraints": [
+     "acyclic"
+    ],
+    "collapse": true,
+    "countable": false,
+    "sugar": true
+   },
+   "generalises": {
+    "boundary": {
+     "src": {
+      "min": 1,
+      "max": 1
+     },
+     "tgt": {
+      "min": 1,
+      "max": 1
+     }
+    },
+    "kinds": {
+     "src": [
+      "uses"
+     ],
+     "tgt": [
+      "uses"
+     ]
+    },
+    "attrs": [
+     "title"
+    ],
+    "constraints": [],
+    "collapse": false,
+    "countable": false,
+    "sugar": false
+   },
+   "commutes": {
+    "boundary": {
+     "edges": {
+      "min": 2,
+      "max": null
+     }
+    },
+    "kinds": {
+     "edges": [
+      "uses"
+     ]
+    },
+    "attrs": [
+     "title"
+    ],
+    "constraints": [
+     "unique"
+    ],
+    "collapse": false,
+    "countable": false,
+    "sugar": false
+   }
+  }
+ },
+ "objects": [
+  {
+   "id": "sec-foundations",
+   "kind": "section",
+   "boundary": [],
+   "attrs": {
+    "title": "Foundations",
+    "order": 1
+   },
+   "body": "The basic vocabulary: covers, filters, nets, and the definition of compactness we will actually use.\n\nEverything in this section is elementary; the point is to fix the formulation that makes [thm-tychonoff] painless.",
+   "source": {
+    "file": "blueprint/foundations/_section.md",
+    "anonymous": false
+   },
+   "depth": 0
+  },
+  {
+   "id": "sec-main",
+   "kind": "section",
+   "boundary": [],
+   "attrs": {
+    "title": "The main theorem",
+    "order": 2
+   },
+   "body": "We prove Tychonoff's theorem for arbitrary products. The argument is the ultrafilter one; the classical subcover argument is recorded in [sec-main-induction] because it is what the applications actually use.",
+   "source": {
+    "file": "blueprint/main/_section.md",
+    "anonymous": false
+   },
+   "depth": 0
+  },
+  {
+   "id": "sec-main-induction",
+   "kind": "section",
+   "boundary": [],
+   "attrs": {
+    "title": "The subcover induction",
+    "order": 1
+   },
+   "body": "A self-contained induction on the number of factors. It is logically redundant given [lem-ultrafilter] but it is constructive and it is what [sec-applications] reuses.",
+   "source": {
+    "file": "blueprint/main/induction/_section.md",
+    "anonymous": false
+   },
+   "depth": 0
+  },
+  {
+   "id": "def-compact",
+   "kind": "definition",
+   "boundary": [],
+   "attrs": {
+    "title": "Compact space",
+    "lean": [
+     "Compact.isCompact"
+    ],
+    "review": "reviewed",
+    "tags": [
+     "core"
+    ],
+    "order": 1
+   },
+   "body": "A space $X$ is **compact** when every open cover of $X$ admits a finite subcover:\n\n$$\\forall\\, \\mathcal{U} \\subseteq \\mathrm{Open}(X),\\quad X = \\bigcup \\mathcal{U} \\;\\Rightarrow\\; \\exists\\, F \\subseteq \\mathcal{U} \\text{ finite},\\ X = \\bigcup F.$$\n\nWe do not assume Hausdorff. The filter-theoretic reformulation is [def-filter].",
+   "source": {
+    "file": "blueprint/foundations/def-compact.md",
+    "anonymous": false
+   },
+   "depth": 0
+  },
+  {
+   "id": "def-filter",
+   "kind": "definition",
+   "boundary": [],
+   "attrs": {
+    "title": "Filters and ultrafilters",
+    "lean": [
+     "Compact.Filter",
+     "Compact.Ultrafilter"
+    ],
+    "review": "ready",
+    "tags": [
+     "core"
+    ],
+    "order": 2
+   },
+   "body": "A **filter** on $X$ is a nonempty upward-closed set $\\mathcal{F} \\subseteq \\mathcal{P}(X)$ closed under finite intersection with $\\emptyset \\notin \\mathcal{F}$. An **ultrafilter** is a maximal filter; equivalently $A \\in \\mathcal{F}$ or $X \\setminus A \\in \\mathcal{F}$ for every $A$.\n\nCompare [def-compact]: $X$ is compact iff every ultrafilter on $X$ converges.",
+   "source": {
+    "file": "blueprint/foundations/def-filter.md",
+    "anonymous": false
+   },
+   "depth": 0
+  },
+  {
+   "id": "def-metric",
+   "kind": "definition",
+   "boundary": [],
+   "attrs": {
+    "title": "Metric spaces",
+    "review": "draft",
+    "order": 4
+   },
+   "body": "The usual $(X, d)$ with $d$ symmetric, separating and satisfying the triangle inequality. Not yet formalised: this object carries no `lean` attribute, so its derived status is `absent`.",
+   "source": {
+    "file": "blueprint/foundations/def-metric.md",
+    "anonymous": false
+   },
+   "depth": 0
+  },
+  {
+   "id": "lem-ultrafilter",
+   "kind": "lemma",
+   "boundary": [],
+   "attrs": {
+    "title": "Ultrafilter criterion",
+    "lean": [
+     "Compact.ultrafilter_le"
+    ],
+    "review": "reviewed",
+    "tags": [
+     "core",
+     "choice"
+    ],
+    "order": 5
+   },
+   "body": "$X$ is compact if and only if every ultrafilter on $X$ converges to some point of $X$.\n\nThe proof uses the ultrafilter lemma, hence the derived status `proved_with_axioms`: it depends on `Classical.choice` plus a project-local axiom.",
+   "source": {
+    "file": "blueprint/foundations/lem-ultrafilter.md",
+    "anonymous": false
+   },
+   "depth": 0
+  },
+  {
+   "id": "thm-tychonoff",
+   "kind": "theorem",
+   "boundary": [],
+   "attrs": {
+    "title": "Tychonoff's theorem",
+    "lean": [
+     "Compact.tychonoff"
+    ],
+    "review": "ready",
+    "tags": [
+     "headline"
+    ],
+    "order": 1
+   },
+   "body": "Let $(X_i)_{i \\in I}$ be a family of compact spaces. Then $\\prod_{i \\in I} X_i$ is compact in the product topology.\n\nThe proof is [uses/thm-tychonoff/lem-ultrafilter]: push an ultrafilter forward along each projection, take a limit coordinatewise, and check that the resulting point is a limit of the original ultrafilter.",
+   "source": {
+    "file": "blueprint/main/thm-tychonoff.md",
+    "anonymous": false
+   },
+   "depth": 0
+  },
+  {
+   "id": "lem-finite-subcover",
+   "kind": "lemma",
+   "boundary": [],
+   "attrs": {
+    "title": "Finite products, by subcovers",
+    "lean": [
+     "Compact.finite_subcover"
+    ],
+    "review": "ready",
+    "order": 1
+   },
+   "body": "If $X$ and $Y$ are compact then so is $X \\times Y$, by the tube lemma. Induction gives finite products without any choice.",
+   "source": {
+    "file": "blueprint/main/induction/lem-finite-subcover.md",
+    "anonymous": false
+   },
+   "depth": 0
+  },
+  {
+   "id": "uses/thm-tychonoff/lem-ultrafilter",
+   "kind": "uses",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "thm-tychonoff"
+    },
+    {
+     "role": "tgt",
+     "id": "lem-ultrafilter"
+    }
+   ],
+   "attrs": {
+    "title": "Ultrafilter proof of Tychonoff"
+   },
+   "body": "Let $\\mathcal{U}$ be an ultrafilter on $\\prod_i X_i$. The argument has three steps: [lem-base-case], [lem-inductive-step] and [lem-limit-point].\n\nThis edge carries prose and is itself refined by those three lemmas, so it is an object that can be expanded like any other.",
+   "source": {
+    "file": "blueprint/main/uses-tychonoff-ultrafilter.md",
+    "anonymous": false
+   },
+   "depth": 1
+  },
+  {
+   "id": "uses/thm-tychonoff/def-compact",
+   "kind": "uses",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "thm-tychonoff"
+    },
+    {
+     "role": "tgt",
+     "id": "def-compact"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/main/thm-tychonoff.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "uses/lem-ultrafilter/def-filter",
+   "kind": "uses",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "lem-ultrafilter"
+    },
+    {
+     "role": "tgt",
+     "id": "def-filter"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/foundations/lem-ultrafilter.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "uses/lem-ultrafilter/def-compact",
+   "kind": "uses",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "lem-ultrafilter"
+    },
+    {
+     "role": "tgt",
+     "id": "def-compact"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/foundations/lem-ultrafilter.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "uses/lem-finite-subcover/def-compact",
+   "kind": "uses",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "lem-finite-subcover"
+    },
+    {
+     "role": "tgt",
+     "id": "def-compact"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/main/induction/lem-finite-subcover.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "uses/sec-main/sec-foundations",
+   "kind": "uses",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "sec-main"
+    },
+    {
+     "role": "tgt",
+     "id": "sec-foundations"
+    }
+   ],
+   "attrs": {
+    "title": "The main theorem rests on the foundations"
+   },
+   "body": "A coarse edge, declared by hand at section level. It is witnessed by several finer edges, so the view shows it as consistent.",
+   "source": {
+    "file": "blueprint/main/_section.md",
+    "anonymous": false
+   },
+   "depth": 1
+  },
+  {
+   "id": "refines/sec-main-induction/sec-main",
+   "kind": "refines",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "sec-main-induction"
+    },
+    {
+     "role": "tgt",
+     "id": "sec-main"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/main/induction/_section.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "refines/def-compact/sec-foundations",
+   "kind": "refines",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "def-compact"
+    },
+    {
+     "role": "tgt",
+     "id": "sec-foundations"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/foundations/def-compact.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "refines/def-filter/sec-foundations",
+   "kind": "refines",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "def-filter"
+    },
+    {
+     "role": "tgt",
+     "id": "sec-foundations"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/foundations/def-filter.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "refines/def-metric/sec-foundations",
+   "kind": "refines",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "def-metric"
+    },
+    {
+     "role": "tgt",
+     "id": "sec-foundations"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/foundations/def-metric.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "refines/lem-ultrafilter/sec-foundations",
+   "kind": "refines",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "lem-ultrafilter"
+    },
+    {
+     "role": "tgt",
+     "id": "sec-foundations"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/foundations/lem-ultrafilter.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "refines/thm-tychonoff/sec-main",
+   "kind": "refines",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "thm-tychonoff"
+    },
+    {
+     "role": "tgt",
+     "id": "sec-main"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/main/thm-tychonoff.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "refines/lem-finite-subcover/sec-main-induction",
+   "kind": "refines",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "lem-finite-subcover"
+    },
+    {
+     "role": "tgt",
+     "id": "sec-main-induction"
+    }
+   ],
+   "attrs": {},
+   "body": "",
+   "source": {
+    "file": "blueprint/main/induction/lem-finite-subcover.md",
+    "anonymous": true
+   },
+   "depth": 1
+  },
+  {
+   "id": "generalises/uses~lem-finite-subcover~def-compact/uses~thm-tychonoff~def-compact",
+   "kind": "generalises",
+   "boundary": [
+    {
+     "role": "src",
+     "id": "uses/lem-finite-subcover/def-compact"
+    },
+    {
+     "role": "tgt",
+     "id": "uses/thm-tychonoff/def-compact"
+    }
+   ],
+   "attrs": {
+    "title": "from finite to arbitrary products"
+   },
+   "body": "An object whose boundary consists of two **edges**: the way the finite-product lemma consumes compactness is the special case $|I| < \\omega$ of the way Tychonoff consumes it. Objects like this are the reason the model has no notion of maximal depth.",
+   "source": {
+    "file": "blueprint/main/generalises-subcover-tychonoff.md",
+    "anonymous": false
+   },
+   "depth": 2
+  }
+ ],
+ "facts": {
+  "Compact.tychonoff": {
+   "exists": true,
+   "kind": "theorem",
+   "signature": "theorem Compact.tychonoff {I : Type u} {X : I → Type v} [∀ i, TopologicalSpace (X i)] (h : ∀ i, IsCompact (Set.univ : Set (X i))) : IsCompact (Set.univ : Set (∀ i, X i))",
+   "module": "Compact.Main",
+   "range": {
+    "file": "Compact/Main.lean",
+    "startLine": 42,
+    "endLine": 71
+   },
+   "doc": "Tychonoff's theorem: an arbitrary product of compact spaces is compact.",
+   "status": "stated",
+   "axioms": [
+    "propext",
+    "Classical.choice",
+    "Quot.sound",
+    "sorryAx"
+   ],
+   "deps": [
+    "Compact.ultrafilter_le",
+    "Compact.isCompact",
+    "Compact.Filter"
+   ]
+  },
+  "Compact.isCompact": {
+   "exists": true,
+   "kind": "definition",
+   "signature": "def Compact.isCompact {X : Type u} [TopologicalSpace X] (s : Set X) : Prop",
+   "module": "Compact.Basic",
+   "range": {
+    "file": "Compact/Basic.lean",
+    "startLine": 12,
+    "endLine": 15
+   },
+   "doc": "A set is compact when every open cover has a finite subcover.",
+   "status": "proved",
+   "axioms": [],
+   "deps": []
+  },
+  "Compact.Filter": {
+   "exists": true,
+   "kind": "structure",
+   "signature": "structure Compact.Filter (X : Type u) : Type u",
+   "module": "Compact.Basic",
+   "range": {
+    "file": "Compact/Basic.lean",
+    "startLine": 30,
+    "endLine": 38
+   },
+   "doc": null,
+   "status": "proved",
+   "axioms": [],
+   "deps": []
+  },
+  "Compact.Ultrafilter": {
+   "exists": true,
+   "kind": "structure",
+   "signature": "structure Compact.Ultrafilter (X : Type u) extends Compact.Filter X : Type u",
+   "module": "Compact.Basic",
+   "range": {
+    "file": "Compact/Basic.lean",
+    "startLine": 40,
+    "endLine": 46
+   },
+   "doc": "A maximal filter.",
+   "status": "proved",
+   "axioms": [],
+   "deps": [
+    "Compact.Filter"
+   ]
+  },
+  "Compact.ultrafilter_le": {
+   "exists": true,
+   "kind": "theorem",
+   "signature": "theorem Compact.ultrafilter_le {X : Type u} [TopologicalSpace X] : IsCompact (Set.univ : Set X) ↔ ∀ (u : Compact.Ultrafilter X), ∃ x, u ≤ nhds x",
+   "module": "Compact.Filters",
+   "range": {
+    "file": "Compact/Filters.lean",
+    "startLine": 88,
+    "endLine": 140
+   },
+   "doc": "The ultrafilter criterion for compactness.",
+   "status": "proved_with_axioms",
+   "axioms": [
+    "propext",
+    "Classical.choice",
+    "Quot.sound",
+    "Compact.ultrafilterLemma"
+   ],
+   "deps": [
+    "Compact.Filter"
+   ]
+  },
+  "Compact.finite_subcover": {
+   "exists": true,
+   "kind": "theorem",
+   "signature": "theorem Compact.finite_subcover {X Y : Type u} [TopologicalSpace X] [TopologicalSpace Y] (hX : IsCompact (Set.univ : Set X)) (hY : IsCompact (Set.univ : Set Y)) : IsCompact (Set.univ : Set (X × Y))",
+   "module": "Compact.Induction",
+   "range": {
+    "file": "Compact/Induction.lean",
+    "startLine": 10,
+    "endLine": 55
+   },
+   "doc": "The tube lemma, in the form we need.",
+   "status": "proved",
+   "axioms": [
+    "propext",
+    "Quot.sound"
+   ],
+   "deps": [
+    "Compact.isCompact"
+   ]
+  }
+ },
+ "derived": {
+  "status": {
+   "def-compact": "proved",
+   "def-filter": "stated",
+   "def-metric": "absent",
+   "lem-ultrafilter": "stated",
+   "lem-finite-subcover": "stated",
+   "thm-tychonoff": "absent"
+  },
+  "progress": {
+   "refines": {
+    "sec-foundations": {
+     "proved": 1,
+     "total": 4
+    },
+    "sec-main": {
+     "proved": 0,
+     "total": 2
+    },
+    "sec-main-induction": {
+     "proved": 0,
+     "total": 1
+    },
+    "def-compact": {
+     "proved": 1,
+     "total": 1
+    },
+    "def-filter": {
+     "proved": 0,
+     "total": 1
+    },
+    "def-metric": {
+     "proved": 0,
+     "total": 1
+    },
+    "lem-ultrafilter": {
+     "proved": 0,
+     "total": 1
+    },
+    "thm-tychonoff": {
+     "proved": 0,
+     "total": 1
+    },
+    "lem-finite-subcover": {
+     "proved": 0,
+     "total": 1
+    }
+   },
+   "instance_of": {
+    "def-compact": {
+     "proved": 1,
+     "total": 1
+    },
+    "def-filter": {
+     "proved": 0,
+     "total": 1
+    },
+    "def-metric": {
+     "proved": 0,
+     "total": 1
+    },
+    "lem-ultrafilter": {
+     "proved": 0,
+     "total": 1
+    },
+    "thm-tychonoff": {
+     "proved": 0,
+     "total": 1
+    },
+    "lem-finite-subcover": {
+     "proved": 0,
+     "total": 1
+    }
+   }
+  },
+  "checks": [
+   {
+    "level": "warning",
+    "code": "actual-not-declared",
+    "message": "Lean says `Compact.tychonoff` depends on `Compact.Filter` (`def-filter`) but no `uses` edge declares it.",
+    "objects": [
+     "thm-tychonoff",
+     "def-filter"
+    ]
+   },
+   {
+    "level": "info",
+    "code": "undeclared-edge",
+    "message": "With collapse kind `refines`, `uses/thm-tychonoff/lem-ultrafilter` is reached from `sec-main` but only through the expanded edge object.",
+    "objects": [
+     "uses/thm-tychonoff/lem-ultrafilter",
+     "sec-main"
+    ]
+   }
+  ]
+ }
+}
