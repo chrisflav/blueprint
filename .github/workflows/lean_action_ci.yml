@@ -1,0 +1,135 @@
+name: Lean Action CI
+
+# Two jobs:
+#
+#   test  builds the tool and runs ./test.sh, on every push and pull request.
+#   site  builds the website for examples/induction and publishes it to
+#         GitHub Pages, on pushes to the default branch only.  The snapshot
+#         history lives on the `gh-pages` branch under `data/`, is restored
+#         from there before the site is assembled, and is pushed back after,
+#         so that the website's time slider keeps growing with the project
+#         (DESIGN.md §7).
+#
+# Pages must be configured once, by hand, in the repository settings:
+# Settings -> Pages -> Build and deployment -> Source: GitHub Actions.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# The default token may only read; the site job needs to write the
+# `gh-pages` branch and to deploy to Pages.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # elan, the toolchain of lean-toolchain, `lake build`, and the Lake
+      # cache.  Everything below runs through `lake exe`, so LEAN_PATH is set.
+      - uses: leanprover/lean-action@v1
+      - name: Run the acceptance tests
+        run: ./test.sh
+
+  site:
+    # Only the default branch publishes; a pull request just runs `test`.
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    needs: test
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write      # push the history back to `gh-pages`
+      pages: write         # deploy to GitHub Pages
+      id-token: write      # OIDC token the Pages deployment needs
+
+    # Two deployments of the same site must not overlap, but a queued one
+    # must not be cancelled either, or a snapshot would be lost.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: leanprover/lean-action@v1
+
+      # The Lean facts of the example: proof status and actual dependencies,
+      # read out of the BlueprintExamples library of this repository.  Run
+      # through `lake exe` so that the .olean files are on LEAN_PATH.
+      - name: Extract the Lean facts
+        run: lake exe blueprint extract --root examples/induction
+
+      - name: Build the snapshot
+        run: lake exe blueprint build --root examples/induction -o snapshot.json
+
+      # `history/` is the directory the website is served with as `data/`.
+      # It starts as whatever `gh-pages` already holds, so that every
+      # snapshot ever published stays in the index.
+      - name: Restore the snapshot history from gh-pages
+        env:
+          REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads "$REMOTE" gh-pages > /dev/null 2>&1; then
+            git clone --depth 1 --branch gh-pages "$REMOTE" gh-pages
+          else
+            echo "no gh-pages branch yet; starting an empty one"
+            mkdir gh-pages
+            git -C gh-pages init -q -b gh-pages
+            git -C gh-pages remote add origin "$REMOTE"
+          fi
+          mkdir -p history
+          if [ -d gh-pages/data ]; then
+            cp -a gh-pages/data/. history/
+          fi
+          ls -la history
+
+      # Files the snapshot as history/<sha>.json and folds it into
+      # history/index.json, whose entries the time slider reads.  The sha and
+      # the date default to HEAD and its commit date.
+      - name: Add this commit's snapshot to the history
+        run: lake exe blueprint history add snapshot.json --dir history
+
+      # web/ + the freshly built blueprint.json + history/ as data/.
+      - name: Assemble the site
+        run: lake exe blueprint site --root examples/induction --history history -o _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+      # The deployed artefact is not a branch, so the history has to be kept
+      # somewhere that survives: `gh-pages`, under the same `data/` name the
+      # site serves it as.  The branch is otherwise unused.
+      - name: Push the history back to gh-pages
+        run: |
+          set -euo pipefail
+          rm -rf gh-pages/data
+          mkdir -p gh-pages/data
+          cp -a history/. gh-pages/data/
+          cd gh-pages
+          # Pages is deployed from the artifact, not from this branch, but
+          # .nojekyll costs nothing and keeps `_`-prefixed files safe if the
+          # branch is ever served directly.
+          touch .nojekyll
+          git add -A
+          if git diff --cached --quiet; then
+            echo "the history did not change"
+          else
+            git -c user.name='github-actions[bot]' \
+                -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+                commit -m "history: snapshot ${GITHUB_SHA}"
+            git push origin HEAD:gh-pages
+          fi
