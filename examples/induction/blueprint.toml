@@ -1,0 +1,10 @@
+name  = "induction"
+title = "Induction on the dimension"
+dir   = "blueprint"
+
+defaultCollapse = "refines"
+
+# The Lean development this blueprint talks about; `blueprint extract`
+# imports these when the command line names no modules.
+[lean]
+modules = ["BlueprintExamples"]

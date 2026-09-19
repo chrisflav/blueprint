@@ -1,0 +1,65 @@
+{"version": 1,
+ "modules": ["BlueprintExamples"],
+ "decls":
+ {"Topology.dim":
+  {"status": "proved",
+   "signature": "def Topology.dim (X : Topology.Space) : Nat",
+   "range":
+   {"startLine": 25, "file": "BlueprintExamples/Topology.lean", "endLine": 27},
+   "module": "BlueprintExamples.Topology",
+   "kind": "definition",
+   "exists": true,
+   "doc": "The dimension of a space; we write `|X|` for `dim X`.",
+   "deps": [],
+   "axioms": []},
+  "Topology.compactnessLemma":
+  {"status": "proved_with_axioms",
+   "signature":
+   "theorem Topology.compactnessLemma (X : Topology.Space) (h : Topology.compactness X) : Topology.dim X ≤ 1",
+   "range":
+   {"startLine": 39, "file": "BlueprintExamples/Topology.lean", "endLine": 42},
+   "module": "BlueprintExamples.Topology",
+   "kind": "theorem",
+   "exists": true,
+   "doc": "A compact space is covered by finitely many charts.",
+   "deps": ["Topology.compactness", "Topology.dim"],
+   "axioms": ["Topology.coverChoice"]},
+  "Topology.compactness":
+  {"status": "proved",
+   "signature": "def Topology.compactness (X : Topology.Space) : Prop",
+   "range":
+   {"startLine": 30, "file": "BlueprintExamples/Topology.lean", "endLine": 31},
+   "module": "BlueprintExamples.Topology",
+   "kind": "definition",
+   "exists": true,
+   "doc": "Every open cover has a finite subcover.",
+   "deps": [],
+   "axioms": []},
+  "Induction.mainTheorem":
+  {"status": "stated",
+   "signature":
+   "theorem Induction.mainTheorem (X : Topology.Space) : Induction.Decomposable X",
+   "range":
+   {"startLine": 42, "file": "BlueprintExamples/Induction.lean", "endLine": 45},
+   "module": "BlueprintExamples.Induction",
+   "kind": "theorem",
+   "exists": true,
+   "doc": "Every finite dimensional object admits a decomposition.",
+   "deps": ["Induction.keyProp"],
+   "axioms": ["sorryAx"]},
+  "Induction.keyProp":
+  {"status": "proved",
+   "signature":
+   "theorem Induction.keyProp (X : Topology.Space) (h : Topology.compactness X) : Induction.Decomposable X",
+   "range":
+   {"startLine": 27, "file": "BlueprintExamples/Induction.lean", "endLine": 28},
+   "module": "BlueprintExamples.Induction",
+   "kind": "theorem",
+   "exists": true,
+   "doc": "Let $X$ be compact.  Then the restriction map is surjective.",
+   "deps": ["Topology.compactness"],
+   "axioms": []}},
+ "attrMap":
+ {"Topology.dim": "notation",
+  "Topology.compactnessLemma": "compactness-lemma",
+  "Induction.mainTheorem": "main-theorem"}}

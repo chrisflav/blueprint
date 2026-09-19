@@ -1,0 +1,10 @@
+name  = "broken"
+title = "Every error on purpose"
+dir   = "blueprint"
+
+# Make `equivalent` unique so that constraint-unique can fire.
+[kinds.equivalent]
+constraints = ["unique"]
+
+[lean]
+modules = ["BlueprintExamples.Broken"]

@@ -1,0 +1,4 @@
+{"version": 1,
+ "modules": ["BlueprintExamples.Broken"],
+ "decls": {"Broken.nope": {"exists": false}},
+ "attrMap": {}}

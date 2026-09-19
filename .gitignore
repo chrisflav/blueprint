@@ -1,0 +1,8 @@
+/.lake
+/blueprint.json
+# `blueprint site` and `blueprint serve` assemble the website here, and CI
+# builds a snapshot and a history directory at the root before publishing.
+_site/
+/history/
+/snapshot.json
+/gh-pages/

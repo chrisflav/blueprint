@@ -1,0 +1,18 @@
+name = "blueprint"
+version = "0.1.0"
+defaultTargets = ["blueprint", "BlueprintExamples"]
+
+[[lean_lib]]
+name = "Blueprint"
+
+# The Lean development the example blueprints under `examples/` talk about.
+# `./test.sh` regenerates their `lean-facts.json` from it.
+[[lean_lib]]
+name = "BlueprintExamples"
+
+[[lean_exe]]
+name = "blueprint"
+root = "Main"
+# `blueprint extract` imports a project's modules with `loadExts := true`,
+# which runs their initializers through the interpreter.
+supportInterpreter = true
