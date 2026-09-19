@@ -10,5 +10,6 @@ import Blueprint.Git
 import Blueprint.Diff
 import Blueprint.Site
 import Blueprint.Attr
+import Blueprint.ImportLatex
 import Blueprint.Extract
 import Blueprint.Cli

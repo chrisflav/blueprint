@@ -255,6 +255,10 @@ structure Project where
   /-- Modules `blueprint extract` imports when the command line names none;
   `[lean] modules` in `blueprint.toml`. -/
   leanModules : Array String := #[]
+  /-- KaTeX macro definitions, `[katex.macros]` in `blueprint.toml`: the macro
+  name with its backslash, and the definition KaTeX is to use for it.  Sorted
+  by name; handed to the website as `project.katexMacros`. -/
+  katexMacros : Array (String × String) := #[]
   deriving Inhabited, BEq
 
 /-- A check produced by `blueprint check`. -/

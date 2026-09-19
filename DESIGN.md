@@ -372,6 +372,7 @@ Blueprint/Git.lean       running git: revisions, trees, commits
 Blueprint/Diff.lean      semantic diff across snapshots
 Blueprint/Site.lean      static site assembly, snapshot history index
 Blueprint/Extract.lean   environment walk, facts (separate executable)
+Blueprint/ImportLatex.lean  LaTeX (leanblueprint) to Markdown importer
 Main.lean                CLI
 web/                     frontend
 ```

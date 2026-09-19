@@ -1,0 +1,6 @@
+[katex.macros]
+"\\Fq" = "\\mathbf F_q"
+"\\Spec" = "\\operatorname{Spec}"
+"\\colim" = "\\operatorname*{colim}"
+"\\poly" = "#1[T]"
+"\\statusnote" = "\\begin{quote}\\textbf{Status.} #1\\end{quote}"

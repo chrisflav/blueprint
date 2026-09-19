@@ -115,9 +115,15 @@ def Analysis.snapshot (a : Analysis) (facts : Option Facts := none) : Snapshot :
 def Snapshot.toJson (s : Snapshot) : Json :=
   Json.mkObj [
     ("version", Json.num (JsonNumber.fromInt s.version)),
-    ("project", Json.mkObj [("name", Json.str s.project.name),
-                            ("title", Json.str s.project.title),
-                            ("dir", Json.str s.project.dir)]),
+    -- `katexMacros` is left out when the project declares none, so that a
+    -- blueprint without maths macros has exactly the `project` it had before
+    -- the field existed.
+    ("project", Json.mkObj ([("name", Json.str s.project.name),
+                             ("title", Json.str s.project.title),
+                             ("dir", Json.str s.project.dir)] ++
+      (if s.project.katexMacros.isEmpty then [] else
+        [("katexMacros",
+          objOf (s.project.katexMacros.map fun (n, d) => (n, Json.str d)))]))),
     ("schema", s.schema.toJson),
     ("objects", Json.arr (s.objects.map Object.toJson)),
     ("facts", s.facts.getD Json.null),
@@ -251,10 +257,14 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
   if version != snapshotVersion then
     throw s!"unsupported snapshot version {version} (this tool speaks {snapshotVersion})"
   let p := (field? j "project").getD Json.null
+  let katexMacros : Array (String × String) := match field? p "katexMacros" with
+    | some m => (objEntries m).filterMap fun (n, v) => (v.getStr?.toOption).map (n, ·)
+    | none => #[]
   let project : Project :=
     { name := fieldStrD p "name" "blueprint"
       title := fieldStrD p "title" ""
-      dir := fieldStrD p "dir" "blueprint" }
+      dir := fieldStrD p "dir" "blueprint"
+      katexMacros }
   let schema := Schema.ofJson ((field? j "schema").getD Json.null)
   let objects ← match field? j "objects" with
     | some (.arr xs) => xs.mapM Object.ofJson

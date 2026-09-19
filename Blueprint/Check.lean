@@ -71,12 +71,29 @@ private def takeSlug : Nat → List Char → String → Option (String × List C
     else if isSlugChar c then takeSlug fuel rest (acc.push c)
     else none
 
-/-- Scan a body for `[slug]` references. -/
+/-- Skip to just past the closing maths delimiter.  `dbl` says whether the
+opening delimiter was `$$`. -/
+private def skipMath : Nat → List Char → Bool → List Char
+  | 0, cs, _ => cs
+  | _, [], _ => []
+  | fuel + 1, c :: rest, dbl =>
+    if c == '\\' then (match rest with | _ :: r => skipMath fuel r dbl | [] => [])
+    else if c == '$' then
+      (if dbl then (match rest with | '$' :: r => r | r => skipMath fuel r dbl) else rest)
+    else skipMath fuel rest dbl
+
+/-- Scan a body for `[slug]` references.  Maths is skipped: `\mathbf Z[T]`
+is not a link, and the website's renderer, which runs KaTeX before looking for
+links, does not treat it as one either. -/
 private def scanLinks : Nat → List Char → Char → Array String → Array String
   | 0, _, _, acc => acc
   | _, [], _, acc => acc
   | fuel + 1, c :: rest, prev, acc =>
-    if c == '[' && prev != '\\' && prev != '[' && prev != '!' then
+    if c == '$' && prev != '\\' then
+      match rest with
+      | '$' :: r => scanLinks fuel (skipMath fuel r true) '$' acc
+      | r => scanLinks fuel (skipMath fuel r false) '$' acc
+    else if c == '[' && prev != '\\' && prev != '[' && prev != '!' then
       match takeSlug (fuel + 1) rest "" with
       | some (slug, rest') =>
         match rest'.head? with

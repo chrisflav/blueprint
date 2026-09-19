@@ -1,0 +1,46 @@
+\chapter{Basics}\label{chap:basics}
+
+Some prose with \emph{emphasis}, \textbf{bold}, \texttt{code\_name} and a
+citation~\cite{stacks}.  Maths is left untouched --- $\Spec A$, and
+\[
+  \poly{\Fq} \subset \Fq(T),
+\]
+where 100\% of the symbols survive.  See \url{https://stacks.math.columbia.edu}
+and \href{https://leanprover-community.github.io}{the community site}.
+
+\begin{quote}
+  A blueprint is a plan, not a proof.
+\end{quote}
+
+\section{Rings}\label{sec:rings}
+
+\begin{definition}[Polynomial ring]
+\label{def:poly}
+\lean{Example.polyRing}
+\leanok
+The polynomial ring over $\Fq$ is written $\poly{\Fq}$.
+\end{definition}
+
+\begin{lemma}
+\label{lem:degree}
+\uses{def:poly}
+Every nonzero $f\in\poly{\Fq}$ has a degree.
+\end{lemma}
+
+\begin{lemma}
+The zero polynomial has no degree.  This one carries no \texttt{label}, so it
+gets a derived id.
+\end{lemma}
+
+\section{Notation}
+
+\begin{tabular}{ll}
+  \textbf{Symbol} & \textbf{Meaning} \\
+  $\Fq$ & the field with $q$ elements \\
+  $\poly{\Fq}$ & polynomials over it \\
+\end{tabular}
+
+\begin{description}
+  \item[Ring] a commutative ring with unit.
+  \item[Scheme] glued from rings.
+\end{description}

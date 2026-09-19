@@ -136,6 +136,27 @@ lake exe blueprint extract --root examples/broken
 — and `./test.sh` fails if the committed files are not what those commands
 produce.
 
+## Coming from a LaTeX blueprint
+
+A project that already has a `leanblueprint` LaTeX blueprint converts in one
+command:
+
+```bash
+lake exe blueprint import-latex blueprint/src/content.tex \
+  --out blueprint --toml blueprint.toml --report import-report.txt
+lake exe blueprint check
+```
+
+`\input` is followed, `\chapter`/`\section`/… become nested sections, the
+theorem-like environments become objects with their `\label` as id, `\lean`
+and `\uses` become the `lean` attribute and `uses` edges, a following
+`proof` becomes a `## Proof` in the same object, and every `\newcommand` and
+`\DeclareMathOperator` lands in `[katex.macros]` for the website to give to
+KaTeX.  Maths is copied out untouched; every command and environment the
+converter did not understand is counted in the report, so the loss is
+visible.  `examples/latex-import` is a worked example with its expected
+output committed next to it, and `docs/cli.md` is the reference.
+
 ## History and the website
 
 The compiled snapshot is the whole interchange format, so everything about

@@ -319,6 +319,65 @@ else
 fi
 wants "$TMP/broken.facts.json" '"decls": {"Broken.nope": {"exists": false}}'
 
+# ------------------------------------------------------------ import-latex
+head_ "blueprint import-latex"
+rm -rf "$TMP/li"
+if "$BP" import-latex examples/latex-import/src/content.tex --out "$TMP/li/blueprint" \
+     --toml "$TMP/li/blueprint.toml" --report "$TMP/li/report.txt" \
+     > "$TMP/li.log" 2>&1; then
+  ok "import-latex exits 0"
+else
+  bad "import-latex exits 0"; cat "$TMP/li.log"
+fi
+
+if diff -r "$TMP/li" examples/latex-import/expected > "$TMP/li.diff" 2>&1; then
+  ok "the import is examples/latex-import/expected"
+else
+  bad "the import is examples/latex-import/expected"; head -40 "$TMP/li.diff"
+fi
+
+if grep -q "wrote 10 file(s)" "$TMP/li.log" \
+   && grep -q '3 uses edges' "$TMP/li.log" \
+   && grep -q '1 unresolved uses' "$TMP/li.log"; then
+  ok "import-latex summarises what it wrote"
+else
+  bad "import-latex summarises what it wrote"; cat "$TMP/li.log"
+fi
+
+if "$BP" check --root "$TMP/li" > "$TMP/li.check" 2>&1 \
+   && grep -q '0 error(s)' "$TMP/li.check"; then
+  ok "check on the imported blueprint has no errors"
+else
+  bad "check on the imported blueprint has no errors"; cat "$TMP/li.check"
+fi
+
+# a second import over the same directory must not change a byte
+"$BP" import-latex examples/latex-import/src/content.tex --out "$TMP/li/blueprint" \
+  --toml "$TMP/li/blueprint.toml" --report "$TMP/li/report.txt" --clean \
+  > /dev/null 2>&1
+if diff -r "$TMP/li" examples/latex-import/expected > /dev/null 2>&1; then
+  ok "re-importing is idempotent"
+else
+  bad "re-importing is idempotent"
+fi
+
+if "$BP" build --root "$TMP/li" -o "$TMP/li.json" > /dev/null 2>&1; then
+  wants "$TMP/li.json" '"katexMacros"' '"\\Spec": "\\operatorname{Spec}"' \
+        '"\\colim": "\\operatorname*{colim}"'
+else
+  bad "build of the imported blueprint"
+fi
+
+# unresolved `\uses` must not become an edge, and must be visible in the body
+if grep -q 'Unresolved dependencies: lem:nowhere' \
+     "$TMP/li/blueprint/the-main-theorem/sec-statement/thm-main.md" \
+   && ! grep -q '"id": "uses/thm-main/lem:nowhere"' "$TMP/li.json" \
+   && ! grep -q '"id": "lem:nowhere"' "$TMP/li.json"; then
+  ok "an unresolved \\uses is reported but never an edge"
+else
+  bad "an unresolved \\uses is reported but never an edge"
+fi
+
 # ------------------------------------------------------------- new / rename
 head_ "new and rename"
 cp -r examples/minimal "$TMP/scratch"

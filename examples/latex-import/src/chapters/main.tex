@@ -1,0 +1,41 @@
+\chapter{The main theorem}
+
+\section{Statement}\label{sec:statement}
+
+\begin{theorem}[Main]
+\label{thm:main}
+\lean{Example.main,
+      Example.main'}
+\uses{def:poly, lem:degree}
+For every $n$ the identities
+\begin{align}
+  a &= b \\
+  b &= c
+\end{align}
+hold, and so does
+\begin{equation}
+  \label{eq:gauss}
+  \sum_{i=0}^{n} i = \frac{n(n+1)}{2}.
+\end{equation}
+See \Cref{lem:degree} and \cref{def:poly,lem:missing}.
+\end{theorem}
+
+\begin{proof}
+\uses{lem:degree, lem:nowhere}
+\leanok
+By induction.  The steps are
+\begin{enumerate}
+  \item the base case, and
+  \item the inductive step, which uses
+    \begin{itemize}
+      \item the degree lemma, and
+      \item nothing else.
+    \end{itemize}
+\end{enumerate}
+\end{proof}
+
+\begin{openproblem}[Still open]
+\label{op:open}
+\statusnote{Nobody has tried.}
+Is $\Fq$ algebraically closed?  Obviously not.
+\end{openproblem}

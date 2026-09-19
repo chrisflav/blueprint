@@ -10,7 +10,16 @@ by editing this file first. Version 1.
 {
   "version": 1,
   "generated": "2026-09-19T12:00:00Z",         // ISO 8601, optional
-  "project": { "name": "MyProject", "title": "My Project blueprint" },
+  "project": {
+    "name": "MyProject",
+    "title": "My Project blueprint",
+    "dir": "blueprint",                          // where the Markdown lives
+    "katexMacros": {                             // optional, see below
+      "\\Fq": "\\mathbf F_q",
+      "\\Spec": "\\operatorname{Spec}",
+      "\\poly": "#1[T]"
+    }
+  },
 
   "schema": {
     "kinds": {
@@ -74,6 +83,15 @@ by editing this file first. Version 1.
 
 Notes
 
+- `project.katexMacros` is the `[katex.macros]` table of `blueprint.toml`
+  (`docs/cli.md`): a macro name, backslash included, to the definition KaTeX
+  is to use for it, with `#1`, `#2`, … as the parameters.  The website passes
+  it to KaTeX as its `macros` option; nothing in the core ever expands a
+  macro.  The key is left out entirely when the project declares no macros,
+  so a reader must treat it as optional and default it to `{}`.
+  `blueprint import-latex` fills the table from the `\newcommand`s,
+  `\renewcommand`s, `\providecommand`s and `\DeclareMathOperator`s of a
+  LaTeX blueprint.
 - `boundary` entries are ordered as written; roles may repeat.
 - `depth` is precomputed. Well-foundedness is guaranteed for a snapshot that
   `build` emitted without errors.

@@ -180,7 +180,16 @@ def decodeConfig (t : TValue) (defaultName : String) :
     | some v => match v.asStrings? with
       | some ss => pure ss
       | none => throw "'[lean] modules' must be a string or an array of strings"
-  let project : Project := { name, title, dir, leanModules }
+  let katexMacros ← match (t.get? "katex").bind (·.get? "macros") with
+    | none => pure #[]
+    | some (.table xs) =>
+      let ms ← xs.foldlM (init := #[]) fun acc (k, v) =>
+        match v.asString? with
+        | some s => pure (acc.push (k, s))
+        | none => throw s!"'[katex.macros] {k}' must be a string, got a {v.typeName}"
+      pure (ms.qsort (fun a b => a.1 < b.1))
+    | some v => throw s!"'[katex.macros]' must be a table, got a {v.typeName}"
+  let project : Project := { name, title, dir, leanModules, katexMacros }
   let mut schema := defaultSchema
   if let some v := lookup "defaultCollapse" then
     match v.asString? with

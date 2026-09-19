@@ -1,3 +1,4 @@
+import Blueprint.ImportLatex
 import Blueprint.Extract
 import Blueprint.Site
 
@@ -19,7 +20,7 @@ open Lean (Json)
 def valueOptions : Array String :=
   #["--root", "-o", "--output", "--facts", "--view", "--collapse", "--expand", "--dir",
     "--snapshot", "--names", "--out", "--limit", "--since", "--history", "--port",
-    "--site", "--sha", "--date"]
+    "--site", "--sha", "--date", "--toml", "--report", "--macros"]
 
 /-- Positional arguments and options, parsed without any dependencies. -/
 structure Args where
@@ -183,6 +184,33 @@ def cmdExtract (args : Args) : IO UInt32 := do
   let missing := (facts.decls.filter (fun d => !d.present)).size
   IO.println s!"wrote {out} ({facts.decls.size} constant(s), \
     {facts.attrMap.size} tagged, {missing} missing)"
+  return 0
+
+/-! ## `blueprint import-latex` -/
+
+/-- Every value of a repeatable option, in command line order. -/
+def Args.getAll (a : Args) (n : String) : Array String :=
+  (a.options.filter (·.1 == n)).map (·.2)
+
+/-- `blueprint import-latex <entry.tex> --out <dir> [--toml f] [--report f]
+[--macros f]... [--clean]`: convert a `leanblueprint` LaTeX blueprint into the
+Markdown sources of `docs/cli.md`. -/
+def cmdImportLatex (args : Args) : IO UInt32 := do
+  let entry ← match (args.positional[1]? : Option String) with
+    | some e => pure (System.FilePath.mk e)
+    | none => throw <| IO.userError "import-latex: give the entry .tex file"
+  let out ← match args.get? "--out" with
+    | some d => pure (System.FilePath.mk d)
+    | none => throw <| IO.userError "import-latex: --out <dir> is required"
+  let rep ← runImport
+    { entry, out
+      toml := (args.get? "--toml").map System.FilePath.mk
+      report := (args.get? "--report").map System.FilePath.mk
+      macros := (args.getAll "--macros").map System.FilePath.mk
+      clean := args.has "--clean" }
+  IO.println s!"wrote {rep.files} file(s) to {out} ({rep.objects} objects, \
+    {rep.edges} uses edges, {rep.leanRefs} lean names, {rep.macros} katex macros, \
+    {rep.unresolved.size} unresolved uses)"
   return 0
 
 /-! ## `blueprint read` -/
@@ -720,6 +748,9 @@ commands:
   extract [modules...] [--root d]          import the modules and write
           [--snapshot f] [--names a,b]     lean-facts.json
           [--out f]
+  import-latex <entry.tex> --out d         convert a leanblueprint LaTeX
+          [--toml f] [--report f]          blueprint into Markdown sources
+          [--macros f] [--clean]
   diff   <A> <B> [--json] [--no-fail]      semantic diff of two snapshots;
                                            each side is a blueprint.json or a
                                            git revision
@@ -760,6 +791,7 @@ def run (argv : List String) : IO UInt32 := do
       | "new" => #["--dir"]
       | "read" => #["-o"]
       | "extract" => #["--snapshot", "--names", "--out"]
+      | "import-latex" => #["--out", "--toml", "--report", "--macros", "--clean"]
       | "diff" => #["--json", "--no-fail"]
       | "log" => #["--limit"]
       | "progress" => #["--since", "--facts"]
@@ -777,6 +809,7 @@ def run (argv : List String) : IO UInt32 := do
     | "rename" => cmdRename root args
     | "read" => cmdRead args
     | "extract" => cmdExtract args
+    | "import-latex" => cmdImportLatex args
     | "diff" => cmdDiff root args
     | "log" => cmdLog root args
     | "progress" => cmdProgress root args

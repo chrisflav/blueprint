@@ -1,0 +1,21 @@
+latex import report for examples/latex-import/src/content.tex
+
+  objects        10
+    definition: 1
+    lemma: 2
+    remark: 1
+    section: 5
+    theorem: 1
+  files written  10
+  uses edges     3
+  lean names     3
+  katex macros   5
+  unlabelled environments  1
+  duplicate labels         0
+  unresolved uses          1
+    thm-main -> lem:nowhere
+
+  dropped commands (0 distinct)
+
+  environments kept but not understood (1 distinct)
+    1  tabular

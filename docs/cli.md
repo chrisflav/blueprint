@@ -63,6 +63,123 @@ object gets `new` as its `id` and `old` appended to its `aliases`.  Files are
 never renamed or moved; if the id used to come from the file name, an
 explicit `id` key is inserted instead.
 
+### `blueprint import-latex <entry.tex> --out <dir>`
+
+```
+blueprint import-latex <entry.tex> --out <dir>
+      [--toml blueprint.toml] [--report file] [--macros file]... [--clean]
+```
+
+Converts a `leanblueprint` style LaTeX blueprint into the authoring format
+below.  It is a one-way conversion: the LaTeX is the input, the Markdown is
+from then on the source.  Nothing is expanded and nothing is thrown away
+silently — everything the converter did not understand is counted in the
+report, which goes to `--report` or, by default, to stderr.
+
+```
+blueprint import-latex blueprint/src/content.tex --out blueprint \
+  --toml blueprint.toml --report import-report.txt
+```
+
+**Inputs.**  `\input{path}` is spliced in recursively, resolved against the
+directory of the entry file (as `leanblueprint` resolves them, relative to
+`src/`) and then against the directory of the including file; `.tex` may be
+left off.  Comments (`%` to the end of the line, but not `\%`) are stripped
+first.  An `\input` that does not resolve is listed in the report.
+
+**Sections.**  `\chapter`, `\section`, `\subsection` and `\subsubsection`
+become `section` objects, one directory each: a chapter is a directory below
+`--out`, a section a directory below its chapter, and so on, with the section
+object itself in that directory's `_section.md`.  The `refines` chain of the
+`_section.md` convention therefore reproduces the document tree.  The id is
+the slug of the `\label` that follows the heading, or of the title when there
+is none, with a numeric suffix if that is taken.  Every object gets an
+`order` attribute counting up in document order, so the document view reads
+like the paper.  `\paragraph` is a run-in heading, not a section: it becomes
+a bold paragraph.
+
+**Environments.**  The theorem-like environments are `theorem`,
+`proposition`, `lemma`, `corollary`, `definition`, `construction`,
+`openproblem`, `conditionaltheorem`, `remark`, `example`, `warning`, a few
+further standard names, and everything a `\newtheorem` in the macro files or
+in the corpus declares.  They map to kinds:
+
+| environment | kind |
+|---|---|
+| `theorem`, `proposition`, `corollary`, `conditionaltheorem`, … | `theorem` |
+| `lemma` | `lemma` |
+| `definition`, `construction`, `notation`, `convention` | `definition` |
+| `remark`, `example`, `warning`, `openproblem`, … | `remark` |
+
+An environment whose name differs from its kind records the name as a tag,
+`latex:openproblem`.  `[title]` becomes `title`; the `\label` gives the id
+(slug: lower case, everything outside `a-z0-9-_.` to `-`, repeats collapsed);
+an environment without a label gets `<section-id>--<env>-<n>`, `n` counting
+that environment within that section, and is counted in the report.
+
+**Annotations.**  `\lean{a, b}` becomes the `lean` attribute, split on commas
+and trimmed, and may be wrapped over several lines.  `\uses{a,b}` in the
+statement and in a `proof` environment that directly follows are merged,
+deduplicated, resolved through the label map and written as the `uses` sugar
+key; the proof itself becomes a `## Proof` section of the same object's body,
+not an object of its own.  `\leanok`, `\notready` and `\mathlibok` are
+dropped: derived status comes from Lean in this tool, never from the text.
+`\discussion{n}` becomes the tag `discussion:n`.
+
+**Unresolved dependencies.**  A `\uses` target that names no label would be a
+`dangling-ref` error, so it never becomes an edge.  It is listed at the end
+of the object's body after `Unresolved dependencies:` and counted in the
+report, with the object that referred to it.
+
+**Bodies.**  Maths is copied out untouched: `$…$`, `$$…$$`, `\(…\)` and
+`\[…\]`, and the `equation`, `equation*`, `gather`, `multline`, `displaymath`
+environments, become `$…$` or `$$ … $$`; `align`, `align*`, `alignat` and
+`flalign` become `$$ \begin{aligned} … \end{aligned} $$`, which is what KaTeX
+can render.  Prose is translated heuristically: `\emph`/`\textit` to `*…*`,
+`\textbf` to `**…**`, `\texttt`/`\verb`/`\nolinkurl` to a code span,
+`\textsc`/`\textsf`/`\text` to plain text, `itemize`/`enumerate` (nested, and
+`description` with bold terms) to Markdown lists, `quote` to a `>` block,
+`verbatim` to a fenced block, `\ref`/`\cref`/`\Cref`/`\autoref`/`\eqref` to a
+`[slug]` link when the label is known and to the label's plain text when it
+is not, `\cite{k1,k2}` to `[k1, k2]`, `\url`/`\href` to Markdown links,
+`\footnote` to a parenthesis, `\\` to a hard line break, `\par` and blank
+lines to paragraph breaks, `~` to a space, `\,`/`\;`/`\!` to nothing, `\ldots`
+to `...`, `--`/`---` to the dashes they stand for, `\'e` and friends to the
+accented letter, and `\%`, `\&`, `\_`, `\#`, `\$`, `\{`, `\}` to the
+characters they escape.  The five prose macros of a `leanblueprint` project's
+`macros/common.tex` that carry meaning are translated too: `\statusnote{x}`
+to a `**Status.** x` paragraph, `\formalizationnote{x}` to
+`**Formalization note.** x`, `\constructedby{x}` to `*Constructed by:* x`,
+`\openobligation{x}` to `**Open obligation:** x` and `\retiredobligation{x}`
+to `**Retired invalid route:** x`.
+
+Any other command keeps its braced argument, loses its name, and is counted
+by name in the report; any other environment keeps its contents and is
+counted.  A handful of commands that take a length or a counter rather than
+prose (`\vspace`, `\Needspace`, `\refstepcounter`, …) lose their argument as
+well, and are still counted.
+
+**KaTeX macros.**  Every `\newcommand`, `\renewcommand`, `\providecommand`,
+`\DeclareMathOperator` and `\DeclareMathOperator*` in the corpus and in the
+macro files is collected — later definitions win — and written into the
+`[katex.macros]` table of the file `--toml` names, replacing whatever was
+there and leaving the rest of the file alone.  `\DeclareMathOperator{\Sh}{Sh}`
+becomes `"\\Sh" = "\\operatorname{Sh}"` and the starred form
+`\operatorname*`.  Macros are never expanded: `#1` style parameters are kept
+exactly as KaTeX wants them.  The macro files are the ones `--macros` names
+(repeatable) plus `<dir of entry>/macros/common.tex` when that exists.
+
+**Output.**  `<out>/<chapter>/<section>/…/<id>.md`, with a `_section.md` in
+every directory, written deterministically so that re-importing diffs
+cleanly.  `--clean` additionally deletes `.md` files below `--out` that this
+import did not write, and then the directories that are left empty; without
+it, files from an earlier import with different ids stay where they are.
+
+**The report** counts, per name and biggest first, the commands and
+environments that were not understood, and lists the unresolved `\uses`
+targets, the environments without a label, the labels declared twice and the
+totals per kind.
+
 ### `blueprint read <blueprint.json> [-o out]`
 
 Parses a snapshot and writes it out again.  Not part of `DESIGN.md` §8; it
@@ -295,6 +412,11 @@ defaultCollapse = "refines"
 [lean]
 modules = ["MyProject"]             # what `blueprint extract` imports
 
+[katex.macros]                      # handed to the website as project.katexMacros
+"\\Fq"   = "\\mathbf F_q"
+"\\Spec" = "\\operatorname{Spec}"
+"\\poly" = "#1[T]"
+
 [kinds.theorem]                     # extends the built-in `theorem`
 attrs = ["title", "lean", "review", "tags", "order", "aliases", "owner"]
 
@@ -318,6 +440,15 @@ a bare integer.
 `[lean] modules` is the module list `blueprint extract` falls back to when
 the command line names none.  It is optional; a string is accepted as well
 as an array.
+
+`[katex.macros]` maps a macro name, with its backslash, to the definition
+KaTeX is to use for it.  Both are ordinary TOML strings, so every backslash
+is doubled; `#1`, `#2`, … are the macro's parameters and KaTeX infers the
+number of arguments from them.  `blueprint build` copies the table into the
+snapshot as `project.katexMacros` (`docs/snapshot-format.md`), which is where
+the website picks it up, and `blueprint import-latex --toml` writes the table
+from the `\newcommand`s of a LaTeX blueprint.  Nothing in the core expands
+them.
 
 ### The default schema
 
@@ -414,6 +545,10 @@ lake exe blueprint check --root examples/broken --lean     # exits 1
 lake exe blueprint site --root examples/induction          # _site/ next to it
 lake exe blueprint serve --root examples/induction         # and serve it
 lake exe blueprint diff HEAD~10 HEAD --root examples/induction
+
+lake exe blueprint import-latex examples/latex-import/src/content.tex \
+  --out /tmp/li/blueprint --toml /tmp/li/blueprint.toml --report /tmp/li/report.txt
+diff -r /tmp/li examples/latex-import/expected
 ```
 
 * `examples/minimal` — one section, four nodes, `uses` and the `_section.md`
@@ -428,6 +563,11 @@ lake exe blueprint diff HEAD~10 HEAD --root examples/induction
   and a `lean-facts.json` so that `check --lean` has something to say.
 * `examples/broken` — every error level check, documented line by line in
   `examples/broken/README.md`.
+* `examples/latex-import` — a small LaTeX blueprint under `src/` and, under
+  `expected/`, byte for byte what `blueprint import-latex` makes of it: two
+  chapters, the theorem-like environments, a proof with `\uses`, `align` and
+  `equation`, a custom macro, an unresolved `\uses` and an unlabelled lemma.
+  `examples/latex-import/README.md` is the table of what it covers.
 
 The Lean side of both `examples/induction` and `examples/broken` is the
 `BlueprintExamples` library of this repository, and their `lean-facts.json`
@@ -459,6 +599,26 @@ merge.  `Topology.coverChoice` is a custom axiom (`proved_with_axioms`),
   `docs/snapshot-format.md` has no code for them.
 * **`generated`** is not written into `blueprint.json`.  The format marks it
   optional and leaving it out keeps snapshots byte identical across runs.
+* **`import-latex` is not in `DESIGN.md`.**  §6 says the format must be one
+  mathematicians can edit; a project that already has a `leanblueprint`
+  LaTeX blueprint needs a way in.  The conversion is one way and lossy, and
+  the report is the record of what was lost.  Judgement calls it makes:
+  `\paragraph` becomes a bold run-in heading rather than a fifth section
+  level, because a directory per `\paragraph` buries the objects; a `proof`
+  that directly follows a theorem-like environment is part of that object
+  rather than an object of its own, since `DESIGN.md` §2 has no separate
+  proof sort; `\cite{k}` becomes `[k]`, which the `bad-link` lint then
+  reports unless a bibliography object of that name exists; `\_`, `\#` and
+  `\$` keep their backslash outside code spans, because a bare `_` or `#` is
+  Markdown syntax; and blank lines inside display maths are removed, because
+  the Markdown renderer runs before KaTeX and would otherwise cut the
+  formula into paragraphs.
+* **`bad-link` skips maths.**  `$\mathbf Z[T]$` is not a link.  The website
+  runs KaTeX before it looks for `[slug]` links and skips the rendered
+  nodes, so `check` agrees with it by skipping `$…$` and `$$…$$` in the body.
+* **`project.katexMacros` is left out of the snapshot when it is empty**, so
+  that a project without `[katex.macros]` gets exactly the `project` object
+  it got before the field existed.
 * **`blueprint read`** is an extra command, see above.
 * **The `attrMap` is merged into the object mapping (§5).**
   `docs/snapshot-format.md` records `attrMap` but says only that the names
