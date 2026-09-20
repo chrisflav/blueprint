@@ -205,10 +205,36 @@ export function shieldMath(src) {
  * from taking a page with it: KaTeX leaves that formula as red source text and
  * carries on with the rest of the element.
  */
+/**
+ * LaTeX commands the corpora use that KaTeX lacks, defined as macros so the
+ * project's own macro files can keep them. A project's declaration of the
+ * same name wins. `\ensuremath` is the identity because auto-render only ever
+ * hands KaTeX maths.
+ */
+const COMPAT_MACROS = {
+  '\\ensuremath': '#1',
+  // `\lhook\joinrel\longrightarrow` is how LaTeX spells a long hook arrow.
+  // KaTeX has no bare hook glyph, so the macro looks ahead, consumes the
+  // rest of the idiom and produces the extensible hook arrow stretched to
+  // the length of `\longrightarrow`; a bare `\lhook` is a plain hook arrow.
+  '\\lhook': (ctx) => {
+    const t1 = ctx.future();
+    if (!t1 || t1.text !== '\\joinrel') return '\\hookrightarrow';
+    ctx.popToken();
+    const t2 = ctx.future();
+    if (t2 && t2.text === '\\longrightarrow') { ctx.popToken(); return '\\xhookrightarrow{\\hphantom{xx}}'; }
+    if (t2 && t2.text === '\\rightarrow') { ctx.popToken(); return '\\hookrightarrow'; }
+    return '\\hookrightarrow';
+  },
+  '\\joinrel': '\\mathrel{}',
+  '\\bm': '\\boldsymbol{#1}',
+  '\\mathbbm': '\\mathbb{#1}',
+};
+
 export function katexOptions() {
   return {
     delimiters: KATEX_DELIMS,
-    macros: katexMacros,
+    macros: Object.assign({}, COMPAT_MACROS, katexMacros),
     throwOnError: false,
     errorCallback: (msg) => {
       // A formula the project's macros do not cover is a blueprint bug, not a
@@ -528,9 +554,24 @@ function updateTabs(view) {
 
 const root = document.getElementById('app');
 
+// The page the reader was last on, so that moving to a *different* one starts
+// at the top.  Without this, leaving a document scrolled 30,000px down and
+// clicking "Progress" landed a third of the way down the progress page, which
+// is neither where the reader asked to be nor anywhere obvious.  Changes that
+// only rewrite the query of the page you are already on — the graph's
+// selection, a checks filter, `?focus=` — leave the scroll position alone, and
+// a page that scrolls somewhere itself still wins, because it does so from
+// `render` below and in the frame after it.
+let lastPageKey = null;
+
 function render() {
   app.route = parseHash();
   updateTabs(app.route.view);
+  const pageKey = app.route.view + ' ' + (app.route.id || '');
+  if (pageKey !== lastPageKey) {
+    lastPageKey = pageKey;
+    if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
+  }
   const page = PAGES[app.route.view] || PAGES.graph;
   try {
     page.render(root, app);
