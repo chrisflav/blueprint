@@ -530,17 +530,35 @@ async function scheduleLayout(app, st, view, quot) {
     ui.stage.classList.remove('laying-out');
     const msg = describe(e);
     status.textContent = 'layout failed: ' + msg;
-    showLayoutError(app, msg);
+    showLayoutError(app, msg, e);
     lastSignature = null; // the next attempt is a fresh one, not a redraw
   }
 }
 
-/** A red line in the graph pane; the status line alone is easy to miss. */
-function showLayoutError(app, message) {
+/**
+ * A red line in the graph pane; the status line alone is easy to miss.  It
+ * carries the top of the stack as well, because a message like "String
+ * contains an invalid character" names a browser check, not the line that
+ * tripped it, and the person reading the page is the only one who can see it.
+ */
+function showLayoutError(app, message, error) {
   clearLayoutError();
   if (!ui) return;
-  ui.errorEl = app.el('div.graph-error', 'Layout failed: ' + message);
+  const where = stackHead(error);
+  ui.errorEl = app.el('div.graph-error',
+    'Layout failed: ' + message + (where ? ` (at ${where})` : ''));
   ui.stage.appendChild(ui.errorEl);
+}
+
+/** The first few frames of an error's stack, trimmed to file:line. */
+function stackHead(error) {
+  const stack = error && typeof error.stack === 'string' ? error.stack : '';
+  const frames = stack.split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /\.(m?js)(\?[^:]*)?:\d+/.test(l))
+    .map((l) => l.replace(/^at\s+/, '').replace(/^.*?@/, '').replace(/^.*\/([^/]+:\d+(?::\d+)?)\)?$/, '$1'))
+    .slice(0, 3);
+  return frames.join(' < ');
 }
 
 function clearLayoutError() {
