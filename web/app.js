@@ -77,6 +77,14 @@ function append(node, children) {
 
 export function svgEl(tag, attrs, ...children) {
   const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  // A string, node or array in the attributes slot is the first child, as in
+  // `el`. Without this, `svgEl('title', text)` walks the string's characters
+  // as attributes named 0, 1, 2, …, which browsers before the 2025 DOM name
+  // relaxation reject with an InvalidCharacterError.
+  if (attrs && (typeof attrs !== 'object' || attrs instanceof Node || Array.isArray(attrs))) {
+    children.unshift(attrs);
+    attrs = null;
+  }
   if (attrs) {
     for (const [k, v] of Object.entries(attrs)) {
       if (v === null || v === undefined || v === false) continue;
