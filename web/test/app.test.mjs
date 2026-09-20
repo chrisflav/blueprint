@@ -284,6 +284,49 @@ function fakeLayout(graph) {
   return graph;
 }
 
+/**
+ * A stand-in for elkjs's `ELK` class, speaking elk-api's protocol: given a
+ * `workerFactory` it drives the worker with `{id, cmd}` messages and resolves
+ * on `{id, data}` / rejects on `{id, error}`; given nothing it lays out
+ * in-thread, which is what elk.bundled.js does on the main thread.
+ */
+function installFakeELK() {
+  const state = { mainThreadLayouts: 0, instances: [] };
+  global.window.ELK = function FakeELK(cfg = {}) {
+    const inst = { cfg, resolvers: new Map(), seq: 0 };
+    state.instances.push(inst);
+    if (!cfg.workerFactory) {
+      inst.mode = 'main';
+      inst.layout = async (g) => { state.mainThreadLayouts += 1; return fakeLayout(g); };
+      return inst;
+    }
+    inst.mode = 'worker';
+    const w = cfg.workerFactory();
+    inst.worker = w;
+    w.onmessage = (ev) => {
+      const msg = (ev && ev.data) || {};
+      const r = inst.resolvers.get(msg.id);
+      if (!r) return;
+      inst.resolvers.delete(msg.id);
+      if (msg.error) r.reject(new Error(String(msg.error)));
+      else r.resolve(msg.data);
+    };
+    const post = (msg) => new Promise((resolve, reject) => {
+      msg.id = inst.seq;
+      inst.seq += 1;
+      inst.resolvers.set(msg.id, { resolve, reject });
+      w.postMessage(msg);
+    });
+    // elk-api registers its algorithms as soon as it is constructed.
+    post({ cmd: 'register', algorithms: ['layered'] }).catch(() => {});
+    inst.layout = (graph, opts = {}) =>
+      post({ cmd: 'layout', graph, layoutOptions: opts.layoutOptions || {}, options: {} });
+    inst.terminateWorker = () => w.terminate();
+    return inst;
+  };
+  return state;
+}
+
 function hasBp(value) {
   if (!value || typeof value !== 'object') return false;
   if (!Array.isArray(value) && Object.prototype.hasOwnProperty.call(value, 'bp')) return true;
@@ -294,11 +337,30 @@ function hasBp(value) {
 }
 
 const statusText = () => root.querySelectorAll('.graph-status')[0].textContent;
+const layingOut = () => root.querySelectorAll('.graph-stage')[0].classList.contains('laying-out');
+const errorLine = () => root.querySelectorAll('.graph-error')[0] || null;
+const lastLayoutMessage = (w) =>
+  [...w.messages].reverse().find((m) => m.cmd === 'layout') || null;
 
-await check('the graph lays out in a Blob worker that imports the pinned ELK', async () => {
-  global.window.ELK = function FakeELK() {
-    return { layout: async (g) => fakeLayout(g) };
-  };
+/** A fresh graph.js, so the worker is attempted again from scratch. */
+const freshGraph = async (tag) => {
+  const mod = await import(path.join(webDir, 'graph.js') + '?' + tag);
+  app.route = { view: 'graph', id: null, params: new URLSearchParams(), raw: '/graph' };
+  return mod;
+};
+
+const graphMod = await import(path.join(webDir, 'graph.js'));
+
+await check('the watchdog deadline grows with the graph', () => {
+  eq(graphMod.layoutDeadline(0), 4000, 'the floor');
+  eq(graphMod.layoutDeadline(1), 4002, 'one node');
+  eq(graphMod.layoutDeadline(1000), 6000, 'a thousand nodes and edges');
+});
+
+const elkState = installFakeELK();
+
+await check('the graph lays out in a Blob worker that imports elkjs’s worker half', async () => {
+  dom.workers.created.length = 0;
   await go('#/graph');
 
   // One worker for the page, reused for every layout.
@@ -306,24 +368,38 @@ await check('the graph lays out in a Blob worker that imports the pinned ELK', a
   const w = dom.workers.created[0];
   ok(String(w.url).startsWith('blob:'), `the worker came from ${w.url}, not a blob`);
   ok(w.source.includes('importScripts('), 'the worker does not import anything');
-  ok(w.source.includes('elkjs@0.9.3/lib/elk.bundled.js'),
-    'the worker does not import the pinned ELK from index.html');
-  ok(w.source.includes('elk.layout('), 'the worker does not lay anything out');
+  ok(w.source.includes('elkjs@0.9.3/lib/elk-worker.min.js'),
+    `the worker imports ${w.source}, not the pinned elk-worker.min.js`);
+  ok(!w.source.includes('elk.bundled.js'),
+    'the worker loads the bundle, whose own protocol would collide with elkjs’s');
+  // Nothing but the import: elkjs installs its own protocol on both sides.
+  eq(w.source.replace(/\s+/g, ' ').trim(),
+    `importScripts("https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk-worker.min.js");`,
+    'the worker runs a program of its own on top of elkjs');
+
+  // The page drives it through ELK itself, not a protocol of ours.
+  const inst = elkState.instances[elkState.instances.length - 1];
+  eq(inst.mode, 'worker', 'ELK was not constructed with a workerFactory');
+  eq(typeof inst.cfg.workerFactory, 'function', 'workerFactory');
+  ok(inst.worker === w, 'the factory did not make the Blob worker');
 
   ok(w.messages.length > 0, 'nothing was posted to the worker');
-  const { id, graph } = w.messages[w.messages.length - 1];
-  ok(typeof id === 'number', 'the request carries no id');
-  ok(!hasBp(graph), 'the model back-references were posted to the worker');
-  ok(graph.children.length > 0, 'an empty graph was posted');
+  ok(w.messages.some((m) => m.cmd === 'register'), 'the algorithms were never registered');
+  const req = lastLayoutMessage(w);
+  ok(req, 'no layout was requested');
+  ok(typeof req.id === 'number', 'the request carries no id');
+  ok(!hasBp(req.graph), 'the model back-references were posted to the worker');
+  ok(req.graph.children.length > 0, 'an empty graph was posted');
 
   ok(/laying out \d+ nodes?/.test(statusText()), `status was "${statusText()}"`);
   eq(root.querySelectorAll('.gnode').length, 0, 'the graph was drawn before ELK answered');
 
-  w.reply({ id, laid: fakeLayout(JSON.parse(JSON.stringify(graph))) });
+  w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
   await tick(5);
 
   ok(root.querySelectorAll('.gnode').length > 0, 'nothing was drawn from the worker’s answer');
   ok(/nodes, \d+ links/.test(statusText()), `status stayed at "${statusText()}"`);
+  ok(!layingOut(), 'the stage is still marked as laying out');
 });
 
 await check('node and edge metadata survives the round trip through the worker', async () => {
@@ -344,25 +420,186 @@ await check('node and edge metadata survives the round trip through the worker',
 await check('a blocked worker falls back to laying out on the main thread', async () => {
   dom.workers.enabled = false;
   dom.workers.created.length = 0;
-  let mainThreadLayouts = 0;
-  global.window.ELK = function FakeELK() {
-    return {
-      layout: async (g) => { mainThreadLayouts += 1; return fakeLayout(g); },
-    };
-  };
+  const state = installFakeELK();
   try {
-    // A fresh module instance, so the worker is attempted again from scratch.
-    const graphPage = await import(path.join(webDir, 'graph.js') + '?fallback');
-    app.route = { view: 'graph', id: null, params: new URLSearchParams(), raw: '/graph' };
+    const graphPage = await freshGraph('blocked');
     graphPage.render(root, app);
     await tick(30);
     eq(dom.workers.created.length, 0, 'a worker was created even though they are blocked');
-    ok(mainThreadLayouts > 0, 'the main-thread fallback never ran');
+    ok(state.mainThreadLayouts > 0, 'the main-thread fallback never ran');
+    eq(state.instances[state.instances.length - 1].mode, 'main', 'not the in-thread ELK');
     ok(root.querySelectorAll('.gnode').length > 0, 'the fallback drew nothing');
   } finally {
     dom.workers.enabled = true;
   }
 });
+
+await check('a worker that never answers is killed and the layout moves to the main thread', async () => {
+  dom.workers.created.length = 0;
+  const state = installFakeELK();
+  global.window.BLUEPRINT_LAYOUT_DEADLINE_MS = 25;
+  try {
+    const graphPage = await freshGraph('watchdog');
+    graphPage.render(root, app);
+    await tick(5);
+    eq(dom.workers.created.length, 1, 'no worker was made');
+    const w = dom.workers.created[0];
+    ok(lastLayoutMessage(w), 'no layout was requested of the worker');
+    eq(state.mainThreadLayouts, 0, 'the main thread was used before the deadline');
+    ok(/laying out \d+ nodes?/.test(statusText()), `status was "${statusText()}"`);
+
+    // …and the worker says nothing, ever.
+    await tick(120);
+    ok(w.terminated, 'the silent worker was left running');
+    ok(state.mainThreadLayouts > 0, 'the watchdog did not fall back to the main thread');
+    ok(root.querySelectorAll('.gnode').length > 0, 'nothing was drawn after the fallback');
+    ok(/nodes, \d+ links/.test(statusText()), `status stayed at "${statusText()}"`);
+    ok(!layingOut(), 'the stage is still marked as laying out');
+    ok(!errorLine(), `an error was shown anyway: "${errorLine() && errorLine().textContent}"`);
+
+    // Every later layout goes straight to the main thread.
+    const before = state.mainThreadLayouts;
+    graphPage.render(root, app);
+    await tick(30);
+    eq(dom.workers.created.length, 1, 'a second worker was made after one had died');
+    ok(state.mainThreadLayouts > before, 'the second layout went nowhere');
+  } finally {
+    delete global.window.BLUEPRINT_LAYOUT_DEADLINE_MS;
+  }
+});
+
+await check('a worker that answers with an error falls back to the main thread', async () => {
+  dom.workers.created.length = 0;
+  const state = installFakeELK();
+  const graphPage = await freshGraph('worker-error');
+  graphPage.render(root, app);
+  await tick(5);
+  eq(dom.workers.created.length, 1, 'no worker was made');
+  const w = dom.workers.created[0];
+  const req = lastLayoutMessage(w);
+  ok(req, 'no layout was requested of the worker');
+  w.reply({ id: req.id, error: 'elkjs fell over' });
+  await tick(30);
+  ok(w.terminated, 'the failing worker was left running');
+  ok(state.mainThreadLayouts > 0, 'the rejection did not fall back to the main thread');
+  ok(root.querySelectorAll('.gnode').length > 0, 'nothing was drawn after the fallback');
+  ok(/nodes, \d+ links/.test(statusText()), `status stayed at "${statusText()}"`);
+  ok(!layingOut(), 'the stage is still marked as laying out');
+});
+
+await check('a failure after the layout says so, and the next attempt still works', async () => {
+  dom.workers.created.length = 0;
+  installFakeELK();
+  const graphPage = await freshGraph('draw-error');
+  graphPage.render(root, app);
+  await tick(5);
+  const w = dom.workers.created[0];
+  const bad = lastLayoutMessage(w);
+  ok(bad, 'no layout was requested of the worker');
+
+  // A well-formed reply that the drawing cannot survive: the failure happens
+  // after the promise resolves, which used to leave "laying out…" on screen.
+  w.reply({ id: bad.id, data: null });
+  await tick(20);
+  ok(!layingOut(), 'the stage is still marked as laying out');
+  ok(!/laying out/.test(statusText()), `status stayed at "${statusText()}"`);
+  ok(/layout failed/.test(statusText()), `status was "${statusText()}"`);
+  const line = errorLine();
+  ok(line, 'no visible error in the graph pane');
+  ok(line.textContent.length > 'Layout failed: '.length, 'the error line says nothing');
+
+  // A second attempt: the same worker, a usable answer.
+  graphPage.render(root, app);
+  await tick(5);
+  const good = lastLayoutMessage(w);
+  ok(good && good.id !== bad.id, 'the retry never reached the worker');
+  w.reply({ id: good.id, data: fakeLayout(JSON.parse(JSON.stringify(good.graph))) });
+  await tick(20);
+  ok(root.querySelectorAll('.gnode').length > 0, 'the retry drew nothing');
+  ok(/nodes, \d+ links/.test(statusText()), `status stayed at "${statusText()}"`);
+  ok(!errorLine(), 'the error line outlived the failure');
+});
+
+// --- the real thing, when a copy of elkjs is at hand -------------------------
+// Everything above stubs ELK out.  This one runs the actual elk-worker.min.js
+// in a node worker thread behind a tiny `self`/`importScripts` shim and drives
+// it with the actual `ELK` class out of elk.bundled.js — the same two halves
+// the page pairs, so a protocol mismatch like the one this replaced would fail
+// here.  elkjs is not vendored, so point the test at a copy:
+//
+//   curl -sLo /tmp/elk.bundled.js    https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js
+//   curl -sLo /tmp/elk-worker.min.js https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk-worker.min.js
+//   node web/test/app.test.mjs --elk=/tmp/elk.bundled.js
+//
+// (or set BLUEPRINT_ELK).  Without it this check is skipped.
+const elkArg = (process.argv.find((a) => a.startsWith('--elk=')) || '').slice(6);
+const ELK_PATH = elkArg || process.env.BLUEPRINT_ELK || '';
+const ELK_WORKER_PATH = process.env.BLUEPRINT_ELK_WORKER ||
+  (ELK_PATH ? path.join(path.dirname(path.resolve(ELK_PATH)), 'elk-worker.min.js') : '');
+
+if (ELK_PATH && fs.existsSync(ELK_PATH) && fs.existsSync(ELK_WORKER_PATH)) {
+  await check('the real elk-worker.min.js answers the real ELK class', async () => {
+    const { Worker: NodeWorker } = await import('node:worker_threads');
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const ELK = require(path.resolve(ELK_PATH));
+
+    // What a browser worker gives elk-worker.min.js: a `self`, a
+    // `postMessage`, an `importScripts`, and no `document`.
+    // `eval: true` runs this in the worker's global scope, where
+    // elk-worker.min.js is about to declare a few hundred names of its own, so
+    // the shim keeps its own bindings inside a function.
+    const host = `
+      (function () {
+        const { parentPort, workerData } = require('worker_threads');
+        const nodeFs = require('fs'), nodeVm = require('vm');
+        globalThis.self = globalThis;
+        globalThis.postMessage = (m) => parentPort.postMessage(m);
+        globalThis.importScripts = function (...urls) {
+          for (const u of urls) nodeVm.runInThisContext(nodeFs.readFileSync(u, 'utf8'), { filename: u });
+        };
+        globalThis.importScripts(workerData.path);
+        parentPort.on('message', (m) => {
+          if (typeof globalThis.onmessage === 'function') globalThis.onmessage({ data: m });
+        });
+      })();
+    `;
+    const nodeWorker = new NodeWorker(host, {
+      eval: true, workerData: { path: path.resolve(ELK_WORKER_PATH) },
+    });
+    // elk-api only needs postMessage, onmessage and terminate.
+    const adapter = {
+      postMessage: (m) => nodeWorker.postMessage(m),
+      terminate: () => nodeWorker.terminate(),
+    };
+    nodeWorker.on('message', (m) => { if (adapter.onmessage) adapter.onmessage({ data: m }); });
+    try {
+      const elk = new ELK({ workerFactory: () => adapter });
+      ok(elk.knownLayoutAlgorithms, 'not the ELK class');
+      const graph = graphMod.plainGraph({
+        id: 'root',
+        layoutOptions: { 'elk.algorithm': 'layered', 'elk.direction': 'DOWN' },
+        children: [
+          { id: 'a', width: 60, height: 30, bp: { back: 'reference' } },
+          { id: 'b', width: 60, height: 30 },
+        ],
+        edges: [{ id: 'e1', sources: ['a'], targets: ['b'] }],
+      });
+      const laid = await elk.layout(graph);
+      eq(laid.children.length, 2, 'the layouter lost a node');
+      ok(laid.width > 0 && laid.height > 0, 'the graph got no size');
+      const [a, b] = laid.children;
+      ok(typeof a.x === 'number' && typeof b.y === 'number', 'nodes got no coordinates');
+      ok(b.y > a.y, 'the layered layout did not stack the edge’s ends');
+      const algorithms = await elk.knownLayoutAlgorithms();
+      ok(algorithms.some((x) => /layered/.test(x.id || x.name || '')), 'no algorithms registered');
+    } finally {
+      await nodeWorker.terminate();
+    }
+  });
+} else {
+  console.log('  - skipped the real elk-worker.min.js check (no --elk=<elk.bundled.js>)');
+}
 
 // ---------------------------------------------------------------------------
 

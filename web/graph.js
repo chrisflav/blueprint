@@ -10,13 +10,16 @@
 //
 //   * the graph handed to ELK carries no back-references into the model (see
 //     `plainGraph`); the metadata is looked up again by id after layout;
-//   * layout runs in a Web Worker built from a Blob URL that `importScripts`
-//     the same pinned elk.bundled.js the page already loads, so the main thread
-//     keeps panning, zooming and responding while ELK thinks.  If a worker
-//     cannot be created — a Content-Security-Policy with a `worker-src` that
-//     forbids `blob:`, say — the layout falls back to the main thread and
-//     yields to the event loop between phases so the status line is painted
-//     before the browser freezes;
+//   * layout runs in a Web Worker built from a Blob URL whose whole program is
+//     an `importScripts` of elkjs's own worker half, elk-worker.min.js, pinned
+//     to the same version as the elk.bundled.js in index.html and driven from
+//     the page with `new ELK({workerFactory})`, so elkjs's own protocol runs
+//     on both sides and the main thread keeps panning, zooming and responding
+//     while ELK thinks.  If the worker cannot be created — a
+//     Content-Security-Policy with a `worker-src` that forbids `blob:`, say —
+//     or it fails, or it does not answer within a deadline, the layout falls
+//     back to the main thread and yields to the event loop between phases so
+//     the status line is painted before the browser freezes;
 //   * the status line says how many nodes are being laid out, and the
 //     "Expand all" button says so up front.
 
@@ -509,24 +512,41 @@ async function scheduleLayout(app, st, view, quot) {
   status.textContent = `laying out ${n.toLocaleString()} node${n === 1 ? '' : 's'}\u2026`;
   ui.stage.classList.add('laying-out');
 
-  let laid;
+  clearLayoutError();
   try {
-    laid = await layoutGraph(plainGraph(graph));
+    const laid = await layoutGraph(plainGraph(graph));
+    if (token !== layoutToken) return; // superseded
+    ui.stage.classList.remove('laying-out');
+    draw(app, st, view, quot, laid, nodes, edgeMeta, structureChanged);
+    const nCount = countNodes(laid);
+    status.textContent = `${nCount.toLocaleString()} nodes, ${(laid.edges || []).length} links \u2014 ` +
+      `${view.expanded.size} expanded, collapse kind \u201c${st.collapse}\u201d`;
   } catch (e) {
+    // Everything on this path is covered, the drawing included: a failure has
+    // to leave a visible answer rather than "laying out N nodes…" for ever,
+    // and has to leave the page able to try again.
     console.error(e);
-    if (token === layoutToken) {
-      ui.stage.classList.remove('laying-out');
-      status.textContent = 'layout failed: ' + (e && e.message ? e.message : e);
-    }
-    return;
+    if (token !== layoutToken) return;
+    ui.stage.classList.remove('laying-out');
+    const msg = describe(e);
+    status.textContent = 'layout failed: ' + msg;
+    showLayoutError(app, msg);
+    lastSignature = null; // the next attempt is a fresh one, not a redraw
   }
-  if (token !== layoutToken) return; // superseded
+}
 
-  ui.stage.classList.remove('laying-out');
-  draw(app, st, view, quot, laid, nodes, edgeMeta, structureChanged);
-  const nCount = countNodes(laid);
-  status.textContent = `${nCount.toLocaleString()} nodes, ${(laid.edges || []).length} links \u2014 ` +
-    `${view.expanded.size} expanded, collapse kind \u201c${st.collapse}\u201d`;
+/** A red line in the graph pane; the status line alone is easy to miss. */
+function showLayoutError(app, message) {
+  clearLayoutError();
+  if (!ui) return;
+  ui.errorEl = app.el('div.graph-error', 'Layout failed: ' + message);
+  ui.stage.appendChild(ui.errorEl);
+}
+
+function clearLayoutError() {
+  if (!ui || !ui.errorEl) return;
+  if (ui.errorEl.parentNode) ui.errorEl.parentNode.removeChild(ui.errorEl);
+  ui.errorEl = null;
 }
 
 function countNodes(n) {
@@ -540,10 +560,24 @@ function countNodes(n) {
 // running ELK: in a worker when the browser lets us, on the main thread if not
 // ---------------------------------------------------------------------------
 
-let worker = null;          // the Blob worker, or null
-let workerBroken = false;   // it could not be created, or it died
-let workerSeq = 0;
-const pending = new Map();  // request id -> {resolve, reject}
+let workerElk = null;       // ELK driving a real Web Worker, or null
+let workerHandle = null;    // that worker, so it can be terminated
+let workerBroken = false;   // it could not be created, died, or timed out
+const inFlight = new Set(); // layout requests the worker still owes an answer
+
+// The watchdog.  A worker that neither answers nor raises an error would leave
+// the page saying "laying out N nodes…" for ever, so every request carries a
+// deadline: a fixed budget plus a little per node and edge.  Overridable
+// through `window.BLUEPRINT_LAYOUT_DEADLINE_MS`, which is how the tests avoid
+// waiting seconds for it.
+const WATCHDOG_BASE_MS = 4000;
+const WATCHDOG_PER_ITEM_MS = 2;
+
+export function layoutDeadline(items) {
+  const base = (typeof window !== 'undefined' && window.BLUEPRINT_LAYOUT_DEADLINE_MS)
+    || WATCHDOG_BASE_MS;
+  return Math.max(base, base + WATCHDOG_PER_ITEM_MS * items);
+}
 
 /** The pinned elk.bundled.js URL, taken from the tag index.html already has. */
 function elkScriptUrl() {
@@ -553,87 +587,150 @@ function elkScriptUrl() {
 }
 
 /**
- * A worker whose whole program is "load ELK, lay out what you are sent".  It is
- * built from a Blob so the deployment stays a directory of static files: no
- * extra worker script to serve, and no build step.  The site is served plainly,
- * without a Content-Security-Policy, so `blob:` workers and the cross-origin
- * `importScripts` of the CDN bundle are both allowed; if a deployment does add
- * a CSP that forbids either, worker creation throws and we fall back.
+ * elk-worker.min.js beside it on the same CDN: the same pinned version, the
+ * file name swapped, so the version still lives in exactly one place —
+ * index.html's script tag.
  */
-function ensureWorker() {
-  if (worker || workerBroken) return worker;
+function elkWorkerUrl() {
   const url = elkScriptUrl();
-  if (!url || typeof Worker !== 'function' || typeof Blob !== 'function' ||
+  if (!url) return null;
+  try {
+    return new URL('elk-worker.min.js', new URL(url, location.href)).href;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * ELK in elkjs's own worker mode.
+ *
+ * elkjs comes in two halves that talk to each other over a fixed protocol
+ * (`{id, cmd: 'register' | 'layout', …}` out, `{id, data}` or `{id, error}`
+ * back): `elk-api`, the `ELK` class on the page, and `elk-worker.min.js`, the
+ * layouter, which installs that protocol on `self.onmessage` as soon as it is
+ * loaded in a worker.  So the worker's whole program is one `importScripts` of
+ * elk-worker.min.js, and the page drives it with `new ELK({workerFactory})`.
+ *
+ * Do *not* load elk.bundled.js in the worker and run a protocol of our own on
+ * top: the bundle contains the worker half too, and in a worker context (no
+ * `document`, a `self`) that half claims `self.onmessage` for elkjs's protocol
+ * and exports no fake worker, so `new ELK()` inside the worker throws and
+ * every message in any other protocol is dropped without an answer — the page
+ * then waits for a reply that never comes.
+ *
+ * The worker is still built from a Blob, so the deployment stays a directory
+ * of static files: no worker script to serve, and no build step.  The site is
+ * served without a Content-Security-Policy, so `blob:` workers and the
+ * cross-origin `importScripts` are both allowed; where a CSP forbids either,
+ * construction throws and we lay out on the main thread instead.
+ */
+function ensureWorkerElk() {
+  if (workerElk || workerBroken) return workerElk;
+  // The CDN bundle may simply not have arrived yet; that is not a verdict on
+  // workers, so it is worth asking again next time.
+  if (!window.ELK) return null;
+  const src = elkWorkerUrl();
+  if (!src || typeof Worker !== 'function' || typeof Blob !== 'function' ||
       typeof URL === 'undefined' || !URL.createObjectURL) {
     workerBroken = true;
     return null;
   }
-  const absolute = new URL(url, location.href).href;
-  const source =
-    `importScripts(${JSON.stringify(absolute)});\n` +
-    'const elk = new ELK();\n' +
-    'self.onmessage = function (ev) {\n' +
-    '  var id = ev.data.id;\n' +
-    '  elk.layout(ev.data.graph).then(\n' +
-    '    function (laid) { self.postMessage({ id: id, laid: laid }); },\n' +
-    '    function (err) { self.postMessage({ id: id, error: String((err && err.message) || err) }); });\n' +
-    '};\n';
+  const source = `importScripts(${JSON.stringify(src)});\n`;
   let objectUrl = null;
   try {
     objectUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
-    worker = new Worker(objectUrl);
+    workerElk = new window.ELK({
+      workerFactory: () => {
+        const w = new Worker(objectUrl);
+        workerHandle = w;
+        // The worker could not even start (a blocked import, most likely).
+        w.onerror = (ev) => breakWorker((ev && ev.message) || 'the ELK worker failed');
+        return w;
+      },
+    });
   } catch (e) {
+    // Most likely `new Worker` itself: a CSP that forbids `blob:` workers.
     workerBroken = true;
-    worker = null;
+    workerElk = null;
+    try { if (workerHandle) workerHandle.terminate(); } catch (e2) { /* never started */ }
+    workerHandle = null;
     if (objectUrl && URL.revokeObjectURL) URL.revokeObjectURL(objectUrl);
     return null;
   }
-  worker.onmessage = (ev) => {
-    const msg = ev.data || {};
-    const req = pending.get(msg.id);
-    if (!req) return;
-    pending.delete(msg.id);
-    if (msg.error) req.reject(new Error(msg.error));
-    else req.resolve(msg.laid);
-  };
-  worker.onerror = (ev) => {
-    // The worker could not even start (a blocked import, most likely).  Every
-    // outstanding request falls back to the main thread, and so does every
-    // later one.
-    workerBroken = true;
-    const waiting = [...pending.values()];
-    pending.clear();
-    try { worker.terminate(); } catch (e) { /* already gone */ }
-    worker = null;
-    for (const req of waiting) req.fallback(ev && ev.message);
-  };
-  return worker;
+  return workerElk;
+}
+
+/**
+ * Give up on the worker: terminate it, never make another, and let every
+ * request it still owes an answer finish on the main thread.
+ */
+function breakWorker(reason) {
+  workerBroken = true;
+  const inst = workerElk;
+  const w = workerHandle;
+  workerElk = null;
+  workerHandle = null;
+  try {
+    if (inst && typeof inst.terminateWorker === 'function') inst.terminateWorker();
+    else if (w && w.terminate) w.terminate();
+  } catch (e) { /* already gone */ }
+  const waiting = [...inFlight];
+  inFlight.clear();
+  for (const req of waiting) req.fail(reason);
+}
+
+function describe(reason) {
+  if (!reason) return 'unknown error';
+  return reason.message ? reason.message : String(reason);
 }
 
 function layoutGraph(graph) {
-  const w = ensureWorker();
-  if (!w) return layoutOnMainThread(graph);
+  const inst = ensureWorkerElk();
+  if (!inst) return layoutOnMainThread(graph);
+  const deadline = layoutDeadline(countNodes(graph) + (graph.edges || []).length);
   return new Promise((resolve, reject) => {
-    const id = (workerSeq += 1);
-    pending.set(id, {
-      resolve,
-      reject,
-      fallback: () => layoutOnMainThread(graph).then(resolve, reject),
-    });
+    let done = false;
+    const req = {
+      timer: null,
+      fail(reason) {
+        if (done) return;
+        done = true;
+        clearTimeout(req.timer);
+        inFlight.delete(req);
+        console.warn('ELK worker layout failed (' + describe(reason) +
+          '); laying out on the main thread instead');
+        layoutOnMainThread(graph).then(resolve, reject);
+      },
+      settle(laid) {
+        if (done) return;
+        done = true;
+        clearTimeout(req.timer);
+        inFlight.delete(req);
+        resolve(laid);
+      },
+    };
+    inFlight.add(req);
+    req.timer = setTimeout(() => {
+      breakWorker(`no answer within ${deadline} ms`);
+    }, deadline);
+    let p;
     try {
-      w.postMessage({ id, graph });
+      p = inst.layout(graph);
     } catch (e) {
-      pending.delete(id);
-      workerBroken = true;
-      layoutOnMainThread(graph).then(resolve, reject);
+      p = Promise.reject(e);
     }
+    // A rejection means the worker cannot be trusted with this graph — and we
+    // cannot tell "this graph is bad" from "this worker is bad" — so drop the
+    // worker and let the main thread say what went wrong.
+    Promise.resolve(p).then((laid) => req.settle(laid), (err) => breakWorker(err));
   });
 }
 
 /**
- * The fallback.  ELK itself is synchronous here, so the best we can do is let
- * the browser paint the "laying out N nodes" status before we take the thread
- * away, and let it paint again before we draw.
+ * The fallback: elk.bundled.js's in-thread mode, which lays out inside a fake
+ * worker on the main thread.  ELK is effectively synchronous here, so the best
+ * we can do is let the browser paint the "laying out N nodes" status before we
+ * take the thread away, and let it paint again before we draw.
  */
 async function layoutOnMainThread(graph) {
   if (!window.ELK) throw new Error('ELK could not be loaded from the CDN; the graph needs it');

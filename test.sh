@@ -690,6 +690,21 @@ else
   diff "$TMP/real.json" web/sample/real/blueprint.json | head -10
 fi
 
+# The website's own tests, when node is available (it is on GitHub's runners; on
+# a NixOS host without it, `nix-shell -p nodejs_22 --run ./test.sh` runs them).
+if command -v node > /dev/null 2>&1; then
+  for t in web/test/model.test.mjs web/test/app.test.mjs; do
+    if node "$t" > "$TMP/$(basename "$t").txt" 2>&1; then
+      ok "$t: $(tail -1 "$TMP/$(basename "$t").txt")"
+    else
+      bad "$t"
+      tail -15 "$TMP/$(basename "$t").txt"
+    fi
+  done
+else
+  echo "  skip web/test/*.mjs (no node on PATH)"
+fi
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

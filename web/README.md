@@ -97,7 +97,7 @@ The graph route carries its full view state as query parameters:
 | `test/bench.mjs` | the performance harness (indexing, quotient, ELK, pages) |
 | `sample/real/blueprint.json` | a snapshot produced by the Lean tool itself, kept as a second fixture, regenerated with `lake exe blueprint build --root examples/induction --facts examples/induction/lean-facts.json -o web/sample/real/blueprint.json` and checked by `./test.sh` |
 | `test/model.test.mjs` | unit tests for `model.js` |
-| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, lazy document rendering, the ELK worker |
+| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, lazy document rendering, the ELK worker and its fallbacks |
 
 Both samples can be opened directly:
 
@@ -116,21 +116,61 @@ stays a tree.
 |---------|---------|--------|
 | KaTeX (css, js, auto-render) | 0.16.11 | cdnjs |
 | marked | 12.0.2 | cdnjs |
-| elkjs (`elk.bundled.js`) | 0.9.3 | jsDelivr — elkjs is not published on cdnjs |
+| elkjs (`elk.bundled.js`, and `elk-worker.min.js` in the worker) | 0.9.3 | jsDelivr — elkjs is not published on cdnjs |
 
-Each tag carries an `integrity` hash.
+Each tag carries an `integrity` hash.  The worker half is not a tag: it is
+fetched by `importScripts` from the same pinned directory as the bundle (see
+below), so it carries no SRI hash.
 
-`elk.bundled.js` is loaded by `index.html` but the graph does not normally run
-it on the main thread: `graph.js` builds a Web Worker out of a `Blob` whose
-whole program is "`importScripts` that same pinned URL, then lay out what you
-are sent". Layout of a few thousand nodes therefore takes seconds *beside* the
-page rather than freezing it, and the deployment stays a directory of static
-files — there is no worker script to serve and still no build step. The site is
-served plainly (nginx, GitHub Pages: no `Content-Security-Policy` anywhere in
-this repository or added by those servers), so `blob:` workers and a
-cross-origin `importScripts` are both allowed. Behind a CSP that forbids
-either, worker creation throws, and the layout falls back to the main thread
-with a yield to the event loop around it so the status line is painted first.
+### How layout runs
+
+elkjs ships as two halves that talk to each other over one fixed protocol
+(`{id, cmd: 'register' | 'layout', …}` out, `{id, data}` or `{id, error}`
+back): `elk-api`, the `ELK` class on the page, and `elk-worker.min.js`, the
+layouter itself, which claims `self.onmessage` for that protocol as soon as it
+is loaded in a worker. `elk.bundled.js` is both halves in one file; that is
+what `index.html` loads, and its tag is the only place the version is written
+down.
+
+`graph.js` pairs them the way elkjs intends:
+
+* the worker's whole program is `importScripts("…/elk-worker.min.js")` — the
+  URL derived from the `elk.bundled.js` tag by swapping the file name, so the
+  pin stays in one place — built into a `Blob`, so the deployment stays a
+  directory of static files: no worker script to serve, still no build step;
+* the page lays out with
+  `new ELK({ workerFactory: () => new Worker(blobUrl) })`, so elkjs's own
+  protocol runs on both sides.
+
+Layout of a few thousand nodes therefore happens *beside* the page rather than
+freezing it. The site is served plainly (nginx, GitHub Pages: no
+`Content-Security-Policy` anywhere in this repository or added by those
+servers), so `blob:` workers and a cross-origin `importScripts` are both
+allowed.
+
+What must **not** be done — and was, until it hung a real browser — is to load
+`elk.bundled.js` inside the worker and run a protocol of one's own on top of
+it. In a worker context (no `document`, a `self`) the bundle's worker half
+takes `self.onmessage` for elkjs's protocol and exports no in-thread worker, so
+`new ELK()` *inside* the worker throws and every message in any other protocol
+is dropped without an answer: the page waits for ever.
+
+Every way this can still go wrong ends on the main thread, in
+`elk.bundled.js`'s in-thread mode (`new ELK()` with no worker at all), with a
+yield to the event loop around it so the status line is painted first:
+
+* `Worker`, `Blob` or `URL.createObjectURL` missing, or construction refused by
+  a CSP that forbids `blob:` workers or the cross-origin `importScripts`;
+* the worker raising an `error` event;
+* the layout promise rejecting;
+* a watchdog: no answer within 4 s plus 2 ms per node and edge, after which the
+  worker is terminated and never used again. The fixed part can be overridden
+  with `window.BLUEPRINT_LAYOUT_DEADLINE_MS`, which is how the tests avoid
+  waiting for it.
+
+A failure anywhere on that path — in the layouter, or in the drawing that
+follows a successful layout — replaces "laying out N nodes…" with a red line in
+the graph pane saying what happened, and leaves the page able to try again.
 
 ## Maths
 
@@ -169,8 +209,24 @@ different expanded set.
 `app.test.mjs` runs the real page modules against `test/dom-shim.mjs`, with
 marked, KaTeX and ELK replaced by stand-ins that record what they were asked to
 do. It is what checks the KaTeX options, that the document view renders lazily,
-and that the graph really posts a `bp`-free graph to a Blob worker and falls
-back when workers are blocked.
+and that the graph really drives a Blob worker that loads elk-worker.min.js —
+with a `bp`-free graph, over elkjs's protocol — and that every way that can
+fail (workers blocked, the worker silent, the layout rejected, the drawing
+throwing) ends in a drawn graph or a visible error rather than a page stuck on
+"laying out…".
+
+Given a copy of elkjs it also runs the real `elk-worker.min.js` in a node
+worker thread behind a small `self`/`importScripts` shim and drives it with the
+real `ELK` class from `elk.bundled.js`, which is the check that the two halves
+are paired correctly — the stand-ins cannot show that:
+
+```sh
+curl -sLo /tmp/elk.bundled.js    https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js
+curl -sLo /tmp/elk-worker.min.js https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk-worker.min.js
+nix-shell -p nodejs_22 --run "node test/app.test.mjs --elk=/tmp/elk.bundled.js"
+```
+
+Without `--elk` (or `BLUEPRINT_ELK`) that one check is skipped and says so.
 
 ## Performance
 
