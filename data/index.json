@@ -36,6 +36,14 @@
     "proved": 2,
     "byStatus":
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "7a1b776812f23ead86218b2eef3cf88ede42c876",
+   "file": "data/7a1b776812f23ead86218b2eef3cf88ede42c876.json",
+   "date": "2026-09-20"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "9eb68ad038f8776103aca497f8b44be26d28d812",
    "file": "data/9eb68ad038f8776103aca497f8b44be26d28d812.json",
    "date": "2026-09-20"},
