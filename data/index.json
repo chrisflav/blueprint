@@ -20,6 +20,14 @@
     "proved": 2,
     "byStatus":
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "6a150f3d03e5df004fc49cf9f74c3afbc7ba8baa",
+   "file": "data/6a150f3d03e5df004fc49cf9f74c3afbc7ba8baa.json",
+   "date": "2026-09-20"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "9eb68ad038f8776103aca497f8b44be26d28d812",
    "file": "data/9eb68ad038f8776103aca497f8b44be26d28d812.json",
    "date": "2026-09-20"},
