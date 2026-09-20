@@ -208,19 +208,24 @@ await check('the document view defers headings and prose', async () => {
     const first = root.querySelectorAll('.doc-entry').length;
     ok(first > 0, 'nothing was rendered at all');
     ok(first <= 40, `the first paint built ${first} sections, not a screenful`);
-    eq(katex.calls.length, 0, 'no prose should be rendered before it is scrolled to');
+    // Heads render their titles' maths eagerly (cheap); the bodies are the
+    // expensive part and must stay empty until scrolled to.
+    const filled = [...root.querySelectorAll('.body-prose')].filter((p) => p.childNodes.length).length;
+    eq(filled, 0, 'no prose should be rendered before it is scrolled to');
     ok(dom.observers.pending() > 0, 'nothing was handed to the observer');
 
     const flow = root.querySelectorAll('.doc-layout')[0].children[1];
     await settle(flow);
     const all = root.querySelectorAll('.doc-entry').length;
     ok(all > first, `the rest of the document never arrived (${all})`);
-    eq(katex.calls.length, 0, 'still no prose, only headings');
+    const filledLater = [...root.querySelectorAll('.body-prose')].filter((p) => p.childNodes.length).length;
+    eq(filledLater, 0, 'still no prose, only headings');
+    const headingPasses = katex.calls.length; // titles' maths, cheap
 
     // Now the reader scrolls through all of it.
     const rendered = dom.observers.flush();
     ok(rendered > 100, `only ${rendered} bodies were rendered on scroll`);
-    ok(katex.calls.length > 100, `only ${katex.calls.length} KaTeX passes`);
+    ok(katex.calls.length - headingPasses > 100, `only ${katex.calls.length - headingPasses} KaTeX passes on bodies`);
     eq(dom.observers.pending(), 0, 'everything was handed over exactly once');
   });
 });

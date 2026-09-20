@@ -136,15 +136,25 @@ export function render(root, app) {
     const status = M.statusOf(m, o.id);
     const prog = M.progressOf(m, kind, o.id);
 
-    const section = el('section', {
-      class: 'doc-entry depth-' + Math.min(entry.depth, 3) + (entry.duplicate ? ' dup' : ''),
-      id: anchor,
-    }, el('div.head',
+    // Sections are headings; everything else is a numbered statement in the
+    // way a paper sets one: "Definition 1.2.14 (Title)." with the kind as the
+    // lead word, and the body indented under it.
+    const isSection = o.kind === 'section';
+    const kindWord = o.kind.charAt(0).toUpperCase() + o.kind.slice(1).replace(/_/g, ' ');
+    const head = el('div.head',
+      isSection ? null : el('span.kindword', kindWord),
       el('span.num', num),
       el('h' + hLevel, el('a.objlink', { href: app.objectHref(o.id) }, M.titleOf(o))),
-      app.kindBadge(o.kind),
+      isSection ? null : app.kindBadge(o.kind),
       status === null ? null : app.statusBadge(status),
-      entry.duplicate ? el('span.chip', 'repeated') : null));
+      entry.duplicate ? el('span.chip', 'repeated') : null);
+    // Titles carry maths too ("the $2$-colimit"); render it like the bodies.
+    app.renderMath(head);
+    const section = el('section', {
+      class: 'doc-entry depth-' + Math.min(entry.depth, 3) + (entry.duplicate ? ' dup' : '') +
+        (isSection ? ' is-section' : ' is-statement'),
+      id: anchor,
+    }, head);
 
     // A coarse edge object that heads its own part: say what it connects.
     if (o.boundary.length) {
@@ -175,13 +185,15 @@ export function render(root, app) {
     body.appendChild(section);
 
     if (entry.depth <= 2 && !entry.duplicate && !(tocStructureOnly && !hasKids(o.id))) {
-      tocList.appendChild(el('li', { class: 'lvl-' + entry.depth },
+      const item = el('li', { class: 'lvl-' + entry.depth },
         el('a', {
           // A real route, so the link survives middle-click and reload; the
           // click handler just scrolls without a re-render.
           href: '#/document?' + new URLSearchParams({ collapse: kind, focus: o.id }).toString(),
           onclick: scrollTo(anchor),
-        }, el('span.muted', num + ' '), M.titleOf(o))));
+        }, el('span.muted', num + ' '), M.titleOf(o)));
+      app.renderMath(item); // titles carry maths too
+      tocList.appendChild(item);
     }
   };
 

@@ -123,13 +123,18 @@ const KATEX_DELIMS = [
 // KaTeX definition, for instance {"\\Fbar": "\\overline{\\mathbf F}_q"}.  A
 // copy is kept per loaded snapshot rather than the snapshot's own object,
 // because KaTeX rewrites the values it is given into its internal form.
+//
+// A plain object, never `Object.create(null)`: KaTeX's macro expander calls
+// `hasOwnProperty` on the object it is handed, and a prototype-less one made
+// every render on the site throw (silently, inside `renderMath`) the moment a
+// snapshot declared macros at all.
 let katexMacros = {};
 
 function setKatexMacros(project) {
   const declared = project && project.katexMacros;
   katexMacros = declared && typeof declared === 'object' && !Array.isArray(declared)
-    ? Object.assign(Object.create(null), declared)
-    : Object.create(null);
+    ? Object.assign({}, declared)
+    : {};
 }
 
 const SKIP_TAGS = new Set(['CODE', 'PRE', 'A', 'SCRIPT', 'STYLE', 'TEXTAREA']);
@@ -155,7 +160,8 @@ export function renderBody(target, text, known) {
   }
   if (window.marked && typeof window.marked.parse === 'function') {
     try {
-      target.innerHTML = window.marked.parse(src, { gfm: true, breaks: false });
+      const { text, restore } = shieldMath(src);
+      target.innerHTML = restore(window.marked.parse(text, { gfm: true, breaks: false }));
     } catch (e) {
       target.innerHTML = '<pre>' + escapeHtml(src) + '</pre>';
     }
@@ -165,6 +171,30 @@ export function renderBody(target, text, known) {
   renderMath(target);
   linkifySlugs(target, known);
   return target;
+}
+
+/**
+ * Markdown and TeX disagree about `_`, `*`, `\` and blank lines: marked turns
+ * `\varpi_E^n` into emphasis and a display formula into two paragraphs
+ * before KaTeX ever sees them.  So every maths span is lifted out first and
+ * put back, HTML-escaped, after marked has run.  Recognised, in this order:
+ * `$$…$$`, `\[…\]`, `\(…\)`, `$…$` (no newline inside, not followed by a
+ * digit, so prices survive); fenced and inline code are left to marked.
+ */
+const MATH_RE = /(```[\s\S]*?```|`[^`\n]*`)|(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s|\d)(?:[^$\n\\]|\\.)+?\$)/g;
+
+export function shieldMath(src) {
+  const spans = [];
+  const text = src.replace(MATH_RE, (whole, code, math) => {
+    if (code !== undefined) return whole;
+    spans.push(math);
+    // A token marked leaves alone: no markdown characters, no letters it
+    // could join to a word.
+    return `⁣MATH${spans.length - 1}⁣`;
+  });
+  const restore = (html) =>
+    html.replace(/⁣MATH(\d+)⁣/g, (_, i) => escapeHtml(spans[Number(i)]));
+  return { text, restore };
 }
 
 /**
@@ -194,7 +224,9 @@ export function renderMath(root) {
   try {
     window.renderMathInElement(root, katexOptions());
   } catch (e) {
-    /* KaTeX unavailable or unhappy: leave the raw text alone. */
+    // The raw text stays on the page, but a failure here is a site bug and
+    // must not be silent: it once hid every formula on every page.
+    if (typeof console !== 'undefined' && console.error) console.error('KaTeX auto-render failed:', e);
   }
 }
 
