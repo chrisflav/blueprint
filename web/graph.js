@@ -1200,18 +1200,25 @@ function installPanZoom(app) {
       x: ev.clientX, y: ev.clientY,
       tx: ui.transform.x, ty: ui.transform.y,
       moved: false,
-      // Pointer capture retargets later events to the stage, so remember what
-      // was actually under the pointer when the drag started.
+      // Remember what was under the pointer when the press started: once a
+      // pan begins, pointer capture retargets later events to the stage.
       target: ev.target,
     };
-    try { stage.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
-    stage.classList.add('panning');
+    // No pointer capture yet. Capturing on the press would make the browser
+    // dispatch the eventual `click` and `dblclick` to the stage instead of the
+    // node under the pointer, and nothing on a node would ever be selectable.
+    // The stage captures only once the pointer has actually moved, below.
   });
   stage.addEventListener('pointermove', (ev) => {
     if (!drag) return;
     const dx = ev.clientX - drag.x;
     const dy = ev.clientY - drag.y;
-    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    if (!drag.moved) {
+      if (Math.abs(dx) + Math.abs(dy) <= 3) return;
+      drag.moved = true;
+      try { stage.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+      stage.classList.add('panning');
+    }
     ui.transform.x = drag.tx + dx;
     ui.transform.y = drag.ty + dy;
     applyTransform(true);
