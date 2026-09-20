@@ -236,6 +236,9 @@ export function katexOptions() {
     delimiters: KATEX_DELIMS,
     macros: Object.assign({}, COMPAT_MACROS, katexMacros),
     throwOnError: false,
+    // `\mathrm{ét}` is fine to render; KaTeX only warns that real LaTeX
+    // would want \text for the accent. Everything else strict still warns.
+    strict: (code) => (code === 'unicodeTextInMathMode' ? 'ignore' : 'warn'),
     errorCallback: (msg) => {
       // A formula the project's macros do not cover is a blueprint bug, not a
       // site bug: say so once in the console and leave the source on the page.

@@ -162,11 +162,11 @@ function leanPanel(app, o, facts) {
         fact.module ? el('span', 'module ', el('code', fact.module)) : null,
         r ? el('span', ' · ', el('code', `${r.file}:${r.startLine}–${r.endLine}`)) : null),
       Array.isArray(fact.axioms) && fact.axioms.length
-        ? el('div.where', 'axioms: ', ...fact.axioms.map((a) => el('code', { style: { marginRight: '.3em' } }, a)))
+        ? el('div.where', 'axioms: ', ...fact.axioms.map((a) => el('code', a)))
         : null,
       fact.doc ? el('div.doc', fact.doc) : null,
       Array.isArray(fact.deps) && fact.deps.length
-        ? el('div.where', 'depends on: ', ...fact.deps.map((d) => el('code', { style: { marginRight: '.3em' } }, d)))
+        ? el('div.where', 'depends on: ', ...fact.deps.map((d) => el('code', d)))
         : null);
   });
   return el('div.panel',

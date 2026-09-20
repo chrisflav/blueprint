@@ -96,6 +96,7 @@ The graph route carries its full view state as query parameters:
 | `test/gen-large.mjs` | generates a synthetic snapshot the size of a real project |
 | `test/bench.mjs` | the performance harness (indexing, quotient, ELK, pages) |
 | `sample/real/blueprint.json` | a snapshot produced by the Lean tool itself, kept as a second fixture, regenerated with `lake exe blueprint build --root examples/induction --facts examples/induction/lean-facts.json -o web/sample/real/blueprint.json` and checked by `./test.sh` |
+| `test/browser/` | the pre-deploy sweep: the whole site driven in real headless Firefox and Chromium (`test/browser/README.md`) |
 | `test/model.test.mjs` | unit tests for `model.js` |
 | `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, lazy document rendering, the ELK worker and its fallbacks |
 
@@ -227,6 +228,22 @@ nix-shell -p nodejs_22 --run "node test/app.test.mjs --elk=/tmp/elk.bundled.js"
 ```
 
 Without `--elk` (or `BLUEPRINT_ELK`) that one check is skipped and says so.
+
+### In real browsers
+
+Neither of those can fail on a legend that has covered the graph, a `hidden`
+element that still takes 15px, or a click that pointer capture swallowed: a DOM
+shim has no layout, no cascade and no input. `test/browser/sweep.mjs` drives the
+deployed site in headless Firefox (geckodriver) and Chromium (DevTools
+protocol) with real pointer, keyboard and wheel events and asserts against the
+DOM the browser built, one `PASS`/`FAIL` line with its evidence per check.
+**Run it before every deploy**; see `test/browser/README.md`.
+
+```sh
+nix-shell -p python3 --run "python3 -m http.server 8765 --directory _site" &
+nix-shell -p firefox geckodriver chromium nodejs_22 \
+  --run "node test/browser/sweep.mjs --browser=firefox,chromium"
+```
 
 ## Performance
 

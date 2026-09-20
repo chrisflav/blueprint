@@ -228,7 +228,14 @@ label.chk input { margin: 0; }
 
 /* -------------------------------------------------------------- app frame */
 
-.app { min-height: calc(100vh - var(--topbar-h)); }
+/* The shell is a column — top bar, the banner when there is one, then the
+   page filling exactly what is left.  Pages that measure themselves from the
+   viewport instead (the graph did: `calc(100vh - var(--topbar-h))`) cannot
+   know whether the banner is there, and while a historical snapshot was on
+   screen the graph ran 47px off the bottom, taking the status line and the
+   legend with it. */
+body { display: flex; flex-direction: column; }
+.app { flex: 1 1 auto; min-height: 0; }
 
 .page {
   max-width: 62rem;
@@ -355,10 +362,9 @@ table.grid tr:last-child td { border-bottom: 0; }
   display: grid;
   grid-template-columns: 1fr 22rem;
   grid-template-rows: auto 1fr;
-  height: calc(100vh - var(--topbar-h));
+  height: 100%;
   overflow: hidden;
 }
-.graph-page.no-banner { height: calc(100vh - var(--topbar-h)); }
 
 .toolbar {
   grid-column: 1 / -1;
@@ -560,7 +566,21 @@ a.objlink.broken { color: var(--lv-missing, var(--st-missing)); text-decoration:
 
 .lean-decl { margin: .7rem 0; }
 .lean-decl pre { margin: .25em 0; white-space: pre-wrap; }
-.lean-decl .where { font-size: .82rem; color: var(--muted); }
+/* The axiom and dependency lists are runs of `code` chips with nothing but a
+   margin between them, and a margin is not a break opportunity: on a theorem
+   with forty Lean dependencies the row became one unbreakable 14,000px line
+   and the whole site grew a horizontal scrollbar.  A wrapping flex row gives
+   the browser somewhere to break and keeps the spacing. */
+.lean-decl .where {
+  font-size: .82rem;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .15em .45em;
+  min-width: 0;
+}
+.lean-decl .where code { overflow-wrap: anywhere; }
 .lean-decl .doc { font-size: .88rem; color: var(--muted); margin-top: .3em; }
 
 ul.objlist { list-style: none; margin: 0; padding: 0; }
