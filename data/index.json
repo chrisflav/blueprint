@@ -70,4 +70,12 @@
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "fb5d434772494be82cf322b021dd0fc8f582710f",
    "file": "data/fb5d434772494be82cf322b021dd0fc8f582710f.json",
-   "date": "2026-09-20"}]}
+   "date": "2026-09-20"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "729324bbd5433cba6c37016cdaaa589a9c14c40b",
+   "file": "data/729324bbd5433cba6c37016cdaaa589a9c14c40b.json",
+   "date": "2026-09-28"}]}
