@@ -493,6 +493,41 @@ async function graphChecks(d, f) {
 
   await d.shot(`${SHOTS}/${d.name}-graph-expand-all.png`);
 
+  // Each edge keeps its own route: two edges running along the same line
+  // cannot be told apart, which is what `elk.layered.mergeEdges` used to do.
+  await check(d, 'graph/edges-do-not-share-segments', async () => {
+    const r = await d.js(`
+      var segs = [];
+      var paths = document.querySelectorAll('.gedge > path:not(.hit)');
+      for (var i = 0; i < paths.length; i++) {
+        var p = paths[i];
+        var nums = (p.getAttribute('d') || '').match(/-?[0-9.]+/g) || [];
+        for (var k = 2; k + 1 < nums.length; k += 2) {
+          segs.push({ id: p.parentNode.dataset.id, x1: +nums[k - 2], y1: +nums[k - 1], x2: +nums[k], y2: +nums[k + 1] });
+        }
+      }
+      var shared = [];
+      for (var a = 0; a < segs.length; a++) for (var b = a + 1; b < segs.length; b++) {
+        var s = segs[a], t = segs[b];
+        if (s.id === t.id) continue;
+        var hs = Math.abs(s.y1 - s.y2) < 0.5, ht = Math.abs(t.y1 - t.y2) < 0.5;
+        var vs = Math.abs(s.x1 - s.x2) < 0.5, vt = Math.abs(t.x1 - t.x2) < 0.5;
+        var ov = 0;
+        if (hs && ht && Math.abs(s.y1 - t.y1) < 1) {
+          ov = Math.min(Math.max(s.x1, s.x2), Math.max(t.x1, t.x2)) - Math.max(Math.min(s.x1, s.x2), Math.min(t.x1, t.x2));
+        } else if (vs && vt && Math.abs(s.x1 - t.x1) < 1) {
+          ov = Math.min(Math.max(s.y1, s.y2), Math.max(t.y1, t.y2)) - Math.max(Math.min(s.y1, s.y2), Math.min(t.y1, t.y2));
+        }
+        if (ov > 4) shared.push(s.id + ' / ' + t.id + ' (' + Math.round(ov) + 'px)');
+      }
+      return { n: segs.length, shared: shared };
+    `);
+    return {
+      ok: r.n > 0 && r.shared.length === 0,
+      evidence: `${r.n} edge segments; shared: ${r.shared.length ? j(r.shared.slice(0, 5)) : 'none'}`,
+    };
+  });
+
   // `uses` is `arrow: "reverse"`: the head sits on the user (`src`), not on
   // what it uses.  Every other directed kind keeps its head on `tgt`.
   await check(d, 'graph/arrow-heads-follow-the-kind', async () => {

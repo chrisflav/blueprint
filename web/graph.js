@@ -454,7 +454,9 @@ export function layoutOptions(cost) {
     'elk.spacing.nodeNode': '30',
     'elk.spacing.edgeNode': '18',
     'elk.spacing.edgeEdge': '12',
-    'elk.layered.mergeEdges': 'true',
+    // Merged edges share a trunk, and a reader cannot follow any one of them
+    // through it: every edge gets its own route instead.
+    'elk.layered.mergeEdges': 'false',
     'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
     'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
     'elk.padding': '[top=24,left=24,bottom=24,right=24]',
