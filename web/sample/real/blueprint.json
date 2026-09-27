@@ -9,7 +9,8 @@
     "color": "#666",
     "collapse": false,
     "boundary": {"tgt": {"min": 1, "max": 1}, "src": {"min": 1, "max": 1}},
-    "attrs": ["title", "review", "tags", "order", "aliases", "owner"]},
+    "attrs": ["title", "review", "tags", "order", "aliases", "owner"],
+    "arrow": "reverse"},
    "theorem":
    {"sugar": false,
     "kinds": {},

@@ -95,7 +95,8 @@
     "constraints": [],
     "collapse": false,
     "countable": false,
-    "sugar": true
+    "sugar": true,
+    "arrow": "reverse"
    },
    "refines": {
     "boundary": {

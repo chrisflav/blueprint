@@ -38,7 +38,8 @@ by editing this file first. Version 1.
         "kinds": { "src": [], "tgt": ["theorem", "definition", "lemma"] },
         "attrs": ["title"],
         "constraints": [],
-        "collapse": false, "countable": false, "sugar": true
+        "collapse": false, "countable": false, "sugar": true,
+        "arrow": "reverse"                       // display hint: head on src; omitted when "forward"
       },
       "refines": { "boundary": { "src": {"min":1,"max":1}, "tgt": {"min":1,"max":1} },
                    "kinds": {}, "attrs": ["title"], "constraints": ["acyclic"],

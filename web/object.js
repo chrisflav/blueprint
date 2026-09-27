@@ -221,7 +221,9 @@ function otherEnd(app, edgeObj, selfId) {
   const tgt = M.boundaryEntry(edgeObj, 'tgt');
   const other = src === selfId ? tgt : src;
   if (!other || other === selfId) return null;
-  return el('span.muted.small', src === selfId ? ' → ' : ' ← ', app.objLink(m, other));
+  // the arrow points the way the graph draws it
+  const outward = (src === selfId) !== M.isReversedKind(m, edgeObj.kind);
+  return el('span.muted.small', outward ? ' → ' : ' ← ', app.objLink(m, other));
 }
 
 function collapsePanel(app, o, kind) {

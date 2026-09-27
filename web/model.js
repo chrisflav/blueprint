@@ -176,6 +176,16 @@ export function isBinaryKind(model, kindName) {
   return roles.length === 2 && roles.includes('src') && roles.includes('tgt');
 }
 
+/**
+ * true when the kind's arrows are drawn tgt -> src (`arrow: "reverse"`, e.g.
+ * `uses`, drawn from the dependency to its user).  Display only: `src` and
+ * `tgt` keep their meaning everywhere else.
+ */
+export function isReversedKind(model, kindName) {
+  const k = model.kinds[kindName];
+  return !!k && k.arrow === 'reverse';
+}
+
 /** Kinds that can appear as an arc in the graph (nonempty boundary). */
 export function edgeKinds(model) {
   return Object.keys(model.kinds).filter((k) => {

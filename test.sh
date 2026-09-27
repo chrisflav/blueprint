@@ -122,6 +122,29 @@ for want in multi-parent undeclared-edge unwitnessed-edge; do
   fi
 done
 
+head_ "kinds: the arrow display hint"
+if [ "$(grep -c '"arrow"' "$TMP/induction.json")" = 1 ] \
+   && grep -q '"arrow": "reverse"' "$TMP/induction.json"; then
+  ok "only uses carries an arrow hint, and it is reverse"
+else
+  bad "only uses carries an arrow hint, and it is reverse"
+fi
+cp -r examples/minimal "$TMP/arrow"
+printf '\n[kinds.uses]\narrow = "forward"\n' >> "$TMP/arrow/blueprint.toml"
+if "$BP" build --root "$TMP/arrow" -o "$TMP/arrow.json" > /dev/null 2>&1 \
+   && ! grep -q '"arrow"' "$TMP/arrow.json"; then
+  ok "blueprint.toml can turn uses back to forward"
+else
+  bad "blueprint.toml can turn uses back to forward"
+fi
+printf '\n[kinds.implies]\narrow = "sideways"\n' >> "$TMP/arrow/blueprint.toml"
+if ! "$BP" check --root "$TMP/arrow" > "$TMP/arrow.check" 2>&1 \
+   && grep -q "unknown arrow 'sideways'" "$TMP/arrow.check"; then
+  ok "an unknown arrow is rejected"
+else
+  bad "an unknown arrow is rejected"; cat "$TMP/arrow.check"
+fi
+
 head_ "examples/induction: snapshot round trip"
 if "$BP" read "$TMP/induction.json" -o "$TMP/induction.rt.json" > /dev/null 2>&1 \
    && cmp -s "$TMP/induction.json" "$TMP/induction.rt.json"; then

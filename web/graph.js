@@ -397,13 +397,16 @@ export function buildElk(app, st, view, quot) {
       // Junction nodes live at the root; ELK routes their edges across levels.
       rootChildren.push(jnode);
       nodes.set(jid, jnode);
+      // Spokes run from the `src` end into the junction and out to the rest;
+      // a reversed kind runs them from the `tgt` end instead.
+      const inRole = M.isReversedKind(m, item.kind) ? 'tgt' : 'src';
       for (const end of item.ends) {
         if (!drawable(end.id)) continue;
-        const isSrc = end.roles.includes('src');
+        const isIn = end.roles.includes(inRole);
         edges.push({
           id: jid + '|' + end.id,
-          sources: [isSrc ? nodeKey(end.id) : jid],
-          targets: [isSrc ? jid : nodeKey(end.id)],
+          sources: [isIn ? nodeKey(end.id) : jid],
+          targets: [isIn ? jid : nodeKey(end.id)],
           bp: {
             kind: 'spoke',
             item,
@@ -414,10 +417,13 @@ export function buildElk(app, st, view, quot) {
       }
     } else {
       if (!drawable(e.src) || !drawable(e.tgt)) continue;
+      // The arrow head sits at the ELK target, and the layer order follows
+      // ELK's direction, so a reversed kind swaps the two for both.
+      const flip = e.directed && M.isReversedKind(m, e.kind);
       edges.push({
         id: e.id,
-        sources: [nodeKey(e.src)],
-        targets: [nodeKey(e.tgt)],
+        sources: [nodeKey(flip ? e.tgt : e.src)],
+        targets: [nodeKey(flip ? e.src : e.tgt)],
         bp: { kind: 'edge', entity: e },
       });
     }
@@ -826,7 +832,9 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
     if (meta.kind === 'junction') {
       gNodes.appendChild(drawJunction(app, box, meta, view));
     } else if (meta.compound) {
-      gCompounds.appendChild(drawNode(app, box, meta, st, view));
+      const g = drawNode(app, box, meta, st, view);
+      gCompounds.appendChild(g);
+      gNodes.appendChild(drawTitleStrip(app, box, g, meta.object.id, view));
     } else {
       gNodes.appendChild(drawNode(app, box, meta, st, view));
     }
@@ -849,10 +857,10 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
   if (animate) {
     layer.classList.remove('no-anim');
     for (const [id, box] of abs) {
-      const g = layer.querySelector(`[data-nid="${cssEscape(id)}"]`);
-      if (!g) continue;
       const prev = prevPos.get(id);
-      if (prev && (prev.x !== box.x || prev.y !== box.y)) {
+      if (!prev || (prev.x === box.x && prev.y === box.y)) continue;
+      // a compound has two groups: its box, and its title strip
+      for (const g of layer.querySelectorAll(`[data-nid="${cssEscape(id)}"]`)) {
         g.setAttribute('transform', `translate(${prev.x},${prev.y})`);
         g.dataset.target = `translate(${box.x},${box.y})`;
       }
@@ -931,6 +939,24 @@ function drawNode(app, box, meta, st, view) {
   g.appendChild(svgEl('title', title2));
   wireNode(app, g, o.id, view);
   return g;
+}
+
+/**
+ * The title strip of a compound, drawn above the edges.  Arcs into an expanded
+ * box cross its title, and without this their hit paths would take the clicks
+ * meant for it.  It acts as the compound `g` does, and hovers it.
+ */
+function drawTitleStrip(app, box, g, id, view) {
+  const strip = app.svgEl('g', {
+    class: 'gtitle',
+    transform: `translate(${box.x},${box.y})`,
+    'data-nid': box.node.id,
+  });
+  strip.appendChild(app.svgEl('rect', { class: 'title-hit', x: 0, y: 0, width: box.w, height: 30 }));
+  wireNode(app, strip, id, view);
+  strip.addEventListener('mouseenter', () => hover(g, true));
+  strip.addEventListener('mouseleave', () => hover(g, false));
+  return strip;
 }
 
 function drawJunction(app, box, meta, view) {
@@ -1067,7 +1093,9 @@ function drawEdge(app, meta, pts, a, b) {
   const names = isSpoke
     ? `${meta.item.id}\nrole: ${meta.role}`
     : [
-        `${kind}: ${entity.src} \u2192 ${entity.tgt}`,
+        entity.directed !== false && M.isReversedKind(app.model, kind)
+          ? `${kind}: ${entity.tgt} \u2192 ${entity.src}`
+          : `${kind}: ${entity.src} \u2192 ${entity.tgt}`,
         state ? `consistency: ${state}` : null,
         entity.members.length
           ? 'from: ' + entity.members.map((x) => x.id).join(', ')

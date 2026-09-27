@@ -788,6 +788,7 @@ ul.objlist .role {
 .arrowhead.hollow { fill: var(--bg); stroke: var(--graph-edge); stroke-width: 1.4; }
 
 .gedge .hit { stroke: transparent; stroke-width: 12; fill: none; cursor: pointer; }
+.gtitle .title-hit { fill: transparent; cursor: pointer; }
 .gedge.hovered path:not(.hit) { stroke: var(--accent); stroke-width: 2.4; }
 .gedge.synthetic path:not(.hit) { opacity: .8; }
 .gedge.spoke path:not(.hit) { stroke-width: 1.3; }

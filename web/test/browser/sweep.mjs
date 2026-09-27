@@ -493,6 +493,49 @@ async function graphChecks(d, f) {
 
   await d.shot(`${SHOTS}/${d.name}-graph-expand-all.png`);
 
+  // `uses` is `arrow: "reverse"`: the head sits on the user (`src`), not on
+  // what it uses.  Every other directed kind keeps its head on `tgt`.
+  await check(d, 'graph/arrow-heads-follow-the-kind', async () => {
+    const r = await d.js(`
+      return fetch('./blueprint.json', { cache: 'no-cache' }).then(function (res) { return res.json(); }).then(function (snap) {
+      var byId = {};
+      snap.objects.forEach(function (o) { byId[o.id] = o; });
+      var end = function (o, role) {
+        var b = o.boundary.find(function (x) { return x.role === role; });
+        return b ? b.id : null;
+      };
+      var boxOf = function (id) {
+        var g = document.querySelector('.gnode[data-id="' + CSS.escape(id) + '"] .shape');
+        return g ? g.getBoundingClientRect() : null;
+      };
+      var near = function (p, r) {
+        return p.x >= r.left - 12 && p.x <= r.right + 12 && p.y >= r.top - 12 && p.y <= r.bottom + 12;
+      };
+      var out = { checked: {}, bad: [] };
+      var edges = document.querySelectorAll('.gedge:not(.spoke):not(.synthetic)');
+      for (var i = 0; i < edges.length; i++) {
+        var o = byId[edges[i].dataset.id];
+        var path = edges[i].querySelector('path[marker-end]');
+        if (!o || !path) continue;
+        var src = end(o, 'src'), tgt = end(o, 'tgt');
+        var head = snap.schema.kinds[o.kind].arrow === 'reverse' ? src : tgt;
+        var box = head && boxOf(head);
+        if (!box) continue; // the head end is a junction or folded away
+        var p = path.getPointAtLength(path.getTotalLength());
+        var m = path.getScreenCTM();
+        var s = { x: m.a * p.x + m.c * p.y + m.e, y: m.b * p.x + m.d * p.y + m.f };
+        out.checked[o.kind] = (out.checked[o.kind] || 0) + 1;
+        if (!near(s, box)) out.bad.push(o.id + ' head not at ' + head);
+      }
+      return out;
+      });
+    `);
+    return {
+      ok: (r.checked.uses || 0) > 0 && r.bad.length === 0,
+      evidence: `checked ${j(r.checked)}; wrong way round: ${r.bad.length ? j(r.bad.slice(0, 5)) : 'none'}`,
+    };
+  });
+
   await check(d, 'graph/collapse-all', async () => {
     const btn = await d.js(elBoxByText('.toolbar button', 'Collapse all'));
     if (!btn) return { ok: false, evidence: 'no "Collapse all" button' };

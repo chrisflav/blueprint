@@ -30,11 +30,11 @@ def mkNodeKind (name : String) (countable : Bool) (color : String) : KindSpec :=
 def mkBinaryKind (name : String) (constraints : Array String := #[])
     (collapse : Bool := false) (sugar : Bool := true)
     (srcKinds : Array String := #[]) (tgtKinds : Array String := #[])
-    (color : Option String := none) : KindSpec :=
+    (color : Option String := none) (arrow : String := "forward") : KindSpec :=
   { name
     roles := #[{ name := "src", card := cardOne, kinds := srcKinds },
                { name := "tgt", card := cardOne, kinds := tgtKinds }]
-    attrs := defaultEdgeAttrs, constraints, collapse, sugar, color }
+    attrs := defaultEdgeAttrs, constraints, collapse, sugar, color, arrow }
 
 /-- Kinds that a `commutes` hyperedge may relate. -/
 def defaultEdgeKindNames : Array String :=
@@ -51,7 +51,8 @@ def defaultSchema : Schema where
       mkNodeKind "lemma" true "#57b",
       mkNodeKind "concept" false "#aa7",
       mkNodeKind "remark" false "#999",
-      mkBinaryKind "uses" (color := some "#666"),
+      -- `src` uses `tgt`, drawn from the dependency to its user
+      mkBinaryKind "uses" (color := some "#666") (arrow := "reverse"),
       mkBinaryKind "refines" (constraints := #["acyclic"]) (collapse := true)
         (color := some "#a55"),
       mkBinaryKind "instance_of" (constraints := #["acyclic"]) (collapse := true)
@@ -157,6 +158,13 @@ def decodeKind (name : String) (base : Option KindSpec) (t : TValue) :
     match v.asString? with
     | some s => k := { k with color := some s }
     | none => throw s!"kind '{name}': 'color' must be a string"
+  if let some v := t.get? "arrow" then
+    match v.asString? with
+    | some s =>
+      unless s == "forward" || s == "reverse" do
+        throw s!"kind '{name}': unknown arrow '{s}' (expected 'forward' or 'reverse')"
+      k := { k with arrow := s }
+    | none => throw s!"kind '{name}': 'arrow' must be a string"
   return k
 
 /-- Decode a whole `blueprint.toml` on top of the default schema. -/

@@ -429,7 +429,13 @@ collapse   = false
 countable  = false
 sugar      = true
 color      = "#4a7"
+arrow      = "reverse"              # "forward" (src -> tgt) | "reverse" (tgt -> src)
 ```
+
+`arrow` only changes the picture: which end of a binary kind's arc carries the
+head, and so which end ELK lays out first.  The built-in `uses` is `reverse`,
+so `uses/a/b` ("a uses b") is drawn from `b` to `a`, dependencies above what
+depends on them; every other built-in kind is `forward`.
 
 A `[kinds.X]` table *extends* the built-in kind `X` if there is one: keys you
 do not mention keep their default.  Giving `boundary` replaces the whole role

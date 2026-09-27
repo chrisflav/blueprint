@@ -362,6 +362,25 @@ await check('the watchdog deadline grows with the graph', () => {
   eq(graphMod.layoutDeadline(1000), 6000, 'a thousand nodes and edges');
 });
 
+await check('a reversed kind is laid out and drawn tgt -> src, the rest src -> tgt', async () => {
+  const M = modelMod;
+  const model = app.model;
+  const expand = [...M.collapseOrder(model, 'refines').expandable];
+  const view = M.makeView(model, 'refines', expand);
+  const st = { collapse: 'refines', expand, ekinds: null, status: null, q: '', sel: null };
+  const { graph } = graphMod.buildElk({ model }, st, view, M.quotient(view));
+  const arcs = graph.edges.filter((e) => e.bp.kind === 'edge' && e.bp.entity.directed);
+  const uses = arcs.filter((e) => e.bp.entity.kind === 'uses');
+  const others = arcs.filter((e) => e.bp.entity.kind !== 'uses');
+  const end = (k) => k.replace(/^j:/, ''); // an edge between edges ends at junctions
+  ok(uses.length > 0 && others.length > 0, 'the sample has both');
+  for (const e of uses) {
+    eq(end(e.sources[0]), e.bp.entity.tgt, `${e.id} starts at the dependency`);
+    eq(end(e.targets[0]), e.bp.entity.src, `${e.id} ends at its user`);
+  }
+  for (const e of others) eq(end(e.sources[0]), e.bp.entity.src, `${e.id} starts at src`);
+});
+
 const elkState = installFakeELK();
 
 await check('the graph lays out in a Blob worker that imports elkjs’s worker half', async () => {

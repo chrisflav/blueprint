@@ -188,6 +188,9 @@ structure KindSpec where
   sugar : Bool := false
   /-- Optional display hint. -/
   color : Option String := none
+  /-- Display hint for binary kinds: `forward` draws the arrow `src → tgt`,
+  `reverse` draws it `tgt → src`.  Only the picture changes, never the data. -/
+  arrow : String := "forward"
   deriving Inhabited, BEq
 
 namespace KindSpec
