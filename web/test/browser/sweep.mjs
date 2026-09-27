@@ -493,6 +493,45 @@ async function graphChecks(d, f) {
 
   await d.shot(`${SHOTS}/${d.name}-graph-expand-all.png`);
 
+  // Titles are never cut: each node shows the whole of it, wrapped if need
+  // be, inside its box and clear of the kind mark and the expander.
+  await check(d, 'graph/titles-are-whole-and-inside-their-nodes', async () => {
+    const r = await d.js(`
+      return fetch('./blueprint.json', { cache: 'no-cache' }).then(function (res) { return res.json(); }).then(function (snap) {
+        var title = {};
+        snap.objects.forEach(function (o) { title[o.id] = (o.attrs && o.attrs.title) || o.id; });
+        var inside = function (a, b) {
+          return a.x >= b.x - 0.5 && a.y >= b.y - 0.5 && a.x + a.width <= b.x + b.width + 0.5 && a.y + a.height <= b.y + b.height + 0.5;
+        };
+        var apart = function (a, b) {
+          return a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+        };
+        var nodes = document.querySelectorAll('.gnode:not(.junction)');
+        var bad = [], lines = 0;
+        for (var i = 0; i < nodes.length; i++) {
+          var g = nodes[i], id = g.dataset.id;
+          var label = g.querySelector('.label');
+          var spans = label ? label.querySelectorAll('tspan') : [];
+          var shown = Array.prototype.map.call(spans, function (s) { return s.textContent; }).join(' ');
+          lines = Math.max(lines, spans.length);
+          var want = String(title[id]).split(/\\s+/).filter(Boolean).join(' ');
+          if (shown !== want) { bad.push(id + ': shows ' + JSON.stringify(shown)); continue; }
+          var lb = label.getBBox(), sb = g.querySelector('.shape').getBBox();
+          if (!inside(lb, sb)) bad.push(id + ': title spills out of the box');
+          ['.kindmark', '.expander'].forEach(function (sel) {
+            var o = g.querySelector(sel);
+            if (o && !apart(lb, o.getBBox())) bad.push(id + ': title overlaps ' + sel);
+          });
+        }
+        return { n: nodes.length, lines: lines, bad: bad };
+      });
+    `);
+    return {
+      ok: r.n > 0 && r.bad.length === 0,
+      evidence: `${r.n} nodes, up to ${r.lines} title lines; problems: ${r.bad.length ? j(r.bad.slice(0, 5)) + ` (${r.bad.length})` : 'none'}`,
+    };
+  });
+
   // Each edge keeps its own route: two edges running along the same line
   // cannot be told apart, which is what `elk.layered.mergeEdges` used to do.
   await check(d, 'graph/edges-do-not-share-segments', async () => {

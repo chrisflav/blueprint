@@ -35,10 +35,18 @@ let layoutToken = 0;    // guards against out-of-order async layouts
 let prevPos = new Map(); // id -> {x, y} from the previous layout, for transitions
 let lastSignature = null;
 
-const NODE_H = 36;
-const NODE_H2 = 46;
+const NODE_H = 36;           // a leaf with a one-line title
+const NODE_H2 = 46;          // ... and a progress bar
+const LINE_H = 15;           // each further line of a wrapped title
 const JUNCTION_R = 8;
-const CHAR_W = 6.9;
+const CHAR_W = 6.9;          // text width per character when nothing can measure it
+const LEAF_TEXT_MAX = 220;   // a leaf's title wraps beyond this width
+const LEAF_PAD = 26;         // either side of a leaf's title: clears the expander and the kind mark
+const TEXT_SLACK = 1.04;     // canvas and SVG disagree on text width by a few per cent
+const SECTION_TEXT_MAX = 420; // an expanded section's title wraps beyond this width
+const SECTION_PAD_L = 26;    // left of a section's title: the expander
+const SECTION_PAD_R = 30;    // right of it: the kind mark
+const SECTION_HEAD = 34;     // the band above a section's children, for a one-line title
 
 // Above this many nodes plus edges, layout quality is traded for speed: ELK's
 // model-order pass and its full crossing-minimisation thoroughness together
@@ -277,8 +285,58 @@ function drawnNodeCount(m) {
 // ELK graph construction
 // ---------------------------------------------------------------------------
 
-function labelWidth(text, min, max) {
-  return Math.max(min, Math.min(max, Math.round(text.length * CHAR_W) + 26));
+// Titles are shown in full: a long one wraps onto more lines and its node grows,
+// so the width of the text has to be known before ELK lays anything out.  The
+// browser measures it in the labels' own font; without a canvas (the unit
+// tests) it is estimated.
+let measureCtx; // undefined until first asked, null when there is no canvas
+function textWidth(text, section) {
+  if (measureCtx === undefined) {
+    measureCtx = null;
+    try {
+      const ctx = document.createElement('canvas').getContext('2d');
+      if (ctx && typeof ctx.measureText === 'function') {
+        const family = getComputedStyle(document.body).fontFamily || 'sans-serif';
+        measureCtx = { ctx, leaf: `550 12px ${family}`, section: `550 12.5px ${family}` };
+      }
+    } catch (e) { /* no DOM: estimate */ }
+  }
+  if (!measureCtx) return text.length * CHAR_W * (section ? 12.5 / 12 : 1);
+  measureCtx.ctx.font = section ? measureCtx.section : measureCtx.leaf;
+  return measureCtx.ctx.measureText(text).width;
+}
+
+const wrapped = new Map();
+/** `text` broken at spaces into lines no wider than `max`, and the widest line. */
+function wrapTitle(text, max, section) {
+  const key = (section ? 's' : 'l') + text;
+  let out = wrapped.get(key);
+  if (out) return out;
+  const lines = [];
+  let cur = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = cur ? cur + ' ' + word : word;
+    if (cur && textWidth(next, section) > max) {
+      lines.push(cur);
+      cur = word;
+    } else {
+      cur = next;
+    }
+  }
+  lines.push(cur); // a single word wider than `max` keeps a line of its own
+  out = { lines, width: Math.ceil(TEXT_SLACK * Math.max(...lines.map((l) => textWidth(l, section)))) };
+  if (wrapped.size > 20000) wrapped.clear();
+  wrapped.set(key, out);
+  return out;
+}
+
+/** Size a leaf (or a section with nothing left inside) to its whole title. */
+function sizeLeaf(node, expandable, section) {
+  const { lines, width } = node.bp.wrap;
+  const pad = section ? SECTION_PAD_L + SECTION_PAD_R : 2 * LEAF_PAD + (expandable ? 10 : 0);
+  const prog = node.bp.prog;
+  node.width = Math.max(section ? 120 : 104, width + pad);
+  node.height = (section || (prog && prog.total > 1) ? NODE_H2 : NODE_H) + (lines.length - 1) * LINE_H;
 }
 
 /**
@@ -325,18 +383,27 @@ export function buildElk(app, st, view, quot) {
     const prog = M.progressOf(m, st.collapse, id);
     const node = {
       id,
-      bp: { kind: 'object', id, object: o, compound, title, prog },
+      bp: {
+        kind: 'object', id, object: o, compound, title, prog,
+        wrap: wrapTitle(title, compound ? SECTION_TEXT_MAX : LEAF_TEXT_MAX, compound),
+      },
       children: [],
       layoutOptions: {},
     };
     if (compound) {
-      node.layoutOptions['elk.padding'] = '[top=34,left=16,bottom=16,right=16]';
+      const { lines, width } = node.bp.wrap;
+      const head = SECTION_HEAD + (lines.length - 1) * LINE_H;
+      node.layoutOptions['elk.padding'] = `[top=${head},left=16,bottom=16,right=16]`;
       node.layoutOptions['elk.spacing.nodeNode'] = '22';
       node.layoutOptions['elk.algorithm'] = 'layered';
       node.layoutOptions['elk.direction'] = 'DOWN';
+      // Wide enough for the whole title.  ELK 0.9.3 transposes the minimum
+      // size of a compound laid out DOWN, so the vector is (height, width).
+      node.layoutOptions['elk.nodeSize.constraints'] = 'MINIMUM_SIZE';
+      node.layoutOptions['elk.nodeSize.minimum'] =
+        `(${head + 16}, ${width + SECTION_PAD_L + SECTION_PAD_R})`;
     } else {
-      node.width = labelWidth(title, 104, 230);
-      node.height = prog && prog.total > 1 ? NODE_H2 : NODE_H;
+      sizeLeaf(node, view.isExpandable(id), false);
     }
     return node;
   };
@@ -352,9 +419,10 @@ export function buildElk(app, st, view, quot) {
   // A compound with no surviving children still needs a size.
   for (const node of nodes.values()) {
     if (node.bp.compound && node.children.length === 0) {
-      node.width = labelWidth(node.bp.title, 120, 230);
-      node.height = NODE_H2;
+      sizeLeaf(node, true, true);
       delete node.children;
+      delete node.layoutOptions['elk.nodeSize.constraints'];
+      delete node.layoutOptions['elk.nodeSize.minimum'];
     }
   }
 
@@ -836,7 +904,7 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
     } else if (meta.compound) {
       const g = drawNode(app, box, meta, st, view);
       gCompounds.appendChild(g);
-      gNodes.appendChild(drawTitleStrip(app, box, g, meta.object.id, view));
+      gNodes.appendChild(drawTitleStrip(app, box, g, meta, view));
     } else {
       gNodes.appendChild(drawNode(app, box, meta, st, view));
     }
@@ -910,14 +978,16 @@ function drawNode(app, box, meta, st, view) {
     class: 'shape', x: 0, y: 0, width: box.w, height: box.h, rx, ry: rx,
   }));
 
-  const title = M.titleOf(o);
-  const maxChars = Math.max(6, Math.floor((box.w - 20) / CHAR_W));
-  const shown = title.length > maxChars ? title.slice(0, maxChars - 1) + '\u2026' : title;
-  const ty = meta.compound ? 21 : box.h / 2 + (meta.prog && meta.prog.total > 1 ? -4 : 4);
+  // The whole title, on the lines `buildElk` sized the node for: a section's
+  // at the top left after the expander, a leaf's centred above its progress bar.
+  const lines = meta.wrap ? meta.wrap.lines : [M.titleOf(o)];
+  const expandable = view.isExpandable(o.id);
+  const bar = !meta.compound && meta.prog && meta.prog.total > 1 ? 10 : 0;
+  const tx = meta.compound ? SECTION_PAD_L - 4 : box.w / 2 + (expandable ? 5 : 0);
+  const ty = meta.compound ? 21 : (box.h - bar) / 2 + 4 - (lines.length - 1) * LINE_H / 2;
   g.appendChild(svgEl('text', {
-    class: 'label', x: meta.compound ? 12 : box.w / 2, y: ty,
-    'text-anchor': meta.compound ? 'start' : 'middle',
-  }, shown));
+    class: 'label', 'text-anchor': meta.compound ? 'start' : 'middle',
+  }, ...lines.map((line, i) => svgEl('tspan', { x: tx, y: ty + i * LINE_H }, line))));
 
   g.appendChild(svgEl('text', {
     class: 'kindmark', x: box.w - 6, y: 12, 'text-anchor': 'end',
@@ -930,10 +1000,9 @@ function drawNode(app, box, meta, st, view) {
     g.appendChild(svgEl('rect', { class: 'ptrack', x: 12, y: box.h - 14, width: w, height: 5, rx: 2.5 }));
     g.appendChild(svgEl('rect', { class: 'pfill', x: 12, y: box.h - 14, width: Math.max(0, w * frac), height: 5, rx: 2.5 }));
   }
-  if (view.isExpandable(o.id)) {
-    g.appendChild(svgEl('text', { class: 'expander', x: 8, y: meta.compound ? 21 : box.h / 2 + 4 },
+  if (expandable) {
+    g.appendChild(svgEl('text', { class: 'expander', x: 8, y: meta.compound ? 21 : (box.h - bar) / 2 + 4 },
       view.isExpanded(o.id) ? '\u2212' : '+'));
-    if (!meta.compound) g.querySelector('.label').setAttribute('x', box.w / 2 + 5);
   }
 
   const title2 = `${o.id}\n${o.kind}` + (status ? `\nstatus: ${M.STATUS_LABEL[status]}` : '') +
@@ -948,13 +1017,15 @@ function drawNode(app, box, meta, st, view) {
  * box cross its title, and without this their hit paths would take the clicks
  * meant for it.  It acts as the compound `g` does, and hovers it.
  */
-function drawTitleStrip(app, box, g, id, view) {
+function drawTitleStrip(app, box, g, meta, view) {
+  const id = meta.object.id;
+  const height = SECTION_HEAD - 4 + (meta.wrap.lines.length - 1) * LINE_H;
   const strip = app.svgEl('g', {
     class: 'gtitle',
     transform: `translate(${box.x},${box.y})`,
     'data-nid': box.node.id,
   });
-  strip.appendChild(app.svgEl('rect', { class: 'title-hit', x: 0, y: 0, width: box.w, height: 30 }));
+  strip.appendChild(app.svgEl('rect', { class: 'title-hit', x: 0, y: 0, width: box.w, height }));
   wireNode(app, strip, id, view);
   strip.addEventListener('mouseenter', () => hover(g, true));
   strip.addEventListener('mouseleave', () => hover(g, false));
