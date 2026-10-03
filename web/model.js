@@ -1172,6 +1172,20 @@ export function kindWord(kind) {
 }
 
 /**
+ * How a cross reference to `id` reads along the outline, as a paper's would:
+ * `{ word: 'Definition', number: '1.2.1' }`, the lead word being the one the
+ * document view sets the entry under.  An object with several parents is
+ * referred to by its one number, the first occurrence's.  `null` for an object
+ * the document gives no number: one that is not in the flow, or a step, which
+ * is read as part of its source rather than on its own.
+ */
+export function referenceOf(outline, id) {
+  const entry = outline.byId.get(id);
+  if (!entry) return null;
+  return { word: kindWord(entry.object.kind), number: entry.number };
+}
+
+/**
  * The page of the split document an object is read on: its own page if it has
  * entries under it, otherwise its parent's, which shows it among its siblings
  * (`null` is the top-level page).  A step is read wherever its source is.
