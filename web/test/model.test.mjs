@@ -46,6 +46,10 @@ function sameSet(actual, expected, what) {
   }
 }
 
+function ok(cond, what) {
+  if (!cond) throw new Error(what || 'expected true');
+}
+
 function has(collection, x, what) {
   const arr = [...collection];
   if (!arr.includes(x)) throw new Error(`${what || 'collection'} should contain ${JSON.stringify(x)}`);
@@ -516,6 +520,62 @@ check('search over id, title and body', () => {
   if (set.size < 3) throw new Error('searchIds should find several objects');
 });
 
+check('search finds Lean declaration names', () => {
+  const exact = M.search(model, 'Compact.tychonoff').map((h) => h.object.id);
+  eq(exact[0], 'thm-tychonoff', 'an exact Lean name ranks first');
+  const part = M.search(model, 'ultrafilter_le').map((h) => h.object.id);
+  sameSet(part, ['lem-ultrafilter'], 'part of a Lean name, found nowhere else');
+  has(M.searchIds(model, 'heineBorel'), 'thm-heine-borel', 'the graph highlight sees Lean names too');
+  sameSet(M.leanNamesOf(model.byId.get('def-filter')), ['Compact.Filter', 'Compact.Ultrafilter'], 'a list');
+  eq(M.leanNamesOf(model.byId.get('sec-main')).length, 0, 'none');
+  eq(M.leanNamesOf({ attrs: { lean: 'X.y' } })[0], 'X.y', 'a single name');
+});
+
+check('search limits, and filters candidates with accept', () => {
+  const all = M.search(model, 'e', Infinity);
+  if (all.length <= 3) throw new Error('"e" should match most of the sample');
+  eq(M.search(model, 'e', 3).length, 3, 'limit');
+  eq(M.searchIds(model, 'e').size, all.length, 'searchIds is not capped');
+  const nodesOnly = M.search(model, 'e', Infinity, { accept: (o) => o.boundary.length === 0 });
+  ok(nodesOnly.length > 0 && nodesOnly.every((h) => h.object.boundary.length === 0), 'accept is honoured');
+  eq(nodesOnly.length, all.filter((h) => h.object.boundary.length === 0).length, 'and drops nothing else');
+});
+
+// --- the progress listing -------------------------------------------------
+
+check('countableObjects is every countable object, by title, memoised', () => {
+  const list = M.countableObjects(model);
+  eq(list.length, M.statusCounts(model).total, 'as many as statusCounts counts');
+  for (let i = 1; i < list.length; i += 1) {
+    ok(M.titleOf(list[i - 1]) <= M.titleOf(list[i]), `sorted at ${i}`);
+  }
+  eq(M.countableObjects(model), list, 'memoised');
+});
+
+check('filterListing: each filter, and their combination', () => {
+  const all = M.countableObjects(model);
+  const ids = (f) => M.filterListing(model, all, { order, ...f }).map((o) => o.id);
+  eq(ids({}).length, all.length, 'no filter keeps everything');
+  sameSet(ids({ kind: 'theorem' }), ['thm-tychonoff', 'thm-heine-borel', 'thm-stone-cech'], 'kind');
+  sameSet(ids({ status: 'stated' }), ['thm-tychonoff', 'lem-inductive-step', 'lem-limit-point'], 'status');
+  sameSet(ids({ status: 'unproved' }),
+    ['thm-tychonoff', 'lem-inductive-step', 'lem-limit-point', 'thm-heine-borel', 'def-metric', 'thm-stone-cech'],
+    'unproved is everything but proved and proved_with_axioms');
+  eq(ids({ status: 'none' }).length, 0, 'every countable sample object has a status');
+  // `under` is any strict ancestor, not just the parent: lem-finite-subcover
+  // sits in sec-main-induction, which sits in sec-main.
+  sameSet(ids({ under: 'sec-main' }), ['thm-tychonoff', 'lem-finite-subcover', 'lem-diagonal'], 'under, at any depth');
+  sameSet(ids({ under: TYCH_ULTRA }), ['lem-base-case', 'lem-inductive-step', 'lem-limit-point'], 'under an edge');
+  sameSet(ids({ q: 'tychonoff' }), ['thm-tychonoff', 'thm-stone-cech'], 'text, by id and by body');
+  sameSet(ids({ q: 'tychonoff', under: 'sec-main' }), ['thm-tychonoff'], 'text and under');
+  sameSet(ids({ q: 'compact', kind: 'definition' }), ['def-compact', 'def-filter', 'def-net', 'def-metric']
+    .filter((id) => M.searchIds(model, 'compact').has(id)), 'text and kind');
+  sameSet(ids({ under: 'sec-foundations', status: 'proved', kind: 'definition' }),
+    ['def-compact', 'def-filter', 'def-net'], 'three filters at once');
+  eq(ids({ under: 'sec-main', status: 'missing' }).length, 0, 'filters combine with "and"');
+  eq(ids({ under: 'sec-main', order: null }).length, 0, 'under without an order matches nothing');
+});
+
 check('body links', () => {
   sameSet(M.bodyLinks(model.byId.get('thm-stone-cech').body), ['def-uniformity'], 'a dangling link');
   sameSet(
@@ -759,6 +819,7 @@ check('search is indexed once and memoised per query', () => {
     const s = q.toLowerCase();
     return o.id.toLowerCase().includes(s) ||
       M.titleOf(o).toLowerCase().includes(s) ||
+      M.leanNamesOf(o).some((n) => n.toLowerCase().includes(s)) ||
       (o.body || '').toLowerCase().includes(s);
   }).map((o) => o.id);
   for (const q of ['compact', 'Tychonoff', 'ULTRAFILTER', 'tube lemma', 'zzz']) {

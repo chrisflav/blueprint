@@ -124,6 +124,7 @@ class Element2 extends Node2 {
   releasePointerCapture() {}
   scrollIntoView() {}
   focus() {}
+  blur() {}
   set textContent(v) { this.childNodes = []; if (v !== '') this.appendChild(new Text2(v)); }
   get textContent() { return this.childNodes.map((c) => c.textContent).join(''); }
   set innerHTML(v) {

@@ -118,6 +118,7 @@ export function buildModel(snapshot) {
     _views: new Map(), // memoised views, keyed by kind + normalised expanded set
     _search: null, // lowercase search index, built on first search
     _searchHits: new Map(), // memoised results per query string
+    _countable: null, // countable objects by title, for the progress listing
   };
   return model;
 }
@@ -891,23 +892,46 @@ export function topLevel(model, kind) {
 // ---------------------------------------------------------------------------
 
 /**
- * Substring search over id, title and body.  Returns objects ranked by where
- * the match was found.  Empty query returns [].
+ * Substring search over id, title, the Lean declaration names (`attrs.lean`)
+ * and body.  Returns objects ranked by where the match was found.  Empty
+ * query returns [].
+ *
+ * `limit` may be `Infinity`.  `accept`, when given, is asked about every
+ * candidate before it is scored, which is how the top bar's search leaves out
+ * bare sugar edges: a real blueprint has several `uses/a/b` edges per
+ * statement, and every one of them matches by id whatever `a` and `b` match.
  */
-export function search(model, query, limit = 200) {
+export function search(model, query, limit = 200, { accept = null } = {}) {
   const q = (query || '').trim().toLowerCase();
   if (!q) return [];
   const hits = [];
   for (const row of searchIndex(model)) {
+    if (accept && !accept(row.object)) continue;
     let score = 0;
     if (row.id === q || row.title === q) score = 100;
+    else if (row.lean.includes(q)) score = 90;
     else if (row.id.includes(q)) score = 60;
     else if (row.title.includes(q)) score = 50;
+    else if (row.lean.some((n) => n.includes(q))) score = 40;
     else if (row.body.includes(q)) score = 20;
     if (score > 0) hits.push({ object: row.object, score });
   }
-  hits.sort((a, b) => b.score - a.score || (a.object.id < b.object.id ? -1 : 1));
-  return hits.slice(0, limit);
+  // Within one tier: statements before the edges between them, whose ids
+  // repeat their ends' ids, then the shorter id (the closer match), then the
+  // id itself, so the order is total and stable.
+  const isEdge = (o) => (o.boundary.length ? 1 : 0);
+  hits.sort((a, b) => b.score - a.score
+    || isEdge(a.object) - isEdge(b.object)
+    || a.object.id.length - b.object.id.length
+    || (a.object.id < b.object.id ? -1 : a.object.id > b.object.id ? 1 : 0));
+  return hits.length > limit ? hits.slice(0, limit) : hits;
+}
+
+/** The Lean declaration names an object carries, as a list (possibly empty). */
+export function leanNamesOf(object) {
+  const names = object && object.attrs ? object.attrs.lean : null;
+  if (Array.isArray(names)) return names.filter((n) => typeof n === 'string');
+  return typeof names === 'string' && names ? [names] : [];
 }
 
 /**
@@ -921,6 +945,7 @@ function searchIndex(model) {
       object: o,
       id: o.id.toLowerCase(),
       title: titleOf(o).toLowerCase(),
+      lean: leanNamesOf(o).map((n) => n.toLowerCase()),
       body: (o.body || '').toLowerCase(),
     }));
   }
@@ -931,6 +956,11 @@ function searchIndex(model) {
  * Ids matching a query, as a Set — used to highlight graph nodes.  The graph
  * asks for the same query more than once per keystroke (once while typing, once
  * when the route settles), so the answer is memoised per query string.
+ *
+ * Every match, not `search`'s default 200.  Sugar edges matched by id outrank
+ * statements matched by title or body, and in a real blueprint an ordinary
+ * word matches several hundred objects, most of the first 200 of them `uses/…`
+ * edges: the graph dimmed hundreds of nodes that did match.
  */
 export function searchIds(model, query) {
   const q = (query || '').trim().toLowerCase();
@@ -939,9 +969,61 @@ export function searchIds(model, query) {
     const hit = model._searchHits.get(q);
     if (hit) return hit;
   }
-  const ids = new Set(search(model, q).map((h) => h.object.id));
+  const ids = new Set(search(model, q, Infinity).map((h) => h.object.id));
   if (model._searchHits) cachePut(model._searchHits, q, ids, SEARCH_CACHE_LIMIT);
   return ids;
+}
+
+/**
+ * The objects of countable kinds, sorted by title: the rows of the progress
+ * page's "All countable objects" table before any filter.  Memoised on the
+ * model, so filtering on every keystroke does not sort a few thousand titles
+ * each time.
+ */
+export function countableObjects(model) {
+  if (!model._countable) {
+    const rows = model.objects
+      .filter((o) => model.kinds[o.kind] && model.kinds[o.kind].countable)
+      .map((o) => ({ o, t: titleOf(o) }));
+    rows.sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
+    model._countable = rows.map((r) => r.o);
+  }
+  return model._countable;
+}
+
+/** `status` filter values of the progress listing that are not statuses. */
+export const LISTING_NONE = 'none'; // the kind carries no Lean reference
+export const LISTING_UNPROVED = 'unproved'; // anything but the two proved states
+
+/**
+ * Filter the progress listing.  Every filter is optional and they combine
+ * with "and":
+ *
+ *   * `q`      — the same matcher as `search` (id, title, Lean names, body);
+ *   * `kind`   — the object's kind;
+ *   * `status` — a derived status, `'none'` for objects without one, or
+ *                `'unproved'` for everything that is not proved (with or
+ *                without extra axioms);
+ *   * `under`  — an id that must be a strict ancestor of the object in the
+ *                collapse order `order`, at any depth, so "under a chapter"
+ *                takes in the lemmas of its sections too.
+ *
+ * Returns a new array, in the order of `objects`.
+ */
+export function filterListing(model, objects, { q = '', kind = null, status = null, under = null, order = null } = {}) {
+  const ids = q && q.trim() ? searchIds(model, q) : null;
+  return objects.filter((o) => {
+    if (kind && o.kind !== kind) return false;
+    if (status) {
+      const s = statusOf(model, o.id);
+      if (status === LISTING_NONE) { if (s !== null) return false; }
+      else if (status === LISTING_UNPROVED) { if (s === 'proved' || s === 'proved_with_axioms') return false; }
+      else if (s !== status) return false;
+    }
+    if (under && (!order || !ancestorsOf(order, o.id).includes(under))) return false;
+    if (ids && !ids.has(o.id)) return false;
+    return true;
+  });
 }
 
 /** Count of objects per derived status, over countable kinds only. */

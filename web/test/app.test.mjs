@@ -43,7 +43,8 @@ const tick = (n = 1) => new Promise((r) => setTimeout(r, n));
 // ---------------------------------------------------------------------------
 
 const dom = setupDom({
-  ids: ['app', 'banner', 'project-title', 'topbar-aside', 'tabs'],
+  ids: ['app', 'banner', 'project-title', 'topbar-aside', 'tabs',
+    'gsearch-input', 'gsearch-panel', 'gsearch-results', 'gsearch-foot'],
   base: webDir,
   snapshot: sample,
 });
@@ -163,6 +164,188 @@ await check('a snapshot without macros gets an empty macro table', async () => {
   await app.showSnapshot(null);
   await tick(5);
   eq(app.katexOptions().macros['\\Opens'], '\\mathrm{Open}', 'back to the current snapshot');
+});
+
+// ---------------------------------------------------------------------------
+// 1b. the progress listing's filters, and the search box in the top bar
+// ---------------------------------------------------------------------------
+
+const modelMod1 = await import(path.join(webDir, 'model.js'));
+
+/** Call the listeners the page attached, as the browser would. */
+function fire(node, type, ev = {}) {
+  const event = { target: node, key: undefined, preventDefault() { this.defaultPrevented = true; }, ...ev };
+  for (const fn of node._listeners.get(type) || []) fn(event);
+  return event;
+}
+const listingRows = () => {
+  const t = root.querySelectorAll('table.grid')[1];
+  return t.querySelectorAll('tbody tr').filter((tr) => !tr.querySelector('td.muted[colspan]'));
+};
+const hashParams = () => new URLSearchParams(String(global.location.hash).split('?')[1] || '');
+
+await check('the progress listing reads its filters from the link', async () => {
+  await go('#/progress?status=stated');
+  eq(listingRows().length, 3, 'three stated objects');
+  eq(root.querySelector('.listing-count').textContent, '3 of 13 objects', 'the count');
+  const [kindSel, statusSel, underSel] = root.querySelectorAll('.listing-filters select');
+  ok(statusSel.querySelectorAll('option').some((o) => o.attributes.has('selected') && o.getAttribute('value') === 'stated'),
+    'the status control shows the filter from the link');
+  ok(kindSel && underSel, 'kind and under controls');
+  await go('#/progress?status=bogus&kind=nope&under=nothing');
+  eq(listingRows().length, 13, 'filters naming nothing in this snapshot filter by nothing');
+});
+
+await check('the progress filters combine, update the table in place and write the link', async () => {
+  await go('#/progress');
+  const page = root.firstChild;
+  const tbody = root.querySelectorAll('table.grid')[1].querySelector('tbody');
+  eq(root.querySelector('.listing-count').textContent, '13 objects', 'unfiltered count');
+  const [kindSel, statusSel, underSel] = root.querySelectorAll('.listing-filters select');
+
+  kindSel.value = 'lemma';
+  fire(kindSel, 'change');
+  eq(listingRows().length, 6, 'six lemmas');
+  statusSel.value = 'stated';
+  fire(statusSel, 'change');
+  eq(listingRows().length, 2, 'two stated lemmas');
+  underSel.value = 'uses/thm-tychonoff/lem-ultrafilter';
+  fire(underSel, 'change');
+  eq(listingRows().length, 2, 'both under the prose edge');
+
+  const search = root.querySelector('.listing-search');
+  search.value = 'limit-point';
+  fire(search, 'input');
+  eq(listingRows().length, 2, 'typing is debounced');
+  await tick(220);
+  eq(listingRows().length, 1, 'all four filters at once');
+  eq(root.querySelector('.listing-count').textContent, '1 of 13 objects', 'the count follows');
+
+  const p = hashParams();
+  eq(p.get('kind'), 'lemma', 'kind in the link');
+  eq(p.get('status'), 'stated', 'status in the link');
+  eq(p.get('under'), 'uses/thm-tychonoff/lem-ultrafilter', 'under in the link');
+  eq(p.get('q'), 'limit-point', 'q in the link');
+  eq(root.firstChild, page, 'the page was not rebuilt');
+  eq(root.querySelectorAll('table.grid')[1].querySelector('tbody'), tbody, 'the same table body');
+
+  statusSel.value = 'missing';
+  fire(statusSel, 'change');
+  eq(listingRows().length, 0, 'nothing left');
+  ok(/No countable object/.test(root.querySelectorAll('table.grid')[1].textContent), 'says so');
+
+  const clearBtn = root.querySelectorAll('.listing-filters button')[0];
+  fire(clearBtn, 'click');
+  eq(listingRows().length, 13, 'Clear shows everything again');
+  eq(String(global.location.hash), '#/progress', 'and empties the query');
+});
+
+await check('Show all works over the filtered rows', async () => {
+  const big = generate({ seed: 3 });
+  const bigModel = modelMod1.buildModel(big);
+  const saved = { model: app.model, snapshot: app.snapshot };
+  app.model = bigModel;
+  app.snapshot = big;
+  try {
+    await go('#/progress?x=1');
+    const all = modelMod1.countableObjects(bigModel).length;
+    ok(all > 300, `the generated snapshot has ${all} countable objects`);
+    eq(listingRows().length, 300, 'the first 300');
+    const kinds = [...new Set(modelMod1.countableObjects(bigModel).map((o) => o.kind))];
+    const kind = kinds.find((k) => modelMod1.countableObjects(bigModel).filter((o) => o.kind === k).length > 300) || kinds[0];
+    const n = modelMod1.countableObjects(bigModel).filter((o) => o.kind === kind).length;
+    const kindSel = root.querySelectorAll('.listing-filters select')[0];
+    kindSel.value = kind;
+    fire(kindSel, 'change');
+    eq(listingRows().length, Math.min(300, n), 'still capped after filtering');
+    const btn = root.querySelectorAll('button').find((b) => /^Show all/.test(b.textContent));
+    if (n > 300) {
+      ok(btn, 'a Show all button');
+      eq(btn.textContent, `Show all ${n}`, 'it counts the filtered rows');
+      fire(btn, 'click');
+      eq(listingRows().length, n, 'Show all adds the filtered rest, not everything');
+    } else {
+      ok(!btn, 'no Show all when the filtered rows fit');
+    }
+  } finally {
+    app.model = saved.model;
+    app.snapshot = saved.snapshot;
+  }
+});
+
+const gs = {
+  input: dom.document.getElementById('gsearch-input'),
+  panel: dom.document.getElementById('gsearch-panel'),
+  list: dom.document.getElementById('gsearch-results'),
+  foot: dom.document.getElementById('gsearch-foot'),
+};
+const gsItems = () => gs.list.querySelectorAll('.gsearch-item');
+
+await check('the top-bar search finds objects and leaves out bare sugar edges', async () => {
+  await go('#/progress');
+  gs.panel.hidden = true;
+  gs.input.value = 'tychonoff';
+  fire(gs.input, 'input');
+  ok(gs.panel.hidden, 'debounced');
+  await tick(150);
+  ok(!gs.panel.hidden, 'the list opened');
+  eq(gs.input.getAttribute('aria-expanded'), 'true', 'aria-expanded');
+  const hrefs = gsItems().map((a) => a.getAttribute('href'));
+  eq(hrefs[0], '#/object/thm-tychonoff', 'the exact id first');
+  ok(!hrefs.some((h) => /refines%2F|uses%2Fthm-tychonoff%2Fdef-compact/.test(h)), `no bare sugar edges in ${hrefs}`);
+  ok(hrefs.includes('#/object/' + encodeURIComponent('uses/thm-tychonoff/lem-ultrafilter')),
+    'a sugar edge with prose of its own is kept');
+  ok(/match/.test(gs.foot.textContent), `the foot counts: ${gs.foot.textContent}`);
+  eq(gsItems()[0].getAttribute('aria-selected'), 'true', 'the first result is active');
+
+  gs.input.value = 'heineBorel';
+  fire(gs.input, 'input');
+  await tick(150);
+  eq(gsItems()[0].getAttribute('href'), '#/object/thm-heine-borel', 'found by Lean name');
+  ok(/heineBorel/.test(gsItems()[0].querySelector('.gsearch-lean').textContent), 'and says which');
+
+  gs.input.value = 'zzzzzz';
+  fire(gs.input, 'input');
+  await tick(150);
+  eq(gsItems().length, 0, 'no results');
+  eq(gs.foot.textContent, 'No object matches.', 'says so');
+});
+
+await check('the top-bar search: arrows, Enter, Escape', async () => {
+  gs.input.value = 'compact';
+  fire(gs.input, 'input');
+  await tick(150);
+  const n = gsItems().length;
+  ok(n >= 3, 'several results');
+  fire(gs.input, 'keydown', { key: 'ArrowDown' });
+  eq(gsItems()[1].getAttribute('aria-selected'), 'true', 'down moves to the second');
+  eq(gs.input.getAttribute('aria-activedescendant'), gsItems()[1].id, 'aria-activedescendant');
+  fire(gs.input, 'keydown', { key: 'ArrowUp' });
+  fire(gs.input, 'keydown', { key: 'ArrowUp' });
+  eq(gsItems()[n - 1].getAttribute('aria-selected'), 'true', 'up from the first wraps to the last');
+  const want = gsItems()[n - 1].getAttribute('href');
+  const ev = fire(gs.input, 'keydown', { key: 'Enter' });
+  ok(ev.defaultPrevented, 'Enter is taken');
+  await tick(5);
+  eq(String(global.location.hash), want, 'Enter goes to the active result');
+  eq(gs.input.value, '', 'and empties the box');
+  ok(gs.panel.hidden, 'and closes the list');
+
+  // Enter straight after typing acts on the new query, not the old list.
+  gs.input.value = 'heine';
+  fire(gs.input, 'input');
+  fire(gs.input, 'keydown', { key: 'Enter' });
+  await tick(5);
+  eq(String(global.location.hash), '#/object/thm-heine-borel', 'Enter before the debounce fired');
+
+  gs.input.value = 'compact';
+  fire(gs.input, 'input');
+  await tick(150);
+  fire(gs.input, 'keydown', { key: 'Escape' });
+  ok(gs.panel.hidden, 'Escape closes the list');
+  eq(gs.input.value, 'compact', 'and keeps the query');
+  gs.input.value = '';
+  await go('#/object/def-compact');
 });
 
 // ---------------------------------------------------------------------------
