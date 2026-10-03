@@ -30,7 +30,7 @@ export function render(root, app) {
 
   page.appendChild(el('div.row', { style: { marginTop: '.7rem' } },
     el('a', { href: graphHref(app, o.id) }, 'Show in graph →'),
-    el('a', { href: '#/document?focus=' + encodeURIComponent(o.id) }, 'In the document →')));
+    documentLink(app, o)));
 
   // ---------------------------------------------------------------- prose
   const prose = el('div.body-prose');
@@ -107,6 +107,21 @@ function kindOf(m, id) {
 function statusChip(app, id) {
   const s = M.statusOf(app.model, id);
   return s === null ? null : app.statusBadge(s);
+}
+
+/**
+ * The page of the split document this object is read on, scrolled to it.
+ * Nothing at all for an object the document leaves out (a plain sugar edge,
+ * say): a link to the top of the document would only look like an answer.
+ */
+function documentLink(app, o) {
+  const kind = app.model.defaultCollapse;
+  if (!kind) return null;
+  const page = M.documentPageOf(M.documentOutline(app.model, kind), o.id);
+  if (page === undefined) return null;
+  const q = new URLSearchParams({ collapse: kind, focus: o.id });
+  const href = '#/document' + (page ? '/' + encodeURIComponent(page) : '') + '?' + q.toString();
+  return app.el('a', { href }, 'In the document →');
 }
 
 function graphHref(app, id) {

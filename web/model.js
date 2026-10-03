@@ -119,6 +119,7 @@ export function buildModel(snapshot) {
     _search: null, // lowercase search index, built on first search
     _searchHits: new Map(), // memoised results per query string
     _countable: null, // countable objects by title, for the progress listing
+    _outlines: new Map(), // memoised document outlines, per collapse kind
   };
   return model;
 }
@@ -1058,6 +1059,170 @@ export function readingOrder(model, kind) {
 export function topLevel(model, kind) {
   const order = collapseOrder(model, kind);
   return [...order.roots].sort((a, b) => compareIds(model, a, b)).map((id) => model.byId.get(id));
+}
+
+/**
+ * The document as the document view sets it: which objects it shows, in what
+ * order, with what numbers, and which page each of them is read on.  Memoised
+ * per collapse kind, like the order itself.
+ *
+ * Two rules keep the result readable rather than a dump of every object in the
+ * snapshot:
+ *
+ *   * an object appears in the flow when it has prose of its own or children
+ *     in the collapse order.  Sugar-created edges with neither are structure,
+ *     not content, and are left to the graph;
+ *   * a binary edge with prose or a title but no children of its own is a
+ *     *step* of its source object, rendered as a block under it — "By
+ *     induction on the dimension" belongs under the theorem it proves, not as
+ *     a chapter.  An edge that does have children keeps its own place: it is a
+ *     coarse object carrying its own prose, and its details nest under it.
+ *
+ * Objects of the collapse kind itself are never in the flow: they *are* the
+ * structure.
+ *
+ * Numbers are the paper's: the third entry under the second top-level entry is
+ * "2.3".  An object with several parents is written out under the first and
+ * repeated, as a pointer, under the others; the repetition carries the number
+ * of the first occurrence and uses none of its own, so every object has exactly
+ * one number and a cross reference to it means one place.
+ *
+ * Returns
+ *   { kind,
+ *     entries,  // the flow, in reading order: {id, object, depth, number,
+ *               //   duplicate, parent, children}; `parent` is the enclosing
+ *               //   entry (null at the top), `children` the entries under it
+ *     roots,    // the top-level entries
+ *     byId,     // id -> its first (written-out) entry
+ *     steps,    // source id -> the step objects filed under it
+ *     stepOf }  // step id -> its source id
+ */
+export function documentOutline(model, kind) {
+  if (model._outlines.has(kind)) return model._outlines.get(kind);
+  const order = collapseOrder(model, kind);
+
+  const hasProse = (o) => !!(o.body && o.body.trim());
+  const hasTitle = (o) => !!(o.attrs && typeof o.attrs.title === 'string' && o.attrs.title);
+  const hasKids = (id) => childrenOf(order, id).length > 0;
+  // An object earns a place in the flow if it says something or contains
+  // something.
+  const inFlow = (o) => o.kind !== kind && (hasProse(o) || hasKids(o.id));
+
+  // Steps: leaf binary edges with something to say, filed under their source.
+  const steps = new Map();
+  const stepOf = new Map();
+  for (const o of model.objects) {
+    if (o.kind === kind) continue;
+    if (!isBinaryKind(model, o.kind)) continue;
+    if (hasKids(o.id)) continue; // it heads its own part of the document
+    if (!hasProse(o) && !hasTitle(o)) continue;
+    const src = boundaryEntry(o, 'src');
+    const srcObj = src && model.byId.get(src);
+    if (!srcObj || !inFlow(srcObj)) continue; // nothing to file it under
+    if (!steps.has(src)) steps.set(src, []);
+    steps.get(src).push(o);
+    stepOf.set(o.id, src);
+  }
+
+  // `readingOrder` gives the walk with its depths; an entry's parent in the
+  // flow is the nearest entry above it that is shallower.  Going by that
+  // rather than by `depth - 1` keeps the numbers whole even where a level was
+  // filtered out, which a broken snapshot can arrange.
+  const entries = [];
+  const roots = [];
+  const byId = new Map();
+  const counts = new Map(); // entry (or null) -> written-out children so far
+  const stack = []; // the chain of open entries, with their walk depths
+  for (const e of readingOrder(model, kind)) {
+    if (!e.object || !inFlow(e.object) || stepOf.has(e.id)) continue;
+    while (stack.length && stack[stack.length - 1].walkDepth >= e.depth) stack.pop();
+    const parent = stack.length ? stack[stack.length - 1].entry : null;
+    const first = byId.get(e.id);
+    const entry = {
+      id: e.id,
+      object: e.object,
+      depth: parent ? parent.depth + 1 : 0,
+      duplicate: !!first,
+      number: null,
+      parent,
+      children: [],
+    };
+    if (first) {
+      entry.number = first.number;
+    } else {
+      const k = (counts.get(parent) || 0) + 1;
+      counts.set(parent, k);
+      entry.number = parent ? parent.number + '.' + k : String(k);
+      byId.set(e.id, entry);
+    }
+    (parent ? parent.children : roots).push(entry);
+    entries.push(entry);
+    if (!entry.duplicate) stack.push({ walkDepth: e.depth, entry });
+  }
+
+  const outline = { kind, entries, roots, byId, steps, stepOf };
+  model._outlines.set(kind, outline);
+  return outline;
+}
+
+/** "Definition", "Section", "Main theorem": the lead word of a numbered entry. */
+export function kindWord(kind) {
+  const s = String(kind);
+  return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ');
+}
+
+/**
+ * The page of the split document an object is read on: its own page if it has
+ * entries under it, otherwise its parent's, which shows it among its siblings
+ * (`null` is the top-level page).  A step is read wherever its source is.
+ * `undefined` when the object is not in the document at all.
+ */
+export function documentPageOf(outline, id) {
+  if (outline.stepOf.has(id)) return documentPageOf(outline, outline.stepOf.get(id));
+  const entry = outline.byId.get(id);
+  if (!entry) return undefined;
+  if (entry.children.length) return entry.id;
+  return entry.parent ? entry.parent.id : null;
+}
+
+/**
+ * Whether the page of `pageId` (null for the top level), inlining `levels`
+ * levels below itself, writes out `id`.
+ */
+export function documentPageShows(outline, pageId, levels, id) {
+  if (outline.stepOf.has(id)) id = outline.stepOf.get(id);
+  const entry = outline.byId.get(id);
+  if (!entry) return false;
+  if (pageId === null) return entry.depth < levels;
+  if (entry.id === pageId) return true;
+  for (let p = entry.parent; p; p = p.parent) {
+    if (p.id === pageId) return entry.depth - p.depth <= levels;
+  }
+  return false;
+}
+
+/**
+ * The entries a page writes out, in reading order: the page's own entry (none
+ * for the top level) and everything up to `levels` levels below it.
+ */
+export function documentPageEntries(outline, pageId, levels) {
+  const out = [];
+  const walk = (list, left) => {
+    if (left <= 0) return;
+    for (const e of list) {
+      out.push(e);
+      walk(e.children, left - 1);
+    }
+  };
+  if (pageId === null) {
+    walk(outline.roots, levels);
+  } else {
+    const entry = outline.byId.get(pageId);
+    if (!entry) return out;
+    out.push(entry);
+    walk(entry.children, levels);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

@@ -412,9 +412,19 @@ const app = {
   progressBar,
   objectHeadBadges,
 
-  /** Navigate to a route. */
-  go(view, id, params) {
-    location.hash = buildHash(view, id, params);
+  /**
+   * Navigate to a route.  `replace` swaps the current history entry instead of
+   * pushing one, for a page that redirects an old-style link to where it now
+   * lives: Back must not land on the link again and be redirected again.
+   */
+  go(view, id, params, { replace = false } = {}) {
+    const hash = buildHash(view, id, params);
+    if (replace) {
+      history.replaceState(null, '', hash);
+      render();
+    } else {
+      location.hash = hash;
+    }
   },
 
   /**

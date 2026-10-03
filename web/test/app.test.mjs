@@ -382,9 +382,13 @@ const settle = async (flow) => {
   }
 };
 
+// The whole document on one page, which is what the lazy machinery is for.
+const allLevels = () => new URLSearchParams({ depth: 'all' });
+const docFlow = () => root.querySelectorAll('.doc-flow')[0];
+
 await check('the document view defers headings and prose', async () => {
   await withBigSnapshot(async () => {
-    app.route = { view: 'document', id: null, params: new URLSearchParams(), raw: '/document' };
+    app.route = { view: 'document', id: null, params: allLevels(), raw: '/document?depth=all' };
     katex.reset();
     documentPage.render(root, app);
 
@@ -397,7 +401,7 @@ await check('the document view defers headings and prose', async () => {
     eq(filled, 0, 'no prose should be rendered before it is scrolled to');
     ok(dom.observers.pending() > 0, 'nothing was handed to the observer');
 
-    const flow = root.querySelectorAll('.doc-layout')[0].children[1];
+    const flow = docFlow();
     await settle(flow);
     const all = root.querySelectorAll('.doc-entry').length;
     ok(all > first, `the rest of the document never arrived (${all})`);
@@ -415,18 +419,15 @@ await check('the document view defers headings and prose', async () => {
 
 await check('a focused section is built even when it is far down', async () => {
   await withBigSnapshot(async () => {
-    const order = modelMod.collapseOrder(app.model, 'refines');
-    const entries = modelMod.readingOrder(app.model, 'refines')
-      .filter((e) => e.object && e.object.kind !== 'refines' &&
-        ((e.object.body && e.object.body.trim()) || modelMod.childrenOf(order, e.id).length));
+    const entries = modelMod.documentOutline(app.model, 'refines').entries.filter((e) => !e.duplicate);
     const target = entries[entries.length - 1].id;
     app.route = {
       view: 'document', id: null,
-      params: new URLSearchParams({ focus: target }), raw: '/document',
+      params: new URLSearchParams({ depth: 'all', focus: target }), raw: '/document',
     };
     documentPage.render(root, app);
     const anchor = 'doc-' + String(target).replace(/[^A-Za-z0-9_-]/g, '_');
-    const flow = root.querySelectorAll('.doc-layout')[0].children[1];
+    const flow = docFlow();
     ok(flow.childNodes.length < 60, 'the focus was reached by building everything at once');
     await settle(flow);
     ok(dom.document.getElementById(anchor), `the focused section ${target} was never built`);
@@ -438,7 +439,7 @@ await check('without an IntersectionObserver everything renders at once', async 
   global.IntersectionObserver = undefined;
   try {
     await withBigSnapshot(async () => {
-      app.route = { view: 'document', id: null, params: new URLSearchParams(), raw: '/document' };
+      app.route = { view: 'document', id: null, params: allLevels(), raw: '/document?depth=all' };
       katex.reset();
       documentPage.render(root, app);
       ok(katex.calls.length > 0, 'the fallback rendered no prose');
@@ -446,6 +447,93 @@ await check('without an IntersectionObserver everything renders at once', async 
   } finally {
     global.IntersectionObserver = keep;
   }
+});
+
+// ---------------------------------------------------------------------------
+// 2b. the document is split into pages along the collapse order
+// ---------------------------------------------------------------------------
+
+const entryIds = () => [...root.querySelectorAll('.doc-entry')].map((s) => s.id);
+const hrefs = (sel) => [...root.querySelectorAll(sel)].map((a) => a.getAttribute('href'));
+
+await check('the top page lists the top level, one level deep', async () => {
+  await go('#/document');
+  const out = modelMod.documentOutline(app.model, 'refines');
+  eq(root.querySelectorAll('.doc-entry').length, out.roots.length, 'one entry per top-level object');
+  ok(entryIds().includes('doc-sec-main'), 'a chapter is on it');
+  ok(!entryIds().includes('doc-thm-tychonoff'), 'its contents are not');
+  // Each chapter leads on to its own page, by its number and by a "Read" line.
+  ok(hrefs('.doc-open a').includes('#/document/sec-main?collapse=refines'), 'a link to the chapter page');
+  ok(hrefs('.doc-entry .head a.num').includes('#/document/sec-main?collapse=refines'), 'the number links there too');
+  eq(root.querySelectorAll('.doc-crumbs').length, 0, 'no breadcrumbs at the top');
+  eq(root.querySelectorAll('.doc-pager').length, 0, 'no siblings at the top');
+});
+
+await check('depth=2 inlines a second level', async () => {
+  await go('#/document?depth=2');
+  ok(entryIds().includes('doc-sec-main-induction'), 'sections are written out');
+  ok(!entryIds().includes('doc-lem-finite-subcover'), 'their contents are not');
+  ok(hrefs('.doc-open a').includes('#/document/sec-main-induction?collapse=refines&depth=2'),
+    'the depth travels with the links');
+  const select = root.querySelectorAll('.doc-controls select')[1];
+  eq(select.querySelectorAll('option[selected]')[0].getAttribute('value'), '2', 'the depth control shows it');
+});
+
+await check('a chapter page: breadcrumbs, its entries, its siblings', async () => {
+  await go('#/document/sec-main');
+  eq(app.route.id, 'sec-main', 'routed');
+  eq(entryIds().join(' '), 'doc-sec-main doc-sec-main-induction doc-thm-tychonoff', 'the page and one level below');
+  eq(root.querySelectorAll('.doc-entry.page-head .head h1').length, 1, 'the page entry is the title');
+  ok(hrefs('.doc-crumbs a').includes('#/document?collapse=refines'), 'breadcrumbs lead to the top');
+  eq(root.querySelectorAll('.doc-pager').length, 2, 'neighbours above and below');
+  const pager = root.querySelectorAll('.doc-pager')[0];
+  eq(pager.querySelectorAll('a.prev')[0].getAttribute('href'), '#/document/sec-foundations?collapse=refines', 'previous chapter');
+  eq(pager.querySelectorAll('a.next')[0].getAttribute('href'), '#/document/sec-applications?collapse=refines', 'next chapter');
+  eq(pager.querySelectorAll('a.up')[0].getAttribute('href'), '#/document?collapse=refines', 'up to the top');
+});
+
+await check('a nested page has the whole chain in its breadcrumbs', async () => {
+  await go('#/document/sec-main-induction');
+  ok(hrefs('.doc-crumbs a').includes('#/document/sec-main?collapse=refines'), 'the chapter is in the chain');
+  const text = root.querySelectorAll('.doc-crumbs')[0].textContent;
+  ok(/2\.1/.test(text), `the page's own number is in the breadcrumbs: ${text}`);
+  ok(entryIds().includes('doc-lem-finite-subcover'), 'its statements are written out');
+});
+
+await check('an old ?focus= link opens the page the entry is read on', async () => {
+  await go('#/document?focus=lem-finite-subcover');
+  eq(app.route.id, 'sec-main-induction', 'redirected to the section page');
+  eq(global.location.hash, '#/document/sec-main-induction?collapse=refines&focus=lem-finite-subcover', 'the URL says so');
+  ok(dom.document.getElementById('doc-lem-finite-subcover'), 'and the entry is on it');
+  // A focus the page does show is scrolled to where it is: a chapter is on
+  // the top page.
+  await go('#/document?collapse=refines&focus=sec-main');
+  eq(app.route.id, null, 'a chapter is on the top page');
+  // A focus the current page does show stays where it is.
+  await go('#/document/sec-main?depth=2&focus=lem-diagonal');
+  eq(app.route.id, 'sec-main', 'no redirect when the page shows it');
+  // A step is read with its source, which here is on the top page too.
+  await go('#/document/sec-foundations?focus=' + encodeURIComponent('uses/sec-main/sec-foundations'));
+  eq(app.route.id, 'sec-main', 'a step opens its source page');
+  ok(dom.document.getElementById('doc-uses_sec-main_sec-foundations'), 'the step block is anchored');
+});
+
+await check('a repeated object points at where it is written out', async () => {
+  await go('#/document/sec-applications');
+  const dup = root.querySelectorAll('.doc-entry.dup');
+  eq(dup.length, 1, 'lem-diagonal is repeated here');
+  eq(dup[0].id, '', 'the repetition does not take the anchor');
+  ok(/2\.1\.2/.test(dup[0].textContent), 'it carries the number of the first occurrence');
+  ok([...dup[0].querySelectorAll('a')].some((a) =>
+    a.getAttribute('href') === '#/document/sec-main-induction?collapse=refines&focus=lem-diagonal'), 'and links to it');
+});
+
+await check('a page the document does not have says so', async () => {
+  await go('#/document/no-such-object');
+  eq(root.querySelectorAll('.error-box').length, 1, 'an unknown id');
+  await go('#/document/' + encodeURIComponent('refines/def-compact/sec-foundations'));
+  eq(root.querySelectorAll('.error-box h1')[0].textContent, 'Not in the document', 'an object with no page');
+  await go('#/document');
 });
 
 // ---------------------------------------------------------------------------

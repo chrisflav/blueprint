@@ -349,7 +349,9 @@ by CI. Separate TypeScript package under `web/`.
 - Object page: rendered prose with KaTeX, Lean signature linking to doc-gen4,
   derived and declared status, boundary, everything incident to the object,
   and its position in each collapse order.
-- Document view: linear reading order.
+- Document view: linear reading order, numbered like a paper and split into
+  one page per level of the chosen collapse order, with a chosen number of
+  levels inlined on each page.
 - Progress dashboard and a time slider that replays snapshots.
 - Later: in-browser editing that commits through the git hosting API.
 
