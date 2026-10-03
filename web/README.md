@@ -156,6 +156,30 @@ and repeated under the others as a pointer back to it; the repetition carries
 the first occurrence's number and takes none of its own, so every object has
 exactly one number.
 
+### Cross references
+
+A `[slug]` in prose reads the way a paper's cross reference does: the lead
+word the document sets the object under and its number, "Definition 1.2.1",
+"Section 2.3" (`referenceOf` in `model.js`; the word is the kind's name,
+capitalised, for every kind alike). The numbers are those of the active
+collapse order: the document's `collapse=`, the graph's `collapse=`, and the
+default order on the object page. The slug stays the link's tooltip.
+
+* In the document the reference stays in the paper: it links to where the
+  object is written out, on the same page (a click scrolls there) or on the
+  page it is read on, scrolled to it. The object page is one click further,
+  on the entry's title.
+* Everywhere else (object pages, the graph's side panel) it links to the
+  object page, as before; only the text changed.
+* When the prose already says the word, "by Lemma [lem-x]", only the number
+  is added, so it does not read "Lemma Lemma 2.3".
+* An object the document gives no number keeps its slug as the text: one
+  that is not in the flow (a sugar edge with no prose, an object with neither
+  prose nor children), or a step, which is read as part of its source. An
+  object with several parents is referred to by its one number. A slug that
+  resolves nowhere is a broken link exactly as before, and explicit link text,
+  `[text](…)`, is markdown's and untouched.
+
 ## Files
 
 | file | contents |

@@ -148,10 +148,14 @@ const SLUG_TEST = new RegExp(SLUG_PATTERN);
  * Render a markdown body into `target`:
  *   1. marked -> HTML
  *   2. KaTeX auto-render (so maths is out of the way)
- *   3. `[slug]` -> link to the object page
+ *   3. `[slug]` -> a cross reference ("Definition 1.2.1") linking to the
+ *      object page
  * `known` is a Set of existing ids; unknown slugs get a `broken` class.
+ * `refs` says how a reference reads and where it leads (see `linkifySlugs`);
+ * left out, it is `pageReferences`, the numbering of the active collapse
+ * order with links to object pages.
  */
-export function renderBody(target, text, known) {
+export function renderBody(target, text, known, refs) {
   clear(target);
   const src = typeof text === 'string' ? text : '';
   if (!src.trim()) {
@@ -169,8 +173,32 @@ export function renderBody(target, text, known) {
     target.innerHTML = '<pre>' + escapeHtml(src) + '</pre>';
   }
   renderMath(target);
-  linkifySlugs(target, known);
+  linkifySlugs(target, known, refs === undefined ? pageReferences : refs);
   return target;
+}
+
+/**
+ * Cross references outside the document view — object pages, the graph's side
+ * panel — read as the document numbers them, along the collapse order the
+ * route has chosen (the graph's `collapse=`) or else the default one, so the
+ * number a reader sees is the one they will find in the document.  They still
+ * lead to the object page: that is the page these views link objects to, and
+ * the document is one click further on from there.
+ */
+function pageReferences(slug) {
+  const m = app.model;
+  if (!m) return null;
+  const wanted = app.route && app.route.params.get('collapse');
+  const kind = wanted && m.kinds[wanted] && m.kinds[wanted].collapse
+    ? wanted
+    : m.defaultCollapse || m.collapseKinds[0];
+  if (!kind) return null;
+  const ref = model.referenceOf(model.documentOutline(m, kind), slug);
+  return ref && { ...ref, href: objectHref(slug) };
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -259,8 +287,19 @@ export function renderMath(root) {
   }
 }
 
-/** Replace `[slug]` in text nodes by object links, skipping code and maths. */
-export function linkifySlugs(root, known) {
+/**
+ * Replace `[slug]` in text nodes by links, skipping code and maths.
+ *
+ * A reference reads the way a paper's does, "Definition 1.2.1": `refs(slug)`
+ * returns `{word, number, href}` for an object the document numbers, and
+ * `null` for one it does not, which keeps its slug as the link text.  When the
+ * prose already says the word ("by Lemma [lem-x]") only the number is added,
+ * so it does not read "Lemma Lemma 2.3".  The slug is the link's tooltip
+ * either way, and an unknown slug is a broken link exactly as before.  Without
+ * `refs` every link text is the slug.  Explicit link text, `[text](…)`, is
+ * markdown's and never reaches this pass.
+ */
+export function linkifySlugs(root, known, refs) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       for (let p = node.parentNode; p && p !== root; p = p.parentNode) {
@@ -287,15 +326,24 @@ export function linkifySlugs(root, known) {
       if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
       const slug = m[1];
       const ok = !known || known.has(slug);
+      const ref = ok && refs ? refs(slug) : null;
+      let label = slug;
+      if (ref) {
+        // "Lemma [x]" already has its word; `\p{L}` so that "dilemma [x]"
+        // does not count as one.
+        const said = new RegExp('(?:^|[^\\p{L}])' + escapeRegExp(ref.word) + '\\s+$', 'iu');
+        label = said.test(text.slice(0, m.index)) ? ref.number : ref.word + ' ' + ref.number;
+      }
       frag.appendChild(
         el(
           'a',
           {
-            class: 'objlink' + (ok ? '' : ' broken'),
-            href: ok ? objectHref(slug) : '#/checks?code=bad-link',
+            class: 'objlink' + (ok ? '' : ' broken') + (ref ? ' ref' : ''),
+            href: ok ? (ref && ref.href) || objectHref(slug) : '#/checks?code=bad-link',
             title: ok ? slug : `${slug} does not resolve to an object`,
+            'data-ref': ref ? slug : null,
           },
-          slug,
+          label,
         ),
       );
       last = m.index + m[0].length;

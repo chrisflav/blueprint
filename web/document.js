@@ -101,6 +101,18 @@ export function render(root, app) {
 
   const known = app.knownIds();
   const entries = M.documentPageEntries(outline, pageId, levels);
+
+  // Cross references in the prose read "Lemma 2.3.1" in this order's numbers,
+  // and stay in the paper: they lead to where the entry is written out, on
+  // this page if it is here and on its own page otherwise.  A reader who wants
+  // the object page has the entry's title for that.  Objects the document
+  // does not number keep their slug and their object-page link.
+  const refs = (slug) => {
+    const ref = M.referenceOf(outline, slug);
+    if (!ref) return null;
+    const here = M.documentPageShows(outline, pageId, levels, slug);
+    return { ...ref, href: href(here ? pageId : M.documentPageOf(outline, slug), slug) };
+  };
   // Depths on this page count from the first level below the page's own
   // entry, which is set as the page's title.
   const base = pageEntry ? pageEntry.depth + 1 : 0;
@@ -111,6 +123,20 @@ export function render(root, app) {
   const toc = el('nav.toc');
   page.appendChild(el('div.doc-layout', toc, body));
   root.appendChild(page);
+
+  // A reference to an entry already built on this page jumps to it instead of
+  // rebuilding the page around the same place.  A jump rather than a smooth
+  // scroll, and pinned: on the way past, bodies render and move the target,
+  // and a smooth scroll in Chromium then ends wherever the target used to be.
+  flow.addEventListener('click', (ev) => {
+    const a = ev.target && ev.target.closest ? ev.target.closest('a.ref[data-ref]') : null;
+    if (!a || !M.documentPageShows(outline, pageId, levels, a.getAttribute('data-ref'))) return;
+    const target = document.getElementById('doc-' + cssId(a.getAttribute('data-ref')));
+    if (!target) return; // not built yet: let the route build the page to it
+    ev.preventDefault();
+    target.scrollIntoView({ block: 'start' });
+    pin(target);
+  });
 
   // ----------------------------------------------------------------- header
   const crumbs = breadcrumbs(app, outline, pageEntry, href);
@@ -215,10 +241,10 @@ export function render(root, app) {
       if (o.body && o.body.trim()) {
         const prose = el('div.prose.body-prose');
         section.appendChild(prose);
-        defer(prose, () => app.renderBody(prose, o.body, known));
+        defer(prose, () => app.renderBody(prose, o.body, known, refs));
       }
       for (const step of outline.steps.get(o.id) || []) {
-        section.appendChild(stepBlock(app, step, known));
+        section.appendChild(stepBlock(app, step, known, refs));
       }
     }
 
@@ -416,7 +442,7 @@ function scrollTo(anchor) {
   };
 }
 
-function stepBlock(app, o, known) {
+function stepBlock(app, o, known, refs) {
   const { el } = app;
   const m = app.model;
   const tgt = M.boundaryEntry(o, 'tgt');
@@ -432,7 +458,7 @@ function stepBlock(app, o, known) {
   if (o.body && o.body.trim()) {
     const prose = el('div.body-prose.step-prose');
     block.appendChild(prose);
-    defer(prose, () => app.renderBody(prose, o.body, known));
+    defer(prose, () => app.renderBody(prose, o.body, known, refs));
   }
   return block;
 }

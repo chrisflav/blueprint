@@ -36,7 +36,7 @@ const ONLY = args.get('only') || null;
 // Which groups of checks to run at all — the A/B of a single fix does not need
 // to lay out 1,068 nodes on the way past.
 const SECTIONS = new Set((args.get('sections')
-  || 'boot,graph,layout,object,document,progress,search,checks,nav,sample').split(',').map((s) => s.trim()));
+  || 'boot,graph,layout,object,document,references,progress,search,checks,nav,sample').split(',').map((s) => s.trim()));
 const WIDTH = Number(args.get('width') || 1400);
 const HEIGHT = Number(args.get('height') || 900);
 const LAUNCH = args.get('no-launch') !== 'true';
@@ -268,6 +268,34 @@ async function loadFixtures(origin) {
     ? { page: busiest.id, id: proseKids(busiest)[Math.floor(proseKids(busiest).length / 2)].id }
     : null;
 
+  // Cross references (taxis #524): a `[slug]` naming a numbered object from
+  // the prose of an entry the document writes out, one of those whose target
+  // is read on another page than its source, and one on the same page.
+  let ref = null;
+  let refFar = null;
+  let refNear = null;
+  for (const o of m.objects) {
+    if (!o.body || !outline.byId.has(o.id)) continue;
+    slugRe.lastIndex = 0;
+    let mm;
+    while ((mm = slugRe.exec(o.body))) {
+      const t = mm[1];
+      if (!has(t) || !M.referenceOf(outline, t)) continue;
+      const r = M.referenceOf(outline, t);
+      const page = M.documentPageOf(outline, o.id);
+      const entry = { id: o.id, target: t, page, label: r.word + ' ' + r.number, number: r.number };
+      if (!ref) ref = entry;
+      if (!refFar && !M.documentPageShows(outline, page, 1, t)) refFar = entry;
+      if (!refNear && t !== o.id && M.documentPageShows(outline, page, 1, t)) refNear = entry;
+    }
+    if (ref && refFar && refNear) break;
+  }
+  // A link that resolves nowhere, as the tool reported it: a bracket found by
+  // a regex over the body might be maths (`F[1]`), which is not a link.
+  const badLink = m.checks.find((c) => c.code === 'bad-link' && c.objects && c.objects.length
+    && /`\[([^\]`]+)\]`/.test(c.message || ''));
+  const brokenRef = badLink && { id: badLink.objects[0], target: badLink.message.match(/`\[([^\]`]+)\]`/)[1] };
+
   const view = M.makeView(m, kind, []);
   const quot = M.quotient(view);
   const visibleNodeIds = [...view.visible].filter((id) => {
@@ -292,6 +320,7 @@ async function loadFixtures(origin) {
     deepLeaf: deepLeaf && deepLeaf.id,
     deepLeafPage: deepLeaf ? M.documentPageOf(outline, deepLeaf.id) : null,
     midFocus,
+    ref, refFar, refNear, brokenRef,
     bench: bench && bench.id,
     benchKids: bench ? M.childrenOf(order, bench.id) : [],
     defaultNodeCount: visibleNodeIds.length,
@@ -1149,7 +1178,7 @@ async function objectChecks(d, f) {
     await openObject(d, f.slug.id);
     const a = await d.js(`
       var a = Array.prototype.slice.call(document.querySelectorAll('.body-prose a.objlink'))
-        .filter(function (x) { return (x.textContent || '').trim() === ${j(f.slug.target)}; })[0];
+        .filter(function (x) { return x.getAttribute('title') === ${j(f.slug.target)}; })[0];
       if (!a) return null;
       var r = inView(a);
       return { href: a.getAttribute('href'), x: r.left + r.width / 2, y: r.top + r.height / 2, broken: a.classList.contains('broken') };
@@ -1233,8 +1262,12 @@ const ENTRY_IN_VIEW = (id) => `
   var t = document.getElementById(${j(anchorOf(id))});
   if (!t) return { found: false };
   var b = t.getBoundingClientRect();
-  return { found: true, top: Math.round(b.top), inView: b.top > -60 && b.top < window.innerHeight * 0.6,
-           scrollY: Math.round(window.scrollY), hash: decodeURIComponent(location.hash) };
+  // An entry near the end of a short page cannot be scrolled to the top: there
+  // it counts when the page is scrolled as far as it goes and the entry shows.
+  var atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+  return { found: true, top: Math.round(b.top), atBottom: atBottom, scrollY: Math.round(window.scrollY),
+           inView: b.top > -60 && (b.top < window.innerHeight * 0.6 || (atBottom && b.top < window.innerHeight - 20)),
+           hash: decodeURIComponent(location.hash) };
 `;
 
 async function clickAndWait(d, box, cond, label) {
@@ -1530,6 +1563,123 @@ async function documentChecks(d, f) {
 
   await d.shot(`${SHOTS}/${d.name}-document.png`);
   await consoleCheck(d, 'document');
+}
+
+// ---------------------------------------------------------------------------
+// 3b. cross references: `[slug]` reads "Definition 1.2.1" (taxis #524)
+// ---------------------------------------------------------------------------
+
+/** The `[slug]` link naming `target` inside `scope`, with its text and box. */
+const REF_LINK = (scope, target) => `
+  var a = Array.prototype.slice.call(document.querySelectorAll(${j(scope + ' a.objlink')}))
+    .filter(function (x) { return x.getAttribute('title') === ${j(target)}; })[0];
+  if (!a) return null;
+  var r = inView(a);
+  return { text: (a.textContent || '').trim(), href: a.getAttribute('href'), title: a.getAttribute('title'),
+           ref: a.classList.contains('ref'), broken: a.classList.contains('broken'),
+           x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  ${IN_VIEW}
+`;
+
+/**
+ * The link found by `body`, once it has stopped moving.  Bodies around it
+ * render lazily as it is scrolled into view and push it about; a click aimed
+ * at where it was a moment ago lands on the text next to it.
+ */
+async function steadyLink(d, body) {
+  let last = await waitFor(d, body, { timeout: 30000, label: 'reference in the document' }).catch(() => null);
+  for (let i = 0; last && i < 20; i += 1) {
+    await sleep(300);
+    const now = await d.js(body);
+    if (now && Math.abs(now.x - last.x) < 1 && Math.abs(now.y - last.y) < 1) return now;
+    last = now;
+  }
+  return last;
+}
+
+async function referenceChecks(d, f) {
+  const labelOk = (got, want) => got === want.label || got === want.number;
+
+  await check(d, 'references/object-page-reads-the-number', async () => {
+    if (!f.ref) return { skip: true, evidence: 'no [slug] naming a numbered object' };
+    await openObject(d, f.ref.id);
+    const a = await waitFor(d, REF_LINK('.body-prose', f.ref.target), { timeout: 15000, label: 'reference link' }).catch(() => null);
+    if (!a) return { ok: false, evidence: `no link for [${f.ref.target}] in ${j(f.ref.id)}` };
+    const want = '#/object/' + encodeURIComponent(f.ref.target);
+    return {
+      ok: labelOk(a.text, f.ref) && a.href === want && a.title === f.ref.target && a.ref,
+      evidence: `[${f.ref.target}] in ${j(f.ref.id)} reads ${j(a.text)} (want ${j(f.ref.label)}), href=${j(a.href)}, tooltip=${j(a.title)}`,
+    };
+  });
+
+  await check(d, 'references/broken-link-unchanged', async () => {
+    if (!f.brokenRef) return { skip: true, evidence: 'no bad-link check in this snapshot: every [slug] resolves' };
+    await openObject(d, f.brokenRef.id);
+    const a = await d.js(`
+      var a = Array.prototype.slice.call(document.querySelectorAll('.body-prose a.objlink.broken'))
+        .filter(function (x) { return (x.textContent || '').trim() === ${j(f.brokenRef.target)}; })[0];
+      return a ? { text: a.textContent, href: a.getAttribute('href') } : null;
+    `);
+    return {
+      ok: !!a && a.href === '#/checks?code=bad-link',
+      evidence: a ? `[${f.brokenRef.target}] in ${j(f.brokenRef.id)}: text=${j(a.text)}, href=${j(a.href)}` : `no broken link ${j(f.brokenRef.target)} in ${j(f.brokenRef.id)}`,
+    };
+  });
+
+  await check(d, 'references/graph-side-panel-reads-the-number', async () => {
+    if (!f.ref) return { skip: true, evidence: 'no [slug] naming a numbered object' };
+    const expand = M.expandableAncestorsOf(f.order, f.ref.id);
+    await gotoGraph(d, new URLSearchParams({ collapse: f.kind, expand: expand.join(','), sel: f.ref.id }).toString());
+    const a = await waitFor(d, REF_LINK('aside.side', f.ref.target), { timeout: 20000, label: 'side panel reference' }).catch(() => null);
+    if (!a) return { ok: false, evidence: `no link for [${f.ref.target}] in the side panel of ${j(f.ref.id)}` };
+    return {
+      ok: labelOk(a.text, f.ref) && a.href === '#/object/' + encodeURIComponent(f.ref.target),
+      evidence: `side panel of ${j(f.ref.id)}: [${f.ref.target}] reads ${j(a.text)}, href=${j(a.href)}`,
+    };
+  });
+
+  const docPage = (page, focus) => '#/document' + (page ? '/' + encodeURIComponent(page) : '')
+    + '?' + new URLSearchParams({ collapse: f.kind, focus }).toString();
+
+  await check(d, 'references/document-reference-opens-the-page-it-is-read-on', async () => {
+    if (!f.refFar) return { skip: true, evidence: 'no reference to an entry on another page' };
+    const { id, target, page } = f.refFar;
+    await route(d, docPage(page, id));
+    const scope = '#' + anchorOf(id);
+    const a = await steadyLink(d, REF_LINK(scope, target));
+    if (!a) return { ok: false, evidence: `no link for [${target}] in ${scope} on ${docPage(page, id)}` };
+    const home = M.documentPageOf(f.outline, target);
+    const want = home === null ? '#/document?' : '#/document/' + home + '?';
+    await d.click(a.x, a.y);
+    await waitFor(d, `return decodeURIComponent(location.hash).indexOf(${j(want)}) === 0
+      && !!document.getElementById(${j(anchorOf(target))})`, { timeout: 30000, label: 'target page' }).catch(() => null);
+    await sleep(900);
+    const r = await d.js(ENTRY_IN_VIEW(target));
+    return {
+      ok: labelOk(a.text, f.refFar) && r.found && r.inView,
+      evidence: `[${target}] in ${j(id)} reads ${j(a.text)}; clicked -> ${j(r.hash)} (want ${j(want + '…')}), target top=${r.top}px in view=${r.inView}`,
+    };
+  });
+
+  await check(d, 'references/document-reference-on-the-same-page-scrolls', async () => {
+    if (!f.refNear) return { skip: true, evidence: 'no reference to an entry on the same page' };
+    const { id, target, page } = f.refNear;
+    await route(d, docPage(page, id));
+    const scope = '#' + anchorOf(id);
+    const a = await steadyLink(d, REF_LINK(scope, target));
+    if (!a) return { ok: false, evidence: `no link for [${target}] in ${scope}` };
+    const before = await d.js('return location.hash');
+    await d.click(a.x, a.y);
+    await sleep(1500);
+    const r = await d.js(ENTRY_IN_VIEW(target));
+    const after = await d.js('return location.hash');
+    return {
+      ok: labelOk(a.text, f.refNear) && r.found && r.inView && after === before,
+      evidence: `[${target}] in ${j(id)} reads ${j(a.text)}, href=${j(decodeURIComponent(a.href))}; clicked: target top=${r.top}px in view=${r.inView}, hash ${after === before ? 'unchanged' : 'changed to ' + after}`,
+    };
+  });
+
+  await consoleCheck(d, 'references');
 }
 
 // ---------------------------------------------------------------------------
@@ -2155,6 +2305,7 @@ async function runBrowser(name, f) {
     if (SECTIONS.has('layout')) await layoutChecks(d, f);
     if (SECTIONS.has('object')) await objectChecks(d, f);
     if (SECTIONS.has('document')) await documentChecks(d, f);
+    if (SECTIONS.has('references')) await referenceChecks(d, f);
     if (SECTIONS.has('progress')) await progressChecks(d, f);
     if (SECTIONS.has('search')) await searchChecks(d, f);
     if (SECTIONS.has('checks')) await checksChecks(d, f);
@@ -2173,6 +2324,7 @@ async function main() {
     withFacts: f.withFacts, withoutFacts: f.withoutFacts, section: f.section, sugar: f.sugar,
     twoParents: f.twoParents, katex: f.katex, slug: f.slug, bench: f.bench,
     chapter: f.chapter, deepLeaf: f.deepLeaf, deepLeafPage: f.deepLeafPage, midFocus: f.midFocus,
+    ref: f.ref, refFar: f.refFar, refNear: f.refNear, brokenRef: f.brokenRef,
     defaultNodeCount: f.defaultNodeCount,
   })}\n`);
 

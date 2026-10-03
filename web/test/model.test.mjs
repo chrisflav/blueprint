@@ -728,6 +728,21 @@ check('pages of the split document', () => {
   }
 });
 
+check('cross references read as the document numbers them', () => {
+  const out = M.documentOutline(model, 'refines');
+  const ref = (id) => { const r = M.referenceOf(out, id); return r && r.word + ' ' + r.number; };
+  eq(ref('def-filter'), 'Definition 1.2', 'a statement');
+  eq(ref('sec-main-induction'), 'Section 2.1', 'a section, by the same rule');
+  eq(ref('lem-diagonal'), 'Lemma 2.1.2', 'two parents: the first occurrence');
+  eq(ref('uses/thm-tychonoff/lem-ultrafilter'), 'Uses 6', 'an edge heading its own part, as the document sets it');
+  eq(ref('uses/sec-main/sec-foundations'), null, 'a step has no number');
+  eq(ref('refines/def-compact/sec-foundations'), null, 'not in the document');
+  eq(ref('no-such-object'), null, 'unknown');
+  // Along another order, other numbers.
+  const r = M.referenceOf(M.documentOutline(model, 'instance_of'), 'thm-heine-borel');
+  eq(r.word + ' ' + r.number, 'Theorem 6.1', 'instance_of numbering');
+});
+
 check('kindWord', () => {
   eq(M.kindWord('definition'), 'Definition', 'capitalised');
   eq(M.kindWord('main_theorem'), 'Main theorem', 'underscores are spaces');

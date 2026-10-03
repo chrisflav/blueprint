@@ -537,6 +537,80 @@ await check('a page the document does not have says so', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// 2c. `[slug]` reads as a cross reference
+// ---------------------------------------------------------------------------
+
+const refLinks = () => [...root.querySelectorAll('.body-prose a.objlink')].map((a) => ({
+  text: a.textContent, href: a.getAttribute('href'), title: a.getAttribute('title'),
+  broken: a.classList.contains('broken'),
+}));
+const refTo = (slug) => refLinks().find((r) => r.title === slug);
+
+await check('on an object page a reference reads "Definition 1.2" and opens the object', async () => {
+  await go('#/object/def-compact');
+  const r = refTo('def-filter');
+  ok(r, `no link for [def-filter]: ${JSON.stringify(refLinks())}`);
+  eq(r.text, 'Definition 1.2', 'the document number');
+  eq(r.href, '#/object/def-filter', 'the link target is unchanged');
+  // An unknown slug is a broken link exactly as before.
+  await go('#/object/thm-stone-cech');
+  const b = refLinks().find((x) => x.broken);
+  eq(b.text, 'def-uniformity', 'a broken link keeps its slug');
+  eq(b.href, '#/checks?code=bad-link', 'and its target');
+});
+
+await check('a reference to an object the document does not number keeps its slug', async () => {
+  // A step (read as part of its source) and a collapse edge (structure); no
+  // body in the sample refers to either, so the body is made up here.
+  const div = dom.document.createElement('div');
+  app.renderBody(div, 'see [uses/sec-main/sec-foundations] and [refines/def-compact/sec-foundations]', app.knownIds());
+  const texts = [...div.querySelectorAll('a.objlink')].map((a) => a.textContent);
+  eq(texts.join(' | '), 'uses/sec-main/sec-foundations | refines/def-compact/sec-foundations', 'slugs');
+});
+
+await check('the word already in the prose is not repeated', async () => {
+  const div = dom.document.createElement('div');
+  app.renderBody(div, 'By Lemma [lem-ultrafilter], by lemma [lem-ultrafilter], a dilemma [lem-ultrafilter].', app.knownIds());
+  const texts = [...div.querySelectorAll('a.objlink')].map((a) => a.textContent);
+  eq(texts.join(' | '), '1.5 | 1.5 | Lemma 1.5', 'only the number after the word, whole words only');
+});
+
+await check('the graph numbers along its own collapse order', async () => {
+  const div = dom.document.createElement('div');
+  await go('#/graph?collapse=instance_of&sel=def-compact');
+  app.renderBody(div, '[thm-heine-borel]', app.knownIds());
+  eq(div.querySelectorAll('a')[0].textContent, 'Theorem 6.1', 'instance_of numbers');
+  await go('#/graph?sel=def-compact');
+  app.renderBody(div, '[thm-heine-borel]', app.knownIds());
+  eq(div.querySelectorAll('a')[0].textContent, 'Theorem 3.1', 'the default order');
+});
+
+await check('in the document a reference leads to where the entry is written out', async () => {
+  await go('#/document/sec-foundations');
+  dom.observers.flush();
+  // def-compact refers to def-filter, on the same page.
+  const same = refTo('def-filter');
+  eq(same.text, 'Definition 1.2', 'numbered');
+  eq(same.href, '#/document/sec-foundations?collapse=refines&focus=def-filter', 'this page, scrolled to it');
+  // sec-foundations' own prose refers to thm-tychonoff, read on sec-main's page.
+  const other = refTo('thm-tychonoff');
+  eq(other.text, 'Theorem 2.2', 'numbered');
+  eq(other.href, '#/document/sec-main?collapse=refines&focus=thm-tychonoff', 'the page it is read on');
+  // A section's own page.
+  await go('#/document/sec-main?depth=2');
+  dom.observers.flush();
+  const sec = refTo('sec-main-induction');
+  eq(sec.text, 'Section 2.1', 'a section');
+  eq(sec.href, '#/document/sec-main?collapse=refines&depth=2&focus=sec-main-induction', 'on this page at depth 2');
+  // Along the other order the numbers and pages are that order's.
+  await go('#/document?collapse=instance_of&depth=all');
+  dom.observers.flush();
+  const inst = refLinks().find((r) => r.title === 'def-filter');
+  eq(inst.text, 'Definition 7', 'instance_of numbering in the document');
+  await go('#/document');
+});
+
+// ---------------------------------------------------------------------------
 // 3. the graph lays out in a worker
 // ---------------------------------------------------------------------------
 
