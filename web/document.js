@@ -261,6 +261,7 @@ export function render(root, app) {
     const target = document.getElementById('doc-' + cssId(wanted));
     if (!target) return;
     wanted = null;
+    pin(target);
     requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
   };
   tryScroll();
@@ -353,6 +354,22 @@ function resetDeferred() {
   if (observer) observer.disconnect();
   observer = null;
   deferred = new Map();
+  pinned = null;
+}
+
+// The entry a focus or a contents link scrolled to, kept in place while the
+// prose around it renders, until the reader scrolls on their own.
+let pinned = null;
+const UNPIN = ['wheel', 'touchstart', 'keydown', 'mousedown'];
+
+function pin(target) {
+  pinned = target;
+  if (typeof window === 'undefined' || !window.addEventListener) return;
+  const release = () => {
+    pinned = null;
+    for (const t of UNPIN) window.removeEventListener(t, release, true);
+  };
+  for (const t of UNPIN) window.addEventListener(t, release, true);
 }
 
 /**
@@ -367,12 +384,22 @@ function defer(node, fn) {
   }
   if (!observer) {
     observer = new IntersectionObserver((records, obs) => {
+      // Prose rendered above the entry the reader was taken to pushes it down
+      // the page; hold it where it was, as scroll anchoring would if the
+      // browser did it from the top of a page (it does not, at scrollY 0).
+      const held = pinned && pinned.isConnected && pinned.getBoundingClientRect &&
+        typeof window.scrollBy === 'function' ? pinned : null;
+      const before = held ? held.getBoundingClientRect().top : 0;
       for (const r of records) {
         if (!r.isIntersecting) continue;
         const run = deferred.get(r.target);
         obs.unobserve(r.target);
         deferred.delete(r.target);
         if (run) run();
+      }
+      if (held) {
+        const moved = held.getBoundingClientRect().top - before;
+        if (Math.abs(moved) > 1) window.scrollBy(0, moved);
       }
     }, { rootMargin: '800px 0px' });
   }
