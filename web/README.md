@@ -75,7 +75,30 @@ All state lives in the URL hash, so every view is a shareable link.
 
 The graph route carries its full view state as query parameters:
 `collapse=<kind>`, `expand=<comma separated ids>`, `ekinds=<edge kinds>`,
-`status=<derived statuses>`, `q=<search>`, `sel=<selected id>`.
+`status=<derived statuses>`, `q=<search>`, `sel=<selected id>`, and
+`reduce=1` when *hide implied* is on.
+
+*Hide implied* (off by default) draws the transitive reduction of the graph as
+drawn: an arc is left out when a longer path of the same kind already joins
+its ends, so of "A uses B, B uses C, A uses C" only the first two are drawn.
+The reduction (`transitiveReduction` in `model.js`) works
+
+* per kind: a path implies an arc only of its own kind;
+* on the quotient after the kind and status filters, so an arc is never hidden
+  in favour of a path the reader cannot see, between collapsed sections just
+  as between leaves;
+* through junctions: src end → junction → tgt end is a path, but a junction
+  and its spokes are never hidden themselves, since they carry more than
+  reachability;
+* in the model's src → tgt direction, which for a kind drawn `arrow =
+  "reverse"` gives the same answer;
+* on the condensation when there are cycles, where the reduction is not
+  unique: arcs inside a cycle are never hidden, an arc between two strongly
+  connected components only when a third component lies between them, and
+  two arcs joining the same pair of components are both kept.
+
+Hiding everything it says loses no reachability. The status line counts the
+arcs it hid.
 
 The progress route carries the "All countable objects" listing's search and
 filters, so a filtered listing is a link too: `q=<search>`, `kind=<kind>`,

@@ -73,6 +73,8 @@ function readState(app) {
     status: p.has('status') ? split('status') : null, // null = all
     q: p.get('q') || '',
     sel: p.get('sel') || null,
+    // Hide arcs implied by a longer path of their kind; off unless asked for.
+    reduce: p.get('reduce') === '1',
   };
 }
 
@@ -236,6 +238,15 @@ function renderToolbar(app, st) {
           writeState(app, { ekinds: filterValue(next, eks) });
         },
       }), k))));
+
+  // Transitive reduction of what is drawn (see `buildElk`): a group of its
+  // own, since it is not a kind and is off when all the kinds are on.
+  bar.appendChild(el('div.group.reduce',
+    el('label.chk', { title: 'hide arcs already implied by a longer path of the same kind' },
+      el('input', {
+        type: 'checkbox', checked: st.reduce,
+        onchange: (e) => writeState(app, { reduce: e.target.checked ? '1' : null }),
+      }), 'hide implied')));
 
   bar.appendChild(el('div.sep'));
 
@@ -449,6 +460,36 @@ export function buildElk(app, st, view, quot) {
     if (!changed) break;
   }
 
+  // --- implied arcs --------------------------------------------------------
+  // With "hide implied" on, the reduction runs on exactly what is about to be
+  // drawn: the quotient after the kind and status filters, with the drawable
+  // ends.  An arc is never hidden in favour of a path through a node or a kind
+  // the reader has filtered away.  A junction's spokes are paths (src end ->
+  // junction -> tgt end, in the model's direction) but are never hidden
+  // themselves; undirected arcs and spokes take no part.
+  let implied = null;
+  if (st.reduce) {
+    const arcs = [];
+    for (const e of kept) {
+      if (e.type === 'junction') {
+        const item = e.members[0];
+        if (!junctionIds.has(item.id)) continue;
+        for (const end of item.ends) {
+          if (!drawable(end.id)) continue;
+          const isSrc = end.roles.includes('src');
+          const isTgt = end.roles.includes('tgt');
+          if (isSrc === isTgt) continue; // neither, or both: no direction
+          arcs.push(isSrc
+            ? { id: null, kind: item.kind, src: end.id, tgt: item.id, keep: true }
+            : { id: null, kind: item.kind, src: item.id, tgt: end.id, keep: true });
+        }
+      } else if (e.directed && drawable(e.src) && drawable(e.tgt)) {
+        arcs.push({ id: e.id, kind: e.kind, src: e.src, tgt: e.tgt, keep: false });
+      }
+    }
+    implied = M.transitiveReduction(arcs);
+  }
+
   const edges = [];
 
   for (const e of kept) {
@@ -485,6 +526,7 @@ export function buildElk(app, st, view, quot) {
       }
     } else {
       if (!drawable(e.src) || !drawable(e.tgt)) continue;
+      if (implied && implied.has(e.id)) continue;
       // The arrow head sits at the ELK target, and the layer order follows
       // ELK's direction, so a reversed kind swaps the two for both.
       const flip = e.directed && M.isReversedKind(m, e.kind);
@@ -504,7 +546,7 @@ export function buildElk(app, st, view, quot) {
     edges,
   };
   const edgeMeta = new Map(edges.map((e) => [e.id, e.bp]));
-  return { graph, nodes, edgeMeta };
+  return { graph, nodes, edgeMeta, implied: implied ? implied.size : 0 };
 }
 
 /**
@@ -567,7 +609,7 @@ export function plainGraph(graph) {
 // ---------------------------------------------------------------------------
 
 function signatureOf(st) {
-  return JSON.stringify([st.collapse, [...st.expand].sort(), st.ekinds, st.status]);
+  return JSON.stringify([st.collapse, [...st.expand].sort(), st.ekinds, st.status, st.reduce]);
 }
 
 async function scheduleLayout(app, st, view, quot) {
@@ -581,7 +623,7 @@ async function scheduleLayout(app, st, view, quot) {
   const structureChanged = sig !== lastSignature;
   lastSignature = sig;
 
-  const { graph, nodes, edgeMeta } = buildElk(app, st, view, quot);
+  const { graph, nodes, edgeMeta, implied } = buildElk(app, st, view, quot);
   const token = ++layoutToken;
 
   const n = countNodes(graph);
@@ -596,6 +638,7 @@ async function scheduleLayout(app, st, view, quot) {
     draw(app, st, view, quot, laid, nodes, edgeMeta, structureChanged);
     const nCount = countNodes(laid);
     status.textContent = `${nCount.toLocaleString()} nodes, ${(laid.edges || []).length} links \u2014 ` +
+      (st.reduce ? `${implied} implied arc${implied === 1 ? '' : 's'} hidden \u2014 ` : '') +
       `${view.expanded.size} expanded, collapse kind \u201c${st.collapse}\u201d`;
   } catch (e) {
     // Everything on this path is covered, the drawing included: a failure has

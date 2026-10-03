@@ -50,6 +50,7 @@ trap.
 | `--shots=<dir>` | `/tmp/shots` | screenshots and `sweep-results.json` |
 | `--width` / `--height` | `1400` / `900` | the viewport, exactly |
 | `--no-launch` | — | attach to a geckodriver/Chromium you started yourself |
+| `--gecko-port` / `--cdp-port` | `4444` / `9222` | the geckodriver and Chromium DevTools ports, for running beside another sweep |
 | `--verbose` | — | list the skipped checks in the summary |
 
 `--sections` and `--only` together are what make an A/B of one fix quick:
@@ -70,7 +71,7 @@ so a failure is readable without re-running anything.
 | section | checks |
 |---------|--------|
 | `boot` | the snapshot loads, the project title reaches the chrome, and KaTeX, auto-render, marked and ELK all arrived from their CDNs |
-| `graph` | initial layout; click selects and fills the side panel; double-click expands and collapses again; Enter and Space on a focused node; the side panel's *Expand/Collapse (n children)* button; Expand all and Collapse all; the collapse-kind select; every edge-kind and every status checkbox, off and on again; search highlighting; Fit, `+`, `−`; wheel zoom; drag to pan; clicking empty stage to deselect; reloading a URL carrying `sel=` and `expand=`; the *Open object page* link; the legend not covering a node |
+| `graph` | initial layout; click selects and fills the side panel; double-click expands and collapses again; Enter and Space on a focused node; the side panel's *Expand/Collapse (n children)* button; Expand all and Collapse all; the collapse-kind select; every edge-kind and every status checkbox, off and on again; *hide implied* on (the arcs that go are the ones the status line counts, and the flag survives a reload) and off again; search highlighting; Fit, `+`, `−`; wheel zoom; drag to pan; clicking empty stage to deselect; reloading a URL carrying `sel=` and `expand=`; the *Open object page* link; the legend not covering a node |
 | `layout` | the shell geometry: legend sample icons stay 24×10, a `hidden` banner takes no space, the graph still fits when the snapshot banner *is* there, and no route overflows horizontally |
 | `object` | a theorem with Lean facts, a definition without, a section, a sugar edge whose id contains slashes, an object with two parents, a body with KaTeX, and a `[slug]` link that is clicked; on every one of them, that **every** `#/object/…` link on the page names an id that exists and that no "unknown object" placeholder names one that does |
 | `document` | initial render; scrolling to the bottom in steps while the bodies render lazily; headings at the bottom; how much maths rendered and what leftover `$…$` there is; heading sizes down the hierarchy; a contents link scrolling to its heading; `?focus=` |
