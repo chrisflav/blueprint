@@ -36,7 +36,7 @@ const ONLY = args.get('only') || null;
 // Which groups of checks to run at all — the A/B of a single fix does not need
 // to lay out 1,068 nodes on the way past.
 const SECTIONS = new Set((args.get('sections')
-  || 'boot,graph,layout,object,document,progress,checks,nav,sample').split(',').map((s) => s.trim()));
+  || 'boot,graph,layout,object,document,progress,search,checks,nav,sample').split(',').map((s) => s.trim()));
 const WIDTH = Number(args.get('width') || 1400);
 const HEIGHT = Number(args.get('height') || 900);
 const LAUNCH = args.get('no-launch') !== 'true';
@@ -1359,6 +1359,264 @@ async function progressChecks(d, f) {
 }
 
 // ---------------------------------------------------------------------------
+// 4b. search: the top bar's box, and the progress listing's search and filters
+// ---------------------------------------------------------------------------
+
+const LISTING_STATE = `
+  var t = document.querySelectorAll('table.grid')[1];
+  var rows = t ? Array.prototype.filter.call(t.querySelectorAll('tbody tr'), function (tr) {
+    return !tr.querySelector('td[colspan]'); }) : [];
+  var sel = Array.prototype.map.call(document.querySelectorAll('.listing-filters select'), function (s) { return s.value; });
+  var more = Array.prototype.filter.call(document.querySelectorAll('.page button'), function (b) {
+    return /^Show all/.test(b.textContent); })[0];
+  return { rows: rows.length,
+           count: (document.querySelector('.listing-count') || {}).textContent || null,
+           q: (document.querySelector('.listing-search') || {}).value,
+           selects: sel, hash: location.hash,
+           more: more ? more.textContent : null,
+           marker: (document.querySelector('.page') || {}).dataset ? document.querySelector('.page').dataset.sweep || null : null,
+           focus: document.activeElement ? (document.activeElement.className || document.activeElement.tagName) : null };
+`;
+
+const GSEARCH_STATE = `
+  var p = document.getElementById('gsearch-panel');
+  var inp = document.getElementById('gsearch-input');
+  var items = Array.prototype.map.call(document.querySelectorAll('#gsearch-results .gsearch-item'), function (a) {
+    return { href: a.getAttribute('href'), active: a.classList.contains('active'), sel: a.getAttribute('aria-selected'),
+             lean: (a.querySelector('.gsearch-lean') || {}).textContent || null }; });
+  var r = p.getBoundingClientRect();
+  var first = document.querySelector('#gsearch-results .gsearch-item');
+  var hit = null;
+  if (first && !p.hidden) {
+    var fr = first.getBoundingClientRect();
+    var e = document.elementFromPoint(fr.left + fr.width / 2, fr.top + fr.height / 2);
+    hit = !!(e && first.contains(e));
+  }
+  return { open: !p.hidden, value: inp.value, focused: document.activeElement === inp,
+           expanded: inp.getAttribute('aria-expanded'), descendant: inp.getAttribute('aria-activedescendant'),
+           items: items, foot: (document.getElementById('gsearch-foot') || {}).textContent,
+           box: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, vw: window.innerWidth, vh: window.innerHeight,
+           firstOnTop: hit, hash: location.hash,
+           h1: (document.querySelector('.page h1') || {}).textContent || null };
+`;
+
+async function typeInto(d, selector, text) {
+  const inp = await d.js(elBox(selector));
+  if (!inp) throw new Error('no ' + selector);
+  await d.click(inp.x, inp.y);
+  await d.js(`var e = document.querySelector(${j(selector)}); e.value = ''; e.dispatchEvent(new Event('input', { bubbles: true })); return true;`);
+  await d.type(text);
+}
+
+async function searchChecks(d, f) {
+  const m = f.m;
+  const all = M.countableObjects(m);
+  const objHref = (id) => '#/object/' + encodeURIComponent(id);
+  const bareSugar = (o) => m.kinds[o.kind] && m.kinds[o.kind].sugar && !o.attrs.title && !o.body.trim();
+
+  // --- the progress listing -------------------------------------------------
+  await route(d, '#/progress');
+  await waitFor(d, `return !!document.querySelector('.listing-filters')`, { timeout: 30000, label: 'listing filters' });
+  await sleep(400);
+  // A mark on the page element: if typing re-rendered the page, it is gone.
+  await d.js(`document.querySelector('.page').dataset.sweep = 'kept'; return true;`);
+
+  // The query: the id of a countable object, minus its first character, so it
+  // is a substring and not the exact id.
+  const probe = all.find((o) => o.id.length > 6) || all[0];
+  const q = probe ? probe.id.slice(1) : 'a';
+  await check(d, 'search/listing-search-updates-in-place', async () => {
+    await typeInto(d, '.listing-search', q);
+    await sleep(900);
+    const s = await d.js(LISTING_STATE);
+    const want = M.filterListing(m, all, { q }).length;
+    return {
+      ok: s.count === `${want} of ${all.length} objects` && s.rows === Math.min(want, 300)
+        && s.marker === 'kept' && /listing-search/.test(s.focus || '') && s.hash.includes('q=' + encodeURIComponent(q)),
+      evidence: `typed ${j(q)}: count=${j(s.count)} (model says ${want}), ${s.rows} rows, page marker=${j(s.marker)}, `
+        + `focus=${j(s.focus)}, hash=${j(s.hash)}`,
+    };
+  });
+
+  // kind, status and under, through the real <select>s (value + change, as the
+  // README says), combined with an empty query.
+  const kinds = [...new Set(all.map((o) => o.kind))];
+  const kind = kinds.sort((a, b) => all.filter((o) => o.kind === b).length - all.filter((o) => o.kind === a).length)[0];
+  const tops = M.topLevel(m, f.kind).filter((o) => M.childrenOf(f.order, o.id).length > 0);
+  const under = tops.map((o) => o.id).find((id) => M.filterListing(m, all, { kind, status: 'unproved', under: id, order: f.order }).length > 0)
+    || (tops[0] && tops[0].id);
+  const filters = { kind, status: 'unproved', under };
+  await check(d, 'search/listing-filters-combine', async () => {
+    await d.js(`var e = document.querySelector('.listing-search'); e.value = ''; e.dispatchEvent(new Event('input', { bubbles: true })); return true;`);
+    await sleep(500);
+    const setSel = async (i, v) => d.js(`
+      var s = document.querySelectorAll('.listing-filters select')[${i}];
+      s.value = ${j(v)}; s.dispatchEvent(new Event('change', { bubbles: true })); return s.value;`);
+    const got = [await setSel(0, kind), await setSel(1, 'unproved'), await setSel(2, under || '')];
+    await sleep(400);
+    const s = await d.js(LISTING_STATE);
+    const want = M.filterListing(m, all, { ...filters, order: f.order }).length;
+    const p = new URLSearchParams(s.hash.split('?')[1] || '');
+    return {
+      ok: s.count === `${want} of ${all.length} objects` && s.rows === Math.min(want, 300) && s.marker === 'kept'
+        && p.get('kind') === kind && p.get('status') === 'unproved' && p.get('under') === under && !p.get('q'),
+      evidence: `kind=${j(kind)} status=unproved under=${j(under)} (selects took ${j(got)}): count=${j(s.count)} `
+        + `(model says ${want}), ${s.rows} rows, marker=${j(s.marker)}, hash=${j(s.hash)}`,
+    };
+  });
+
+  await check(d, 'search/listing-link-survives-a-reload', async () => {
+    const before = await d.js(LISTING_STATE);
+    await d.reload();
+    await waitFor(d, `return !!document.querySelector('.listing-filters')`, { timeout: 60000, label: 'listing after reload' });
+    await sleep(600);
+    await d.installHooks();
+    const s = await d.js(LISTING_STATE);
+    return {
+      ok: s.count === before.count && s.rows === before.rows && j(s.selects) === j(before.selects) && s.hash === before.hash,
+      evidence: `reloaded ${j(before.hash)}: count ${j(before.count)} -> ${j(s.count)}, selects ${j(before.selects)} -> ${j(s.selects)}`,
+    };
+  });
+
+  await check(d, 'search/listing-show-all-over-filtered-rows', async () => {
+    // Only the kind filter, so that there are more than 300 rows if anything does.
+    await route(d, '#/progress?kind=' + encodeURIComponent(kind));
+    await waitFor(d, `return !!document.querySelector('.listing-filters')`, { timeout: 30000, label: 'listing' });
+    await sleep(500);
+    const want = M.filterListing(m, all, { kind }).length;
+    const before = await d.js(LISTING_STATE);
+    if (want <= 300) {
+      return { ok: before.rows === want && before.more === null, skip: true,
+        evidence: `only ${want} ${kind} objects: no Show all to press (rows=${before.rows}, button=${j(before.more)})` };
+    }
+    const b = await d.js(elBoxByText('.page button', 'Show all'));
+    await d.click(b.x, b.y);
+    await sleep(1500);
+    const s = await d.js(LISTING_STATE);
+    return {
+      ok: before.rows === 300 && before.more === `Show all ${want}` && s.rows === want,
+      evidence: `kind=${j(kind)}: ${before.rows} rows and ${j(before.more)} -> ${s.rows} rows (model says ${want})`,
+    };
+  });
+
+  await check(d, 'search/listing-clear', async () => {
+    const b = await d.js(elBoxByText('.listing-filters button', 'Clear'));
+    await d.click(b.x, b.y);
+    await sleep(500);
+    const s = await d.js(LISTING_STATE);
+    return {
+      ok: s.count === `${all.length} objects` && s.rows === Math.min(300, all.length) && s.hash === '#/progress'
+        && s.selects.every((v) => v === '') && s.q === '',
+      evidence: `count=${j(s.count)}, ${s.rows} rows, selects=${j(s.selects)}, hash=${j(s.hash)}`,
+    };
+  });
+
+  await d.shot(`${SHOTS}/${d.name}-listing.png`);
+
+  // --- the top bar's search box ---------------------------------------------
+  // Start from a page where focus is on nothing in particular.
+  await route(d, '#/checks');
+  await sleep(700);
+  await d.js(`if (document.activeElement) document.activeElement.blur(); return true;`);
+
+  await check(d, 'search/global-slash-focuses-the-box', async () => {
+    await d.key('/');
+    await sleep(200);
+    const s = await d.js(GSEARCH_STATE);
+    return { ok: s.focused && s.value === '', evidence: `after "/": focused=${s.focused}, value=${j(s.value)} (the slash must not be typed)` };
+  });
+
+  const target = f.withFacts ? m.byId.get(f.withFacts) : all[0];
+  await check(d, 'search/global-finds-an-object-by-id', async () => {
+    if (!target) return { skip: true, evidence: 'no object to look for' };
+    await d.type(target.id);
+    await sleep(700);
+    const s = await d.js(GSEARCH_STATE);
+    const hrefs = s.items.map((x) => x.href);
+    const bare = hrefs.map((h) => decodeURIComponent(h.replace('#/object/', ''))).filter((id) => {
+      const o = m.byId.get(id); return o && bareSugar(o);
+    });
+    const inView = s.box.left >= 0 && s.box.right <= s.vw && s.box.bottom <= s.vh;
+    return {
+      ok: s.open && hrefs[0] === objHref(target.id) && s.items[0].active && s.expanded === 'true'
+        && bare.length === 0 && inView && s.firstOnTop === true,
+      evidence: `typed ${j(target.id)}: open=${s.open}, ${s.items.length} results, first=${j(hrefs[0])} active=${s.items[0] && s.items[0].active}, `
+        + `bare sugar edges listed=${bare.length}, foot=${j(s.foot)}, panel ${Math.round(s.box.left)}..${Math.round(s.box.right)} x `
+        + `${Math.round(s.box.top)}..${Math.round(s.box.bottom)} in ${s.vw}x${s.vh}, first item on top=${s.firstOnTop}`,
+    };
+  });
+
+  await check(d, 'search/global-arrows-and-enter', async () => {
+    const s0 = await d.js(GSEARCH_STATE);
+    if (s0.items.length < 2) return { skip: true, evidence: `only ${s0.items.length} result(s) to move between` };
+    await d.key('ArrowDown');
+    await sleep(100);
+    const s1 = await d.js(GSEARCH_STATE);
+    await d.key('ArrowUp');
+    await d.key('ArrowUp');
+    await sleep(100);
+    const s2 = await d.js(GSEARCH_STATE);
+    const last = s2.items.length - 1;
+    await d.key('Enter');
+    await sleep(900);
+    const s3 = await d.js(GSEARCH_STATE);
+    const want = s2.items[last].href;
+    return {
+      ok: s1.items[1].active && s1.descendant === 'gsearch-opt-1' && s2.items[last].active
+        && s3.hash === want && !s3.open && s3.value === '' && !!s3.h1,
+      evidence: `down -> active ${s1.items.findIndex((x) => x.active)} (${j(s1.descendant)}); up, up -> ${s2.items.findIndex((x) => x.active)} of ${s2.items.length}; `
+        + `Enter -> hash=${j(s3.hash)} (want ${j(want)}), open=${s3.open}, box=${j(s3.value)}, h1=${j(s3.h1)}`,
+    };
+  });
+
+  const lean = f.withFacts ? M.leanNamesOf(m.byId.get(f.withFacts))[0] : null;
+  await check(d, 'search/global-finds-a-lean-name', async () => {
+    if (!lean) return { skip: true, evidence: 'no object with a Lean name' };
+    await typeInto(d, '#gsearch-input', lean);
+    await sleep(700);
+    const s = await d.js(GSEARCH_STATE);
+    const mine = s.items.find((x) => x.href === objHref(f.withFacts));
+    return {
+      ok: s.open && !!mine && !!mine.lean && mine.lean.includes(lean),
+      evidence: `typed ${j(lean)}: ${s.items.length} results, ${j(f.withFacts)} listed=${!!mine} with Lean line ${j(mine && mine.lean)}`,
+    };
+  });
+
+  await check(d, 'search/global-escape-then-click', async () => {
+    await d.key('Escape');
+    await sleep(150);
+    const s1 = await d.js(GSEARCH_STATE);
+    // ArrowDown reopens the list; a real click on a result follows it.
+    await d.key('ArrowDown');
+    await sleep(300);
+    const s2 = await d.js(GSEARCH_STATE);
+    const pick = s2.items[Math.min(1, s2.items.length - 1)];
+    if (!pick) return { ok: false, evidence: 'no results to click' };
+    const box = await d.js(elBox(`#gsearch-results .gsearch-item[href="${pick.href}"]`));
+    await d.click(box.x, box.y);
+    await sleep(900);
+    const s3 = await d.js(GSEARCH_STATE);
+    return {
+      ok: !s1.open && s1.value === lean && s2.open && s3.hash === pick.href && !s3.open && s3.value === '',
+      evidence: `Escape: open=${s1.open}, value kept=${j(s1.value)}; ArrowDown: open=${s2.open}; clicked ${j(pick.href)} -> hash=${j(s3.hash)}, open=${s3.open}`,
+    };
+  });
+
+  await check(d, 'search/global-closes-on-navigation', async () => {
+    await typeInto(d, '#gsearch-input', target ? target.id : 'e');
+    await sleep(700);
+    const s1 = await d.js(GSEARCH_STATE);
+    await d.back();
+    await sleep(900);
+    const s2 = await d.js(GSEARCH_STATE);
+    return { ok: s1.open && !s2.open, evidence: `open=${s1.open}, then back to ${j(s2.hash)}: open=${s2.open}` };
+  });
+
+  await d.js(`var e = document.getElementById('gsearch-input'); e.value = ''; e.blur(); return true;`);
+  await consoleCheck(d, 'search');
+}
+
+// ---------------------------------------------------------------------------
 // 5. checks page
 // ---------------------------------------------------------------------------
 
@@ -1638,6 +1896,7 @@ async function runBrowser(name, f) {
     if (SECTIONS.has('object')) await objectChecks(d, f);
     if (SECTIONS.has('document')) await documentChecks(d, f);
     if (SECTIONS.has('progress')) await progressChecks(d, f);
+    if (SECTIONS.has('search')) await searchChecks(d, f);
     if (SECTIONS.has('checks')) await checksChecks(d, f);
     if (SECTIONS.has('nav')) await navChecks(d, f);
     if (SECTIONS.has('sample')) await sampleChecks(d);

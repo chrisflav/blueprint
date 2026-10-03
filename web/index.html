@@ -45,6 +45,16 @@
       <a href="#/checks"   data-view="checks">Checks</a>
     </nav>
   </div>
+  <div class="gsearch" id="gsearch" role="search">
+    <input type="search" id="gsearch-input" placeholder="Search the blueprint"
+           aria-label="Search the blueprint (press / to focus)" autocomplete="off" spellcheck="false"
+           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="gsearch-results">
+    <kbd class="gsearch-key" aria-hidden="true">/</kbd>
+    <div class="gsearch-panel" id="gsearch-panel" hidden>
+      <div class="gsearch-results" id="gsearch-results" role="listbox" aria-label="Search results"></div>
+      <div class="gsearch-foot" id="gsearch-foot"></div>
+    </div>
+  </div>
   <div class="topbar-aside" id="topbar-aside"></div>
 </header>
 

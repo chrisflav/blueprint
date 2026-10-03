@@ -77,18 +77,42 @@ The graph route carries its full view state as query parameters:
 `collapse=<kind>`, `expand=<comma separated ids>`, `ekinds=<edge kinds>`,
 `status=<derived statuses>`, `q=<search>`, `sel=<selected id>`.
 
+The progress route carries the "All countable objects" listing's search and
+filters, so a filtered listing is a link too: `q=<search>`, `kind=<kind>`,
+`status=<derived status, or none, or unproved>`, `under=<id>` (objects that id
+is an ancestor of, at any depth, in the collapse order), next to
+`collapse=<kind>`. Typing and picking rewrite these silently and rebuild only
+the table, not the page.
+
+## Search
+
+There is one matcher, `model.search`: a case-insensitive substring match over
+id, title, the Lean declaration names in `attrs.lean`, and body, ranked in that
+spirit (exact id or title, exact Lean name, id, title, part of a Lean name,
+body; within a tier statements before edges and shorter ids first), over a
+lowercase index built once per snapshot. Three places use it:
+
+* the **search box in the top bar** (`/` focuses it from anywhere that is not
+  taking text) lists the best twelve objects of the whole blueprint, leaving
+  out bare sugar edges (a `uses/a/b` with no title and no prose of its own
+  matches whatever `a` matches); arrows move, Enter or a click opens the
+  object page, Escape closes the list;
+* the graph's highlight (`q=`), which dims every node that does not match;
+* the progress listing's search box, combined with its kind, status and
+  "under" filters (`model.filterListing`).
+
 ## Files
 
 | file | contents |
 |------|----------|
-| `index.html` | the shell: CDN tags, top bar, banner, `#app` mount point |
+| `index.html` | the shell: CDN tags, top bar (with the search box), banner, `#app` mount point |
 | `style.css` | everything visual, light and dark via `prefers-color-scheme` |
-| `model.js` | **pure** logic: indexing, collapse orders, views, the quotient, consistency states, progress, search. No DOM, no fetch |
-| `app.js` | data loading, hash router, and the DOM helpers handed to the pages in the `app` context object |
+| `model.js` | **pure** logic: indexing, collapse orders, views, the quotient, consistency states, progress, search, the progress listing's filters. No DOM, no fetch |
+| `app.js` | data loading, hash router, the top bar's search box, and the DOM helpers handed to the pages in the `app` context object |
 | `graph.js` | ELK compound layout plus hand-written SVG rendering, pan/zoom, filters, side panel |
 | `object.js` | the object page |
 | `document.js` | the linear document |
-| `progress.js` | the dashboard, the hand-drawn SVG line chart and the time slider |
+| `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |
 | `checks.js` | the lint report |
 | `sample/blueprint.json` | a hand-written snapshot exercising every feature |
 | `sample/data/` | four fake historical snapshots and their index |
@@ -98,7 +122,7 @@ The graph route carries its full view state as query parameters:
 | `sample/real/blueprint.json` | a snapshot produced by the Lean tool itself, kept as a second fixture, regenerated with `lake exe blueprint build --root examples/induction --facts examples/induction/lean-facts.json -o web/sample/real/blueprint.json` and checked by `./test.sh` |
 | `test/browser/` | the pre-deploy sweep: the whole site driven in real headless Firefox and Chromium (`test/browser/README.md`) |
 | `test/model.test.mjs` | unit tests for `model.js` |
-| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, lazy document rendering, the ELK worker and its fallbacks |
+| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, lazy document rendering, the ELK worker and its fallbacks, the progress filters and the top bar's search |
 
 Both samples can be opened directly:
 
@@ -272,4 +296,9 @@ The shape the pages are built for:
   rather than the whole project;
 * `quotient`, `rep` and the incidence lookups are linear, with the ancestor
   chains precomputed once per collapse kind and views and quotients memoised;
-* search works off a lowercase index built once per snapshot.
+* search works off a lowercase index built once per snapshot, so a query is
+  one pass over it (a few milliseconds on a real blueprint, edges included),
+  and every search box waits for a pause in the typing before it asks;
+* the progress listing sorts the countable objects once per snapshot, and a
+  filter change rebuilds only its table, at most 300 rows of it until "Show
+  all" is pressed.

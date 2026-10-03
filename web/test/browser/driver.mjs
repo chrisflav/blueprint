@@ -382,12 +382,15 @@ export async function chromium({ width = 1400, height = 900, port = 9222, launch
 }
 
 const KEYS = {
-  firefox: { Enter: '', Space: ' ', Escape: '', Tab: '' },
+  firefox: { Enter: '', Space: ' ', Escape: '', Tab: '', ArrowUp: '\uE013', ArrowDown: '\uE015' },
   chromium: {
     Enter: { key: 'Enter', code: 'Enter', text: '\r', vk: 13 },
     Space: { key: ' ', code: 'Space', text: ' ', vk: 32 },
     Escape: { key: 'Escape', code: 'Escape', text: '', vk: 27 },
     Tab: { key: 'Tab', code: 'Tab', text: '\t', vk: 9 },
+    ArrowUp: { key: 'ArrowUp', code: 'ArrowUp', text: '', vk: 38 },
+    ArrowDown: { key: 'ArrowDown', code: 'ArrowDown', text: '', vk: 40 },
+    '/': { key: '/', code: 'Slash', text: '/', vk: 191 },
   },
 };
 

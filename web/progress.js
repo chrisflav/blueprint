@@ -131,14 +131,105 @@ function miniStack(app, counts) {
 // unreadable one; the rest is one click away.
 const FIRST_ROWS = 300;
 
-function objectTable(app, kind) {
-  const { el } = app;
-  const m = app.model;
-  const objects = m.objects
-    .filter((o) => m.kinds[o.kind] && m.kinds[o.kind].countable)
-    .sort((a, b) => (M.titleOf(a) < M.titleOf(b) ? -1 : 1));
+// The listing's filters live in the route's query — `q`, `kind`, `status`,
+// `under` — so a filtered listing is a link.  Typing and picking rewrite the
+// URL silently and rebuild only the table: re-rendering the page would redraw
+// the chart and the section table on every keystroke, and take the focus out
+// of the search box.
+const SEARCH_DEBOUNCE_MS = 150;
 
+function listingState(app) {
+  const p = app.route.params;
+  return {
+    q: p.get('q') || '',
+    kind: p.get('kind') || null,
+    status: p.get('status') || null,
+    under: p.get('under') || null,
+  };
+}
+
+function objectTable(app, kind) {
+  const { el, clear } = app;
+  const m = app.model;
+  const all = M.countableObjects(m);
   const order = M.collapseOrder(m, kind);
+  const state = listingState(app);
+
+  // --- the filter controls ------------------------------------------------
+  // Option lists count over the whole listing, not the filtered one, so that
+  // picking one filter never makes the others' options vanish.
+  const kindCounts = new Map();
+  const statusCounts = new Map();
+  for (const o of all) {
+    kindCounts.set(o.kind, (kindCounts.get(o.kind) || 0) + 1);
+    const s = M.statusOf(m, o.id) || M.LISTING_NONE;
+    statusCounts.set(s, (statusCounts.get(s) || 0) + 1);
+  }
+  const option = (value, label, selected) => el('option', { value, selected }, label);
+
+  // A link naming a kind, status or object this snapshot does not have (an
+  // old link, an older snapshot on the slider) filters by nothing, rather than
+  // by something no control can show.
+  const statuses = new Set([...M.STATUSES, M.LISTING_NONE, M.LISTING_UNPROVED]);
+  if (state.kind && !kindCounts.has(state.kind)) state.kind = null;
+  if (state.status && !statuses.has(state.status)) state.status = null;
+  if (state.under && !m.byId.has(state.under)) state.under = null;
+
+  const kindSelect = el('select', { 'aria-label': 'kind', onchange: (e) => update({ kind: e.target.value || null }) },
+    option('', 'any kind', !state.kind),
+    ...[...kindCounts.keys()].sort().map((k) => option(k, `${k} (${kindCounts.get(k)})`, k === state.kind)));
+
+  const unproved = all.length - (statusCounts.get('proved') || 0) - (statusCounts.get('proved_with_axioms') || 0);
+  const statusSelect = el('select', { 'aria-label': 'status', onchange: (e) => update({ status: e.target.value || null }) },
+    option('', 'any status', !state.status),
+    option(M.LISTING_UNPROVED, `not proved (${unproved})`, state.status === M.LISTING_UNPROVED),
+    ...M.STATUSES.filter((s) => statusCounts.has(s))
+      .map((s) => option(s, `${M.STATUS_LABEL[s]} (${statusCounts.get(s)})`, s === state.status)),
+    statusCounts.has(M.LISTING_NONE)
+      ? option(M.LISTING_NONE, `no Lean ref (${statusCounts.get(M.LISTING_NONE)})`, state.status === M.LISTING_NONE)
+      : null);
+
+  // "Under" offers the top of the hierarchy, as the section table above does;
+  // a link may name any object, and then that object is offered too, so the
+  // control always says what the listing is showing.
+  const tops = M.topLevel(m, kind).filter((o) => M.childrenOf(order, o.id).length > 0);
+  const underIds = tops.map((o) => o.id);
+  if (state.under && !underIds.includes(state.under)) underIds.push(state.under);
+  const underSelect = el('select', { 'aria-label': 'under', onchange: (e) => update({ under: e.target.value || null }) },
+    option('', 'anywhere', !state.under),
+    ...underIds.map((id) => option(id, M.titleOf(m.byId.get(id)), id === state.under)));
+
+  let searchTimer = null;
+  const search = el('input', {
+    type: 'search', class: 'listing-search', value: state.q,
+    placeholder: 'filter by id, title, Lean name, body…',
+    'aria-label': 'filter the objects',
+    oninput: (e) => {
+      clearTimeout(searchTimer);
+      const v = e.target.value;
+      searchTimer = setTimeout(() => update({ q: v }), SEARCH_DEBOUNCE_MS);
+    },
+  });
+
+  const reset = el('button', {
+    onclick: () => {
+      clearTimeout(searchTimer);
+      search.value = '';
+      kindSelect.value = '';
+      statusSelect.value = '';
+      underSelect.value = '';
+      update({ q: '', kind: null, status: null, under: null });
+    },
+  }, 'Clear');
+
+  const controls = el('div.listing-filters',
+    search,
+    el('label', el('span.lbl', 'Kind'), kindSelect),
+    el('label', el('span.lbl', 'Status'), statusSelect),
+    el('label', el('span.lbl', 'Under'), underSelect),
+    reset);
+
+  // --- the table ------------------------------------------------------------
   const row = (o) => {
     const s = M.statusOf(m, o.id);
     const p = M.progressOf(m, kind, o.id);
@@ -152,24 +243,50 @@ function objectTable(app, kind) {
       el('td', p ? app.progressBar(p) : el('span.muted', '—')));
   };
 
-  const shown = objects.slice(0, FIRST_ROWS);
-  const rest = objects.slice(FIRST_ROWS);
-  const tbody = el('tbody', ...shown.map(row));
+  const count = el('p.muted.small.listing-count', { 'aria-live': 'polite' });
+  const tbody = el('tbody');
   const table = el('div.table-wrap', el('table.grid',
     el('thead', el('tr',
       el('th', 'Object'), el('th', 'Kind'), el('th', 'Status'), el('th', 'Under'), el('th', 'Progress'))),
     tbody));
-  if (!rest.length) return table;
+  const more = el('p.muted.small');
 
-  const more = el('p.muted.small',
-    `Showing the first ${FIRST_ROWS} of ${objects.length} objects. `,
-    el('button', {
+  function fill() {
+    const objects = M.filterListing(m, all, { ...state, order });
+    const filtered = !!(state.q.trim() || state.kind || state.status || state.under);
+    count.textContent = filtered
+      ? `${objects.length} of ${all.length} objects`
+      : `${all.length} objects`;
+    clear(tbody);
+    clear(more);
+    more.hidden = true;
+    if (!objects.length) {
+      tbody.appendChild(el('tr', el('td.muted', { colspan: 5 }, 'No countable object matches these filters.')));
+      return;
+    }
+    for (const o of objects.slice(0, FIRST_ROWS)) tbody.appendChild(row(o));
+    const rest = objects.slice(FIRST_ROWS);
+    if (!rest.length) return;
+    const noun = filtered ? 'matching objects' : 'objects';
+    more.hidden = false;
+    more.appendChild(el('span', `Showing the first ${FIRST_ROWS} of ${objects.length} ${noun}. `));
+    more.appendChild(el('button', {
       onclick: () => {
         for (const o of rest) tbody.appendChild(row(o));
-        more.textContent = `All ${objects.length} objects.`;
+        more.textContent = `All ${objects.length} ${noun}.`;
       },
     }, `Show all ${objects.length}`));
-  return el('div', table, more);
+  }
+
+  function update(changes) {
+    Object.assign(state, changes);
+    app.setParams({ q: state.q.trim() || null, kind: state.kind, status: state.status, under: state.under },
+      { silent: true });
+    fill();
+  }
+
+  fill();
+  return el('div', controls, count, table, more);
 }
 
 // ---------------------------------------------------------------------------
