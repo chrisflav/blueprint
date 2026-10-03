@@ -834,6 +834,179 @@ export function visibleNodes(view) {
 }
 
 // ---------------------------------------------------------------------------
+// 4a. Transitive reduction of the drawn arcs
+// ---------------------------------------------------------------------------
+
+/**
+ * The arcs a reader can do without: those already implied by a longer path of
+ * the same kind.  If A uses B, B uses C and A uses C, the arc A -> C says
+ * nothing the other two do not, and on a real dependency graph such arcs are
+ * most of the ink.
+ *
+ * `arcs` is a list of `{id, kind, src, tgt, keep}`, directed src -> tgt in the
+ * model's sense, between whatever ids the caller draws as nodes.  The answer is
+ * the Set of ids that may be hidden.  Choices, and why:
+ *
+ *   * Per kind.  A path only implies an arc of its own kind: `uses` through a
+ *     `generalises` is not a use.  Nothing here knows any kind by name; arcs
+ *     are simply grouped by `kind`.
+ *   * On what the caller passes, which for the graph is the quotient as drawn
+ *     (after the kind and status filters), so an arc is never hidden in favour
+ *     of a path the reader cannot see.
+ *   * `keep: true` arcs count as paths but are never hidden.  The graph uses
+ *     this for the spokes of a junction: a junction carries more than its
+ *     reachability (other ends, objects attached to it), so it stays, but the
+ *     path src -> junction -> tgt does imply src -> tgt.
+ *   * Direction is the model's, src -> tgt.  A kind drawn reversed reverses
+ *     every one of its arcs, which leaves the set of implied arcs unchanged.
+ *   * Cycles.  On a cyclic graph the transitive reduction is not unique (in a
+ *     triangle with both orientations every arc is implied by the others, but
+ *     not all of them can go), so the reduction is taken on the condensation:
+ *     arcs inside a strongly connected component are never hidden, and an arc
+ *     between two components is hidden only when its target component is
+ *     reachable from its source component through some third component.  Two
+ *     arcs joining the same pair of components are both kept, since neither
+ *     can be preferred.  Hiding everything this says loses no reachability.
+ *
+ * Linear in the arcs plus one bitset of reachable components per component,
+ * which for the few thousand nodes of a fully expanded blueprint is a few
+ * megabytes at worst and normally nothing.
+ */
+export function transitiveReduction(arcs) {
+  const hidden = new Set();
+  const byKind = new Map();
+  for (const a of arcs || []) {
+    if (a.src == null || a.tgt == null || a.src === a.tgt) continue;
+    if (!byKind.has(a.kind)) byKind.set(a.kind, []);
+    byKind.get(a.kind).push(a);
+  }
+  for (const list of byKind.values()) reduceOneKind(list, hidden);
+  return hidden;
+}
+
+function reduceOneKind(arcs, hidden) {
+  const index = new Map();
+  const succ = [];
+  const at = (id) => {
+    let i = index.get(id);
+    if (i === undefined) {
+      i = succ.length;
+      index.set(id, i);
+      succ.push([]);
+    }
+    return i;
+  };
+  const ends = arcs.map((a) => [at(a.src), at(a.tgt)]);
+  for (const [u, v] of ends) succ[u].push(v);
+
+  // Tarjan numbers components in the order it finishes them, and a component
+  // finishes only after everything reachable from it: so every arc between two
+  // components runs from a higher number to a lower one.
+  const comp = stronglyConnected(succ);
+  let nComp = 0;
+  for (const c of comp) if (c + 1 > nComp) nComp = c + 1;
+
+  const csucc = Array.from({ length: nComp }, () => new Set());
+  for (const [u, v] of ends) if (comp[u] !== comp[v]) csucc[comp[u]].add(comp[v]);
+
+  // below[c]: the components reachable from c by a path of at least one arc,
+  // as a bitset.  Filled lowest number first, so every successor is done.
+  const words = (nComp + 31) >>> 5;
+  const below = new Array(nComp);
+  const setBit = (bits, i) => { bits[i >>> 5] |= 1 << (i & 31); };
+  const hasBit = (bits, i) => (bits[i >>> 5] & (1 << (i & 31))) !== 0;
+  for (let c = 0; c < nComp; c += 1) {
+    if (csucc[c].size === 0) { below[c] = null; continue; }
+    const bits = new Uint32Array(words);
+    for (const d of csucc[c]) {
+      setBit(bits, d);
+      const bd = below[d];
+      if (bd) for (let w = 0; w < words; w += 1) bits[w] |= bd[w];
+    }
+    below[c] = bits;
+  }
+
+  // An arc c -> d is implied when d is two or more steps below c, that is,
+  // below some successor of c.
+  const twoSteps = new Array(nComp);
+  const twoStepsOf = (c) => {
+    if (twoSteps[c] !== undefined) return twoSteps[c];
+    let bits = null;
+    for (const e of csucc[c]) {
+      const be = below[e];
+      if (!be) continue;
+      if (!bits) bits = new Uint32Array(words);
+      for (let w = 0; w < words; w += 1) bits[w] |= be[w];
+    }
+    twoSteps[c] = bits;
+    return bits;
+  };
+  arcs.forEach((a, i) => {
+    if (a.keep) return;
+    const cu = comp[ends[i][0]];
+    const cv = comp[ends[i][1]];
+    if (cu === cv) return; // inside a cycle: never hidden
+    const bits = twoStepsOf(cu);
+    if (bits && hasBit(bits, cv)) hidden.add(a.id);
+  });
+}
+
+/**
+ * Tarjan's strongly connected components, iteratively (a long chain of uses
+ * would overflow the stack recursively).  Returns comp[node] in finishing
+ * order, sinks first.
+ */
+function stronglyConnected(succ) {
+  const n = succ.length;
+  const index = new Int32Array(n).fill(-1);
+  const low = new Int32Array(n);
+  const comp = new Int32Array(n).fill(-1);
+  const onStack = new Uint8Array(n);
+  const stack = [];
+  let next = 0;
+  let nComp = 0;
+  for (let root = 0; root < n; root += 1) {
+    if (index[root] !== -1) continue;
+    const work = [[root, 0]]; // node, position in its successor list
+    index[root] = low[root] = next++;
+    stack.push(root);
+    onStack[root] = 1;
+    while (work.length) {
+      const top = work[work.length - 1];
+      const v = top[0];
+      if (top[1] < succ[v].length) {
+        const w = succ[v][top[1]];
+        top[1] += 1;
+        if (index[w] === -1) {
+          index[w] = low[w] = next++;
+          stack.push(w);
+          onStack[w] = 1;
+          work.push([w, 0]);
+        } else if (onStack[w]) {
+          low[v] = Math.min(low[v], index[w]);
+        }
+        continue;
+      }
+      work.pop();
+      if (work.length) {
+        const u = work[work.length - 1][0];
+        low[u] = Math.min(low[u], low[v]);
+      }
+      if (low[v] === index[v]) {
+        let w;
+        do {
+          w = stack.pop();
+          onStack[w] = 0;
+          comp[w] = nComp;
+        } while (w !== v);
+        nComp += 1;
+      }
+    }
+  }
+  return comp;
+}
+
+// ---------------------------------------------------------------------------
 // 5. Reading order (DESIGN 6: "a blueprint still reads as a paper")
 // ---------------------------------------------------------------------------
 

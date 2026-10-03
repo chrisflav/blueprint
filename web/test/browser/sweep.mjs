@@ -41,6 +41,9 @@ const WIDTH = Number(args.get('width') || 1400);
 const HEIGHT = Number(args.get('height') || 900);
 const LAUNCH = args.get('no-launch') !== 'true';
 const VERBOSE = args.get('verbose') === 'true';
+// Driver ports, for running beside another sweep on the same machine.
+const GECKO_PORT = Number(args.get('gecko-port')) || null;
+const CDP_PORT = Number(args.get('cdp-port')) || null;
 
 mkdirSync(SHOTS, { recursive: true });
 
@@ -698,6 +701,44 @@ async function graphChecks(d, f) {
       log.push(`${pos.label}: edges ${before.edges}->${off.edges}->${back.edges}${off.error ? ' ERROR ' + off.error : ''}`);
     }
     return { ok: allOk, evidence: log.join(' | ') };
+  });
+
+  // "hide implied": a real click on the checkbox, then the arcs that went must
+  // be exactly the ones the status line counts, the flag must reach the URL and
+  // survive a reload, and a second click must bring every arc back.
+  await check(d, 'graph/hide-implied-arcs', async () => {
+    const box = `
+      var l = document.querySelector('.toolbar .group.reduce label.chk');
+      if (!l) return null;
+      var r = l.querySelector('input').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, checked: l.querySelector('input').checked };
+    `;
+    const pos = await d.js(box);
+    if (!pos) return { ok: false, evidence: 'no "hide implied" checkbox' };
+    if (pos.checked) return { ok: false, evidence: 'it is on by default' };
+    const before = await d.js(GRAPH_COUNTS);
+    await d.click(pos.x, pos.y);
+    await sleep(350);
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, interval: 200, label: 'relayout with implied arcs hidden' });
+    const on = await d.js(GRAPH_COUNTS);
+    const m = /(\d+) implied arcs? hidden/.exec(on.status);
+    const n = m ? Number(m[1]) : -1;
+    await d.open(ORIGIN + '/' + on.hash);
+    await d.installHooks();
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, interval: 300, label: 'layout after reload' });
+    const reloaded = await d.js(GRAPH_COUNTS);
+    const pos2 = await d.js(box);
+    await d.click(pos2.x, pos2.y);
+    await sleep(350);
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, interval: 200, label: 'relayout with every arc' });
+    const off = await d.js(GRAPH_COUNTS);
+    return {
+      ok: n >= 0 && before.edges - on.edges === n && /[?&]reduce=1/.test(on.hash) &&
+        pos2.checked && reloaded.edges === on.edges && off.edges === before.edges &&
+        !/reduce=/.test(off.hash) && before.nodes === on.nodes && !on.error && !off.error,
+      evidence: `edges ${before.edges} -> ${on.edges} (status: ${n} hidden) -> reload ${reloaded.edges}, ` +
+        `checked=${pos2.checked} -> off ${off.edges}; nodes ${before.nodes}/${on.nodes}; hash=${j(on.hash)}`,
+    };
   });
 
   await check(d, 'graph/status-filters', async () => {
@@ -1870,8 +1911,8 @@ async function sampleChecks(d) {
 
 async function runBrowser(name, f) {
   const d = name === 'firefox'
-    ? await firefox({ width: WIDTH, height: HEIGHT, launch: LAUNCH })
-    : await chromium({ width: WIDTH, height: HEIGHT, launch: LAUNCH });
+    ? await firefox({ width: WIDTH, height: HEIGHT, launch: LAUNCH, ...(GECKO_PORT ? { port: GECKO_PORT } : {}) })
+    : await chromium({ width: WIDTH, height: HEIGHT, launch: LAUNCH, ...(CDP_PORT ? { port: CDP_PORT } : {}) });
   try {
     await d.open(`${ORIGIN}/#/checks`);
     await waitFor(d, `return !!document.querySelector('#app').firstElementChild`, { timeout: 60000, label: 'first paint' });

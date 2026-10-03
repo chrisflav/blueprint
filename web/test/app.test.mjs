@@ -564,6 +564,51 @@ await check('a reversed kind is laid out and drawn tgt -> src, the rest src -> t
   for (const e of others) eq(end(e.sources[0]), e.bp.entity.src, `${e.id} starts at src`);
 });
 
+await check('"hide implied" drops exactly the implied arcs from the ELK graph, and no spoke', async () => {
+  const M = modelMod;
+  const model = app.model;
+  const ids = (g) => g.edges.map((e) => e.id);
+  for (const expand of [[], ['sec-main'], [...M.collapseOrder(model, 'refines').expandable]]) {
+    const view = M.makeView(model, 'refines', expand);
+    const base = { collapse: 'refines', expand, ekinds: null, status: null, q: '', sel: null };
+    const full = graphMod.buildElk({ model }, { ...base, reduce: false }, view, M.quotient(view));
+    const red = graphMod.buildElk({ model }, { ...base, reduce: true }, view, M.quotient(view));
+    eq(full.implied, 0, 'nothing is hidden with the option off');
+    const gone = ids(full.graph).filter((id) => !ids(red.graph).includes(id));
+    eq(gone.length, red.implied, `${expand.length} expanded: the count matches what went`);
+    eq(ids(red.graph).filter((id) => !ids(full.graph).includes(id)).length, 0, 'nothing new appears');
+    for (const id of gone) {
+      const meta = full.edgeMeta.get(id);
+      eq(meta.kind, 'edge', `${id} is an arc, not a spoke`);
+    }
+    // The nodes are untouched: the option is about arcs only.
+    eq(red.nodes.size, full.nodes.size, 'the same nodes');
+  }
+  // Collapsed, three arcs go.  The junction for the prose edge
+  // uses/thm-tychonoff/lem-ultrafilter has a uses-arc to sec-main and one to
+  // sec-foundations, which sec-main uses.  And sec-main -> sec-foundations and
+  // sec-applications -> sec-foundations are each also drawn through a junction
+  // (a uses edge that something else attaches to): src end -> junction -> tgt
+  // end is a path, so the plain arc beside it is implied, and the junction,
+  // with its spokes, stays.
+  const view = M.makeView(model, 'refines', []);
+  const st = { collapse: 'refines', expand: [], ekinds: null, status: null, q: '', sel: null, reduce: true };
+  const { graph, implied } = graphMod.buildElk({ model }, st, view, M.quotient(view));
+  eq(implied, 3, 'implied arcs when collapsed');
+  const drawnArc = (s, t) => graph.edges.some((e) => e.bp.kind === 'edge' &&
+    e.bp.entity.src === s && e.bp.entity.tgt === t && e.bp.entity.kind === 'uses');
+  for (const s of ['uses/thm-tychonoff/lem-ultrafilter', 'sec-main', 'sec-applications']) {
+    ok(!drawnArc(s, 'sec-foundations'), `${s} -> sec-foundations is not drawn`);
+  }
+  // The cycle between sec-main and sec-applications is left alone.
+  ok(drawnArc('sec-main', 'sec-applications') && drawnArc('sec-applications', 'sec-main'), 'the cycle');
+  ok(graph.edges.some((e) => e.id === 'j:uses/thm-tychonoff/def-compact|sec-foundations'), 'a spoke stays');
+  // With uses filtered out there is nothing of that kind left to reduce.
+  const off = graphMod.buildElk({ model }, { ...st, ekinds: ['instance_of', 'generalises', 'commutes'] },
+    view, M.quotient(view));
+  eq(off.implied, 0, 'a filtered kind implies nothing');
+});
+
 const elkState = installFakeELK();
 
 await check('the graph lays out in a Blob worker that imports elkjs’s worker half', async () => {

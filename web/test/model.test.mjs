@@ -831,6 +831,123 @@ check('search is indexed once and memoised per query', () => {
   eq(M.searchIds(model, '').size, 0, 'the empty query still finds nothing');
 });
 
+// --- transitive reduction ----------------------------------------------------
+
+const arc = (src, tgt, kind = 'uses', keep = false) =>
+  ({ id: `${kind}:${src}>${tgt}`, kind, src, tgt, keep });
+
+check('transitive reduction: the issue’s triangle loses its long side', () => {
+  const hidden = M.transitiveReduction([arc('A', 'B'), arc('B', 'C'), arc('A', 'C')]);
+  sameSet(hidden, ['uses:A>C'], 'hidden');
+});
+
+check('transitive reduction: a longer chain implies every shortcut', () => {
+  const arcs = [arc('a', 'b'), arc('b', 'c'), arc('c', 'd'), arc('a', 'c'), arc('a', 'd'), arc('b', 'd')];
+  sameSet(M.transitiveReduction(arcs), ['uses:a>c', 'uses:a>d', 'uses:b>d'], 'hidden');
+  // a diamond is already reduced
+  const diamond = [arc('a', 'b'), arc('a', 'c'), arc('b', 'd'), arc('c', 'd')];
+  eq(M.transitiveReduction(diamond).size, 0, 'nothing in a diamond is implied');
+});
+
+check('transitive reduction is per kind', () => {
+  const hidden = M.transitiveReduction([
+    arc('A', 'B', 'uses'), arc('B', 'C', 'generalises'), arc('A', 'C', 'uses'),
+    arc('A', 'B', 'other'), arc('B', 'C', 'other'), arc('A', 'C', 'other'),
+  ]);
+  sameSet(hidden, ['other:A>C'], 'only a path of the same kind implies an arc');
+});
+
+check('transitive reduction: kept arcs are paths but stay', () => {
+  // A junction J of kind uses with src end A and tgt end C, plus A -> C direct
+  // through another route: the spokes imply nothing is lost, and stay.
+  const hidden = M.transitiveReduction([
+    arc('A', 'J', 'uses', true), arc('J', 'C', 'uses', true), arc('A', 'C'),
+    arc('X', 'Y', 'uses', true), arc('Y', 'Z', 'uses', true), arc('X', 'Z', 'uses', true),
+  ]);
+  sameSet(hidden, ['uses:A>C'], 'the arc goes, the spokes and the kept shortcut stay');
+});
+
+check('transitive reduction on a cyclic graph works on the condensation', () => {
+  // Both orientations of a triangle: every arc is implied by the others, but
+  // they cannot all go.  Inside a cycle nothing is hidden.
+  const tri = [arc('a', 'b'), arc('b', 'c'), arc('c', 'a'), arc('b', 'a'), arc('c', 'b'), arc('a', 'c')];
+  eq(M.transitiveReduction(tri).size, 0, 'nothing inside a strongly connected component');
+  // A 2-cycle s <-> m, both pointing at f: the two arcs into f join the same
+  // pair of components, so neither is preferred and both stay ...
+  eq(M.transitiveReduction([arc('s', 'm'), arc('m', 's'), arc('s', 'f'), arc('m', 'f')]).size, 0,
+    'two arcs between the same components');
+  // ... but a third component in between does imply the shortcut.
+  sameSet(M.transitiveReduction([
+    arc('s', 'm'), arc('m', 's'), arc('m', 'x'), arc('x', 'f'), arc('s', 'f'),
+  ]), ['uses:s>f'], 'a shortcut past a further component');
+  // Self loops and dangling arcs are ignored rather than fatal.
+  eq(M.transitiveReduction([arc('a', 'a'), { id: 'z', kind: 'uses', src: null, tgt: 'b' }]).size, 0,
+    'degenerate arcs');
+});
+
+check('transitive reduction matches its definition on random graphs', () => {
+  // Brute force against the doc comment: u -> v is hidden exactly when u and v
+  // are in different components and some node w, in neither of their
+  // components, lies on a path from u to v.  And hiding all of them loses no
+  // reachability.
+  let seed = 7;
+  const rand = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  const reach = (arcs, from) => {
+    const out = new Set([from]);
+    const stack = [from];
+    while (stack.length) {
+      const u = stack.pop();
+      for (const a of arcs) if (a.src === u && !out.has(a.tgt)) { out.add(a.tgt); stack.push(a.tgt); }
+    }
+    return out;
+  };
+  for (let round = 0; round < 40; round += 1) {
+    const n = 4 + rand(9);
+    const arcs = [];
+    const seen = new Set();
+    for (let k = 0; k < n * 2; k += 1) {
+      const s = rand(n);
+      const t = rand(n);
+      // mostly forward, so most graphs are acyclic and some are not
+      if (s === t || seen.has(s + '>' + t) || (s > t && rand(6) !== 0)) continue;
+      seen.add(s + '>' + t);
+      arcs.push(arc(String(s), String(t)));
+    }
+    const hidden = M.transitiveReduction(arcs);
+    const nodes = [...Array(n).keys()].map(String);
+    const R = new Map(nodes.map((x) => [x, reach(arcs, x)]));
+    const sameComp = (x, y) => R.get(x).has(y) && R.get(y).has(x);
+    for (const a of arcs) {
+      const expected = !sameComp(a.src, a.tgt) && nodes.some((w) =>
+        !sameComp(w, a.src) && !sameComp(w, a.tgt) && R.get(a.src).has(w) && R.get(w).has(a.tgt));
+      eq(hidden.has(a.id), expected, `round ${round}: ${a.id} hidden`);
+    }
+    const left = arcs.filter((a) => !hidden.has(a.id));
+    for (const a of arcs) {
+      eq(reach(left, a.src).has(a.tgt), true, `round ${round}: ${a.tgt} still reachable from ${a.src}`);
+    }
+  }
+});
+
+check('the sample: hiding implied arcs on the drawn quotient', () => {
+  // Fully collapsed, sec-main and sec-applications use each other and both
+  // use sec-foundations: one component pointing at another twice, so the
+  // cycle guard keeps both arcs.  The prose edge TYCH_ULTRA is drawn as a
+  // junction, and the lemmas refining it give it uses-arcs of its own, to
+  // sec-main and to sec-foundations: the second goes through the first's
+  // component, so it is implied.
+  const arcsOf = (q) => q.edges.filter((e) => e.type === 'edge' && e.directed)
+    .map((e) => ({ id: e.id, kind: e.kind, src: e.src, tgt: e.tgt }));
+  const hidden = M.transitiveReduction(arcsOf(qCollapsed));
+  sameSet(hidden, [edgeFor(qCollapsed, TYCH_ULTRA, 'sec-foundations', 'uses').id], 'hidden');
+  for (const [s, t] of [['sec-main', 'sec-foundations'], ['sec-applications', 'sec-foundations'],
+    ['sec-main', 'sec-applications'], ['sec-applications', 'sec-main']]) {
+    hasNot(hidden, edgeFor(qCollapsed, s, t, 'uses').id, `${s} -> ${t}`);
+  }
+  // The instance_of arc between the same nodes is another kind: untouched.
+  hasNot(hidden, edgeFor(qCollapsed, TYCH_ULTRA, 'sec-main', 'instance_of').id, 'instance_of');
+});
+
 // ---------------------------------------------------------------------------
 
 if (failures.length) {
