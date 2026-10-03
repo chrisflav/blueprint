@@ -258,6 +258,16 @@ async function loadFixtures(origin) {
     && e.object.body && e.object.body.trim())
     || outline.entries.find((e) => !e.duplicate && e.depth >= 1 && !e.children.length);
 
+  // A page with many entries carrying prose, and one halfway down it: when it
+  // is focused, the prose above renders after the scroll and must not push it
+  // out of view.
+  const proseKids = (e) => e.children.filter((c) => !c.duplicate && c.object.body && c.object.body.trim());
+  const busiest = outline.entries.filter((e) => !e.duplicate)
+    .reduce((best, e) => (proseKids(e).length > (best ? proseKids(best).length : 5) ? e : best), null);
+  const midFocus = busiest
+    ? { page: busiest.id, id: proseKids(busiest)[Math.floor(proseKids(busiest).length / 2)].id }
+    : null;
+
   const view = M.makeView(m, kind, []);
   const quot = M.quotient(view);
   const visibleNodeIds = [...view.visible].filter((id) => {
@@ -281,6 +291,7 @@ async function loadFixtures(origin) {
     chapter: chapter && chapter.id,
     deepLeaf: deepLeaf && deepLeaf.id,
     deepLeafPage: deepLeaf ? M.documentPageOf(outline, deepLeaf.id) : null,
+    midFocus,
     bench: bench && bench.id,
     benchKids: bench ? M.childrenOf(order, bench.id) : [],
     defaultNodeCount: visibleNodeIds.length,
@@ -1348,6 +1359,24 @@ async function pageChecks(d, f) {
     return { ok: r.found && r.inView, evidence: `-> ${j(r.hash)}: entry top=${r.top}px, scrollY=${r.scrollY}, in view=${r.inView}` };
   });
 
+  await check(d, 'document/focus-holds-while-prose-above-renders', async () => {
+    if (!f.midFocus) return { skip: true, evidence: 'no page with more than five entries carrying prose' };
+    const { page, id } = f.midFocus;
+    await route(d, '#/progress');
+    await waitFor(d, `return document.querySelectorAll('table.grid').length > 0`, { timeout: 30000, label: 'progress' });
+    await route(d, '#/document/' + encodeURIComponent(page) + '?' + new URLSearchParams({ collapse: f.kind, focus: id }).toString());
+    await waitFor(d, `return !!document.getElementById(${j(anchorOf(id))})`, { timeout: 30000, label: 'focused entry' });
+    // Long enough for every body near the viewport to have rendered.
+    await sleep(2500);
+    const r = await d.js(ENTRY_IN_VIEW(id));
+    const rendered = await d.js(`return Array.prototype.filter.call(document.querySelectorAll('.doc-entry .prose'),
+      function (p) { return p.childNodes.length > 0; }).length`);
+    return {
+      ok: r.found && r.top > -10 && r.top < 200,
+      evidence: `${page} focused on ${id} (halfway down): entry top=${r.top}px after ${rendered} bodies rendered, scrollY=${r.scrollY}`,
+    };
+  });
+
   await route(d, '#/document');
   await sleep(500);
 }
@@ -2143,7 +2172,7 @@ async function main() {
   console.log(`# fixtures ${j({
     withFacts: f.withFacts, withoutFacts: f.withoutFacts, section: f.section, sugar: f.sugar,
     twoParents: f.twoParents, katex: f.katex, slug: f.slug, bench: f.bench,
-    chapter: f.chapter, deepLeaf: f.deepLeaf, deepLeafPage: f.deepLeafPage,
+    chapter: f.chapter, deepLeaf: f.deepLeaf, deepLeafPage: f.deepLeafPage, midFocus: f.midFocus,
     defaultNodeCount: f.defaultNodeCount,
   })}\n`);
 
