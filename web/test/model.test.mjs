@@ -643,6 +643,96 @@ check('reading order follows the order attribute, then id', () => {
   eq(seen.size, model.objects.length, 'every object is reachable in the reading order');
 });
 
+// --- the document outline: numbers and pages ---------------------------------
+
+check('the document outline numbers entries the way a paper does', () => {
+  const out = M.documentOutline(model, 'refines');
+  const num = (id) => out.byId.get(id).number;
+  eq(num('sec-foundations'), '1', 'first chapter');
+  eq(num('def-compact'), '1.1', 'first entry of the first chapter');
+  eq(num('lem-ultrafilter'), '1.5', 'numbers count up through a chapter');
+  eq(num('sec-main-induction'), '2.1', 'a section in a chapter');
+  eq(num('lem-finite-subcover'), '2.1.1', 'three levels');
+  eq(num('thm-tychonoff'), '2.2', 'numbering continues after a nested section');
+  // The prose edge with children is a top-level entry; its steps are not.
+  eq(num('uses/thm-tychonoff/lem-ultrafilter'), '6', 'an edge heading its own part');
+  eq(num('lem-base-case'), '6.1', 'under the edge');
+  eq(out.byId.has('refines/def-compact/sec-foundations'), false, 'collapse edges are structure');
+  eq(out.stepOf.get('uses/sec-main/sec-foundations'), 'sec-main', 'a leaf edge with prose is a step');
+  eq(out.byId.has('uses/sec-main/sec-foundations'), false, 'a step has no number of its own');
+  // Parents and children are the entries', so pages can be read off them.
+  eq(out.byId.get('lem-finite-subcover').parent.id, 'sec-main-induction', 'parent entry');
+  sameSet(out.roots.map((e) => e.id).filter((id) => id.startsWith('sec-')),
+    ['sec-foundations', 'sec-main', 'sec-applications'], 'top level');
+});
+
+check('an object with two parents has one number, and its repetition none', () => {
+  const out = M.documentOutline(model, 'refines');
+  const occ = out.entries.filter((e) => e.id === 'lem-diagonal');
+  eq(occ.length, 2, 'written out once, repeated once');
+  eq(occ[0].duplicate, false, 'first occurrence written out');
+  eq(occ[1].duplicate, true, 'second occurrence a pointer');
+  eq(occ[0].number, '2.1.2', 'the number of the first occurrence');
+  eq(occ[1].number, '2.1.2', 'the repetition carries the same number');
+  eq(out.byId.get('lem-diagonal'), occ[0], 'byId is the written-out entry');
+  // The repetition sits under sec-applications and takes no number there.
+  eq(occ[1].parent.id, 'sec-applications', 'repeated under its second parent');
+  eq(out.byId.get('thm-heine-borel').number, '3.1', 'before the repetition');
+  eq(out.byId.get('thm-stone-cech').number, '3.2', 'after it: no number was used up');
+});
+
+check('the outline follows the collapse order it is asked for', () => {
+  const a = M.documentOutline(model, 'refines');
+  const b = M.documentOutline(model, 'instance_of');
+  eq(M.documentOutline(model, 'refines'), a, 'memoised');
+  eq(a !== b, true, "one outline per collapse kind");
+  eq(b.byId.get('thm-heine-borel').parent.id, 'thm-tychonoff', 'instance_of nests differently');
+  eq(b.byId.get('thm-heine-borel').number, '6.1', 'and numbers differently');
+});
+
+check('pages of the split document', () => {
+  const out = M.documentOutline(model, 'refines');
+  // An entry with children is read on its own page, a leaf on its parent's,
+  // a top-level leaf on the top page, a step wherever its source is.
+  eq(M.documentPageOf(out, 'sec-main'), 'sec-main', 'own page');
+  eq(M.documentPageOf(out, 'lem-finite-subcover'), 'sec-main-induction', "parent's page");
+  eq(M.documentPageOf(out, 'commutes/uses~thm-heine-borel~thm-tychonoff/uses~thm-tychonoff~def-compact/uses~thm-heine-borel~def-compact'),
+    null, 'a top-level leaf');
+  eq(M.documentPageOf(out, 'uses/sec-main/sec-foundations'), 'sec-main', 'a step');
+  eq(M.documentPageOf(out, 'refines/def-compact/sec-foundations'), undefined, 'not in the document');
+
+  // What a page writes out, by levels.
+  const ids = (page, levels) => M.documentPageEntries(out, page, levels).map((e) => e.id);
+  sameSet(ids(null, 1), out.roots.map((e) => e.id), 'the top page at one level: the chapters');
+  eq(ids(null, 2).includes('sec-main-induction'), true, 'two levels: their sections too');
+  eq(ids(null, 2).includes('lem-finite-subcover'), false, 'but not three');
+  eq(ids(null, Infinity).length, out.entries.length, 'all levels: the whole document');
+  eq(ids('sec-main', 1).join(' '), 'sec-main sec-main-induction thm-tychonoff', 'a chapter page');
+  eq(ids('sec-main', 2).join(' '),
+    'sec-main sec-main-induction lem-finite-subcover lem-diagonal thm-tychonoff', 'two levels below it');
+  eq(ids('no-such-id', 1).length, 0, 'an unknown page writes nothing');
+
+  // And the converse, which is what decides whether a focus needs a redirect.
+  eq(M.documentPageShows(out, null, 1, 'sec-main'), true, 'a chapter on the top page');
+  eq(M.documentPageShows(out, null, 1, 'thm-tychonoff'), false, 'not its contents');
+  eq(M.documentPageShows(out, null, 2, 'thm-tychonoff'), true, 'unless two levels are inlined');
+  eq(M.documentPageShows(out, 'sec-main', 1, 'sec-main'), true, 'a page shows itself');
+  eq(M.documentPageShows(out, 'sec-main', 1, 'lem-diagonal'), false, 'two levels down');
+  eq(M.documentPageShows(out, 'sec-main', 2, 'lem-diagonal'), true, 'with two levels');
+  eq(M.documentPageShows(out, 'sec-foundations', 3, 'lem-diagonal'), false, 'another branch');
+  eq(M.documentPageShows(out, 'sec-main', 1, 'uses/sec-main/sec-foundations'), true, 'a step with its source');
+  // Every entry's page shows it, at the default depth.
+  for (const e of out.entries) {
+    if (e.duplicate) continue;
+    eq(M.documentPageShows(out, M.documentPageOf(out, e.id), 1, e.id), true, `${e.id} on its own page`);
+  }
+});
+
+check('kindWord', () => {
+  eq(M.kindWord('definition'), 'Definition', 'capitalised');
+  eq(M.kindWord('main_theorem'), 'Main theorem', 'underscores are spaces');
+});
+
 check('topLevel', () => {
   const tl = M.topLevel(model, 'refines').map((o) => o.id);
   eq(tl[0], 'sec-foundations', 'first section');

@@ -247,6 +247,17 @@ async function loadFixtures(origin) {
     return kids.length >= 3 && kids.some((c) => M.statusOf(m, c) !== null);
   }) || tops[0];
 
+  // The split document: a top-level entry with children and a next sibling, to
+  // click into and page along, and a leaf two levels down, read on its parent's
+  // page, for the redirect of an old `?focus=` link.
+  const outline = M.documentOutline(m, kind);
+  const chapterIdx = outline.roots.findIndex((e, i) => !e.duplicate && e.children.length > 0
+    && outline.roots.slice(i + 1).some((x) => !x.duplicate));
+  const chapter = chapterIdx >= 0 ? outline.roots[chapterIdx] : null;
+  const deepLeaf = outline.entries.find((e) => !e.duplicate && e.depth >= 2 && !e.children.length
+    && e.object.body && e.object.body.trim())
+    || outline.entries.find((e) => !e.duplicate && e.depth >= 1 && !e.children.length);
+
   const view = M.makeView(m, kind, []);
   const quot = M.quotient(view);
   const visibleNodeIds = [...view.visible].filter((id) => {
@@ -266,6 +277,10 @@ async function loadFixtures(origin) {
     twoParents: twoParents && twoParents.id,
     katex: katex && katex.id,
     slug,
+    outline,
+    chapter: chapter && chapter.id,
+    deepLeaf: deepLeaf && deepLeaf.id,
+    deepLeafPage: deepLeaf ? M.documentPageOf(outline, deepLeaf.id) : null,
     bench: bench && bench.id,
     benchKids: bench ? M.childrenOf(order, bench.id) : [],
     defaultNodeCount: visibleNodeIds.length,
@@ -1182,6 +1197,161 @@ const DOC_STATE = `
   };
 `;
 
+// Where the document view is: which page, what it writes out, its chrome.
+const PAGE_STATE = `
+  var head = document.querySelector('.doc-entry.page-head .head h1');
+  var top = document.querySelector('.doc-flow .doc-entry');
+  return {
+    hash: decodeURIComponent(location.hash),
+    entries: document.querySelectorAll('.doc-entry').length,
+    ids: Array.prototype.map.call(document.querySelectorAll('.doc-entry'), function (s) { return s.id; }).slice(0, 6),
+    pageHead: head ? (head.textContent || '').trim().slice(0, 60) : null,
+    crumbs: document.querySelectorAll('.doc-crumbs a').length,
+    pagers: document.querySelectorAll('.doc-pager').length,
+    opens: document.querySelectorAll('.doc-open a').length,
+    toc: document.querySelectorAll('nav.toc a').length,
+    scrollY: Math.round(window.scrollY),
+    errorBox: !!document.querySelector('.error-box')
+  };
+`;
+
+const anchorOf = (id) => 'doc-' + String(id).replace(/[^A-Za-z0-9_-]/g, '_');
+
+/** Is the entry for `id` built and in the top part of the viewport? */
+const ENTRY_IN_VIEW = (id) => `
+  var t = document.getElementById(${j(anchorOf(id))});
+  if (!t) return { found: false };
+  var b = t.getBoundingClientRect();
+  return { found: true, top: Math.round(b.top), inView: b.top > -60 && b.top < window.innerHeight * 0.6,
+           scrollY: Math.round(window.scrollY), hash: decodeURIComponent(location.hash) };
+`;
+
+async function clickAndWait(d, box, cond, label) {
+  await d.click(box.x, box.y);
+  await sleep(500);
+  return waitFor(d, cond, { timeout: 30000, label });
+}
+
+/** The split document (taxis #526): pages, their navigation, and old links. */
+async function pageChecks(d, f) {
+  const out = f.outline;
+  const docPath = (id) => '#/document/' + id + '?';
+
+  await check(d, 'document/top-page-lists-the-top-level', async () => {
+    const s = await d.js(PAGE_STATE);
+    const withKids = out.roots.filter((e) => !e.duplicate && e.children.length).length;
+    return {
+      ok: s.entries === out.roots.length && s.opens === withKids && !s.pageHead && s.crumbs === 0 && s.pagers === 0,
+      evidence: `#/document: ${s.entries} .doc-entry (outline roots ${out.roots.length}), ${s.opens} "Read …" links (roots with children ${withKids}), page head ${j(s.pageHead)}, ${s.crumbs} breadcrumbs, ${s.pagers} pagers`,
+    };
+  });
+
+  await check(d, 'document/click-into-a-chapter', async () => {
+    if (!f.chapter) return { skip: true, evidence: 'no top-level entry with children and a next sibling' };
+    const entry = out.byId.get(f.chapter);
+    await d.js('window.scrollTo(0, 0); return 0;');
+    const box = await d.js(`
+      var a = Array.prototype.slice.call(document.querySelectorAll('.doc-open a')).filter(function (x) {
+        return x.getAttribute('href').indexOf(${j('#/document/' + encodeURIComponent(f.chapter) + '?')}) === 0; })[0];
+      if (!a) return null;
+      var r = inView(a);
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: (a.textContent || '').trim() };
+      ${IN_VIEW}
+    `);
+    if (!box) return { ok: false, evidence: `no "Read" link for ${f.chapter} on the top page` };
+    await clickAndWait(d, box, `return !!document.querySelector('.doc-entry.page-head')`, 'chapter page');
+    await sleep(400);
+    const s = await d.js(PAGE_STATE);
+    const want = M.documentPageEntries(out, f.chapter, 1).length;
+    return {
+      ok: s.hash.startsWith(docPath(f.chapter)) && s.entries === want && s.crumbs >= 1 && s.pagers >= 1
+        && s.scrollY === 0 && s.ids[0] === anchorOf(f.chapter),
+      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, page head ${j(s.pageHead)} (${entry.number}), ${s.entries} entries (want ${want}), `
+        + `${s.crumbs} breadcrumb links, ${s.pagers} pagers, scrollY=${s.scrollY}`,
+    };
+  });
+
+  await check(d, 'document/pager-next-sibling', async () => {
+    if (!f.chapter) return { skip: true, evidence: 'no chapter fixture' };
+    const siblings = out.roots.filter((e) => !e.duplicate);
+    const next = siblings[siblings.indexOf(out.byId.get(f.chapter)) + 1];
+    const box = await d.js(elBox('.doc-pager a.next'));
+    if (!box) return { ok: false, evidence: 'no .doc-pager a.next' };
+    await clickAndWait(d, box, `return decodeURIComponent(location.hash).indexOf(${j(docPath(next.id))}) === 0
+      && !!document.querySelector('.doc-entry.page-head')`, 'next page');
+    const s = await d.js(PAGE_STATE);
+    return {
+      ok: s.ids[0] === anchorOf(next.id),
+      evidence: `next of ${f.chapter} is ${next.id} (${next.number}): hash=${j(s.hash)}, first entry #${s.ids[0]}, head ${j(s.pageHead)}`,
+    };
+  });
+
+  await check(d, 'document/breadcrumb-leads-to-the-top', async () => {
+    if (!f.chapter) return { skip: true, evidence: 'no chapter fixture' };
+    const box = await d.js(elBox('.doc-crumbs a'));
+    if (!box) return { ok: false, evidence: 'no breadcrumb link' };
+    await clickAndWait(d, box, `return location.hash.indexOf('#/document?') === 0 && !document.querySelector('.doc-entry.page-head')
+      && document.querySelectorAll('.doc-entry').length > 0`, 'top page');
+    const s = await d.js(PAGE_STATE);
+    return { ok: s.entries === out.roots.length, evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries` };
+  });
+
+  await check(d, 'document/depth-control-inlines-a-level', async () => {
+    const want = M.documentPageEntries(out, null, 2).length;
+    await d.js(`
+      var s = document.querySelectorAll('.doc-controls select');
+      s = s[s.length - 1];
+      s.value = '2';
+      s.dispatchEvent(new Event('change', { bubbles: true }));
+      return s.value;
+    `);
+    const n = await waitFor(d, `var n = document.querySelectorAll('.doc-entry').length; return n >= ${want} ? n : 0;`,
+      { timeout: 30000, label: `${want} entries at depth 2` }).catch(() => null);
+    const s = await d.js(PAGE_STATE);
+    const opensOk = s.opens > 0 || !out.roots.some((e) => e.children.some((c) => c.children.length));
+    return {
+      ok: n === want && /depth=2/.test(s.hash) && opensOk,
+      evidence: `depth 2 on the top page: ${s.entries} entries (want ${want}), hash=${j(s.hash)}, ${s.opens} "Read …" links to third-level pages`,
+    };
+  });
+
+  await check(d, 'document/old-focus-link-redirects-and-back-still-works', async () => {
+    if (!f.deepLeaf) return { skip: true, evidence: 'no leaf below the top level' };
+    await route(d, '#/progress');
+    await waitFor(d, `return document.querySelectorAll('table.grid').length > 0`, { timeout: 30000, label: 'progress' });
+    await route(d, '#/document?focus=' + encodeURIComponent(f.deepLeaf));
+    const want = f.deepLeafPage === null ? '#/document?' : docPath(f.deepLeafPage);
+    await waitFor(d, `return decodeURIComponent(location.hash).indexOf(${j(want)}) === 0
+      && !!document.getElementById(${j(anchorOf(f.deepLeaf))})`, { timeout: 40000, label: 'redirected page' });
+    await sleep(900);
+    const r = await d.js(ENTRY_IN_VIEW(f.deepLeaf));
+    await d.back();
+    await sleep(900);
+    const after = await d.js(`return { hash: location.hash, progress: document.querySelectorAll('table.grid').length > 0 }`);
+    return {
+      ok: r.found && r.inView && after.hash === '#/progress' && after.progress,
+      evidence: `#/document?focus=${f.deepLeaf} -> ${j(r.hash)} (want ${j(want + '…')}), entry top=${r.top}px in view=${r.inView}; `
+        + `Back -> ${j(after.hash)} (the redirect replaced its history entry)`,
+    };
+  });
+
+  await check(d, 'document/object-page-link-opens-the-right-page', async () => {
+    if (!f.deepLeaf) return { skip: true, evidence: 'no leaf below the top level' };
+    await openObject(d, f.deepLeaf);
+    const box = await d.js(elBoxByText('a', 'In the document'));
+    if (!box) return { ok: false, evidence: `no "In the document" link on ${f.deepLeaf}` };
+    const want = f.deepLeafPage === null ? '#/document?' : docPath(f.deepLeafPage);
+    await clickAndWait(d, box, `return decodeURIComponent(location.hash).indexOf(${j(want)}) === 0
+      && !!document.getElementById(${j(anchorOf(f.deepLeaf))})`, 'document page from the object page');
+    await sleep(900);
+    const r = await d.js(ENTRY_IN_VIEW(f.deepLeaf));
+    return { ok: r.found && r.inView, evidence: `-> ${j(r.hash)}: entry top=${r.top}px, scrollY=${r.scrollY}, in view=${r.inView}` };
+  });
+
+  await route(d, '#/document');
+  await sleep(500);
+}
+
 async function documentChecks(d, f) {
   await route(d, '#/document');
   await waitFor(d, `return document.querySelectorAll('.doc-entry').length > 0`, { timeout: 30000, label: 'document entries' });
@@ -1193,6 +1363,22 @@ async function documentChecks(d, f) {
       ok: s.entries > 0 && s.toc > 0,
       evidence: `${s.entries} .doc-entry, ${s.toc} toc links, ${s.prose} .prose (${s.proseRendered} rendered), ${s.steps} steps, heads=${j(s.heads)}`,
     };
+  });
+
+  await pageChecks(d, f);
+
+  // The rest is about one large page: the whole document, which is what the
+  // lazy machinery is for.
+  await route(d, '#/document?depth=all');
+  await waitFor(d, `return document.querySelectorAll('.doc-entry').length > 0`, { timeout: 30000, label: 'whole document' });
+  await sleep(700);
+
+  await check(d, 'document/depth-all-builds-the-whole-document', async () => {
+    const want = f.outline.entries.length;
+    const n = await waitFor(d, `var n = document.querySelectorAll('.doc-entry').length; return n >= ${want} ? n : 0;`,
+      { timeout: 60000, interval: 300, label: `${want} entries` }).catch(() => null);
+    const got = await d.js(`return document.querySelectorAll('.doc-entry').length`);
+    return { ok: n === want, evidence: `depth=all: ${got} .doc-entry built, the outline has ${want}` };
   });
 
   await check(d, 'document/lazy-render-while-scrolling', async () => {
@@ -1798,7 +1984,8 @@ async function navChecks(d, f) {
   });
 
   await check(d, 'nav/scroll-resets-when-the-page-changes', async () => {
-    await route(d, '#/document');
+    // The whole document, so there are 4000px to scroll down.
+    await route(d, '#/document?depth=all');
     await waitFor(d, `return document.querySelectorAll('.doc-entry').length > 0`, { timeout: 30000, label: 'document' });
     await sleep(600);
     await d.js(`window.scrollTo(0, 4000); return window.scrollY;`);
@@ -1915,7 +2102,10 @@ async function runBrowser(name, f) {
     : await chromium({ width: WIDTH, height: HEIGHT, launch: LAUNCH, ...(CDP_PORT ? { port: CDP_PORT } : {}) });
   try {
     await d.open(`${ORIGIN}/#/checks`);
-    await waitFor(d, `return !!document.querySelector('#app').firstElementChild`, { timeout: 60000, label: 'first paint' });
+    // Past index.html's own "Loading blueprint…" placeholder: a large
+    // snapshot takes long enough to arrive that the boot check otherwise ran
+    // before the data, and the deferred CDN scripts, were there.
+    await waitFor(d, `var a = document.querySelector('#app'); return !!a.firstElementChild && !a.querySelector('.loading');`, { timeout: 60000, label: 'first paint' });
     const hooked = await d.installHooks();
     if (SECTIONS.has('boot')) await check(d, 'boot/loads-the-snapshot', async () => {
       const s = await d.js(`
@@ -1953,6 +2143,7 @@ async function main() {
   console.log(`# fixtures ${j({
     withFacts: f.withFacts, withoutFacts: f.withoutFacts, section: f.section, sugar: f.sugar,
     twoParents: f.twoParents, katex: f.katex, slug: f.slug, bench: f.bench,
+    chapter: f.chapter, deepLeaf: f.deepLeaf, deepLeafPage: f.deepLeafPage,
     defaultNodeCount: f.defaultNodeCount,
   })}\n`);
 

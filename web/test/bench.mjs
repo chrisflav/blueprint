@@ -198,7 +198,8 @@ if (!app.model) throw new Error('the app did not load the snapshot');
 const documentPage = await import(path.join(webDir, 'document.js'));
 const root = global.document.getElementById('app');
 
-app.route = { view: 'document', id: null, params: new URLSearchParams(), raw: '/document' };
+// The whole document on one page, the worst case the split leaves.
+app.route = { view: 'document', id: null, params: new URLSearchParams({ depth: 'all' }), raw: '/document?depth=all' };
 global.window.renderMathInElement.reset();
 
 time('document view: first render', () => documentPage.render(root, app), {
@@ -209,7 +210,7 @@ time('document view: first render', () => documentPage.render(root, app), {
 
 // The chunked append runs a frame at a time; wait for it to settle.  Counting
 // the flow's own children is O(1), unlike a querySelectorAll over the page.
-const flow = root.querySelectorAll('.doc-layout')[0].children[1];
+const flow = root.querySelectorAll('.doc-flow')[0];
 await timeAsync('document view: the rest of the headings', async () => {
   let last = -1;
   for (let i = 0; i < 500 && last !== flow.childNodes.length; i += 1) {
@@ -217,7 +218,7 @@ await timeAsync('document view: the rest of the headings', async () => {
     await new Promise((r) => setTimeout(r, 0));
   }
 }, {
-  detail: () => `${flow.childNodes.length - 2} sections, ` +
+  detail: () => `${flow.childNodes.length} sections, ` +
     `${global.window.renderMathInElement.calls.length} bodies rendered`,
 });
 

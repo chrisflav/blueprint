@@ -69,7 +69,8 @@ All state lives in the URL hash, so every view is a shareable link.
 |-------|------|
 | `#/graph` | the quotient graph |
 | `#/object/<id>` | one object (the id is percent-encoded) |
-| `#/document` | linear reading order |
+| `#/document` | the top of the linear document |
+| `#/document/<id>` | the page of one entry of the document |
 | `#/progress` | dashboard and time slider |
 | `#/checks` | `derived.checks` |
 
@@ -124,17 +125,48 @@ lowercase index built once per snapshot. Three places use it:
 * the progress listing's search box, combined with its kind, status and
   "under" filters (`model.filterListing`).
 
+### The document's pages
+
+The document is the reading order of DESIGN.md §6, numbered as a paper is
+("Definition 1.2.14"), and split into pages along the collapse order.
+`#/document` writes out the top level — usually the chapters, each with its
+own prose — and `#/document/<id>` writes out one entry and the levels below
+it. An entry whose children are not on the page links on to its own page, by
+its number and by a *Read 1.2 →* line. Each page has breadcrumbs up its chain,
+its previous and next siblings, and a contents list of what it shows. Query
+parameters:
+
+* `collapse=<kind>`: the collapse order to read along (default: the
+  snapshot's `defaultCollapse`). The outline, the numbers and the pages are
+  all of that order;
+* `depth=<n>|all`: how many levels below the page are written out on it
+  (default 1). `depth=2` on the top page is the chapters with their sections;
+  `depth=all` is the whole document on one page;
+* `focus=<id>`: scroll to that entry. If the page does not show it, the route
+  is replaced by the page that does: an entry with children is read on its own
+  page, any other on its parent's, a step wherever its source is
+  (`documentPageOf` in `model.js`). That is what keeps every link written
+  before the split, `#/document?focus=<id>`, working.
+
+What is in the document, the numbers and the pages are pure functions of the
+snapshot (`documentOutline`, `documentPageOf`, `documentPageShows`,
+`documentPageEntries` in `model.js`), tested in `test/model.test.mjs`. An
+object with several parents in the order is written out under its first parent
+and repeated under the others as a pointer back to it; the repetition carries
+the first occurrence's number and takes none of its own, so every object has
+exactly one number.
+
 ## Files
 
 | file | contents |
 |------|----------|
 | `index.html` | the shell: CDN tags, top bar (with the search box), banner, `#app` mount point |
 | `style.css` | everything visual, light and dark via `prefers-color-scheme` |
-| `model.js` | **pure** logic: indexing, collapse orders, views, the quotient, consistency states, progress, search, the progress listing's filters. No DOM, no fetch |
+| `model.js` | **pure** logic: indexing, collapse orders, views, the quotient, consistency states, the document outline and its pages, progress, search, the progress listing's filters. No DOM, no fetch |
 | `app.js` | data loading, hash router, the top bar's search box, and the DOM helpers handed to the pages in the `app` context object |
 | `graph.js` | ELK compound layout plus hand-written SVG rendering, pan/zoom, filters, side panel |
 | `object.js` | the object page |
-| `document.js` | the linear document |
+| `document.js` | the linear document, one page per entry of the collapse order |
 | `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |
 | `checks.js` | the lint report |
 | `sample/blueprint.json` | a hand-written snapshot exercising every feature |
@@ -145,7 +177,7 @@ lowercase index built once per snapshot. Three places use it:
 | `sample/real/blueprint.json` | a snapshot produced by the Lean tool itself, kept as a second fixture, regenerated with `lake exe blueprint build --root examples/induction --facts examples/induction/lean-facts.json -o web/sample/real/blueprint.json` and checked by `./test.sh` |
 | `test/browser/` | the pre-deploy sweep: the whole site driven in real headless Firefox and Chromium (`test/browser/README.md`) |
 | `test/model.test.mjs` | unit tests for `model.js` |
-| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, lazy document rendering, the ELK worker and its fallbacks, the progress filters and the top bar's search |
+| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, the document pages and their lazy rendering, the ELK worker and its fallbacks, the progress filters and the top bar's search |
 
 Both samples can be opened directly:
 
@@ -314,9 +346,11 @@ The shape the pages are built for:
   hierarchy, tens of nodes. Everything below it arrives as the reader expands
   into it, and only "Expand all" (which says how many objects that is) puts
   thousands of nodes on screen;
-* the document view appends its headings a chunk per frame and renders a
-  section's prose when it scrolls into view, so opening it costs a screenful
-  rather than the whole project;
+* the document is split into pages, so a page is one level of the hierarchy
+  rather than the whole project; and a page that is still large (a section
+  with hundreds of statements, or `depth=all`) appends its headings a chunk
+  per frame and renders a section's prose when it scrolls into view, so
+  opening it costs a screenful;
 * `quotient`, `rep` and the incidence lookups are linear, with the ancestor
   chains precomputed once per collapse kind and views and quotients memoised;
 * search works off a lowercase index built once per snapshot, so a query is
