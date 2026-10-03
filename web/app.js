@@ -201,6 +201,36 @@ function escapeRegExp(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// The words prose names a reference with, besides the schema's own kind words:
+// a blueprint imported from LaTeX says "Thm [x]" and "Proposition [x]" whatever
+// the kind of `x` turned out to be, and "Thm Theorem 2.3" or "Theorem Section
+// 2.3" is worse than letting the author's word stand, which is what
+// `Theorem~\ref{…}` gave in the paper.
+const REFERENCE_WORDS = [
+  'theorem', 'thm', 'lemma', 'lem', 'proposition', 'prop', 'corollary', 'cor',
+  'definition', 'def', 'defn', 'remark', 'rem', 'example', 'exercise',
+  'construction', 'conjecture', 'claim', 'notation', 'observation',
+  'assumption', 'hypothesis', 'axiom', 'section', 'sec', 'chapter', 'chap',
+  'appendix', 'equation', 'eq',
+];
+
+// One pattern per snapshot: "<word>[s][.] " at the end of the text before the
+// reference, the word whole (`\p{L}`, so "dilemma [x]" does not count).
+let namingFor = null;
+let namingRe = null;
+
+function namesReference(before) {
+  const m = app.model;
+  if (namingFor !== m) {
+    const words = new Set(REFERENCE_WORDS);
+    for (const k of Object.keys((m && m.kinds) || {})) words.add(model.kindWord(k).toLowerCase());
+    const alt = [...words].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|');
+    namingRe = new RegExp('(?:^|[^\\p{L}])(?:' + alt + ')s?\\.?\\s+$', 'iu');
+    namingFor = m;
+  }
+  return namingRe.test(before);
+}
+
 /**
  * Markdown and TeX disagree about `_`, `*`, `\` and blank lines: marked turns
  * `\varpi_E^n` into emphasis and a display formula into two paragraphs
@@ -293,8 +323,9 @@ export function renderMath(root) {
  * A reference reads the way a paper's does, "Definition 1.2.1": `refs(slug)`
  * returns `{word, number, href}` for an object the document numbers, and
  * `null` for one it does not, which keeps its slug as the link text.  When the
- * prose already says the word ("by Lemma [lem-x]") only the number is added,
- * so it does not read "Lemma Lemma 2.3".  The slug is the link's tooltip
+ * prose already says the word ("by Lemma [lem-x]"), or any word a reference is
+ * named with ("Thm [x]", "Props. [x]", any kind of the schema), only the number
+ * is added, so it does not read "Lemma Lemma 2.3" or "Thm Theorem 2.3".  The slug is the link's tooltip
  * either way, and an unknown slug is a broken link exactly as before.  Without
  * `refs` every link text is the slug.  Explicit link text, `[text](…)`, is
  * markdown's and never reaches this pass.
@@ -329,10 +360,10 @@ export function linkifySlugs(root, known, refs) {
       const ref = ok && refs ? refs(slug) : null;
       let label = slug;
       if (ref) {
-        // "Lemma [x]" already has its word; `\p{L}` so that "dilemma [x]"
-        // does not count as one.
+        // "Lemma [x]" and "Thm [x]" already have their word.
         const said = new RegExp('(?:^|[^\\p{L}])' + escapeRegExp(ref.word) + '\\s+$', 'iu');
-        label = said.test(text.slice(0, m.index)) ? ref.number : ref.word + ' ' + ref.number;
+        const before = text.slice(0, m.index);
+        label = said.test(before) || namesReference(before) ? ref.number : ref.word + ' ' + ref.number;
       }
       frag.appendChild(
         el(

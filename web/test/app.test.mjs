@@ -575,6 +575,15 @@ await check('the word already in the prose is not repeated', async () => {
   eq(texts.join(' | '), '1.5 | 1.5 | Lemma 1.5', 'only the number after the word, whole words only');
 });
 
+await check('a word the prose names a reference with stands, whatever the kind', async () => {
+  const div = dom.document.createElement('div');
+  app.renderBody(div, 'Thm [lem-ultrafilter], Props. [lem-ultrafilter], definition [lem-ultrafilter], ' +
+    'the theorem [lem-ultrafilter], using [lem-ultrafilter], athm [lem-ultrafilter].', app.knownIds());
+  const texts = [...div.querySelectorAll('a.objlink')].map((a) => a.textContent);
+  eq(texts.join(' | '), '1.5 | 1.5 | 1.5 | 1.5 | Lemma 1.5 | Lemma 1.5',
+    'abbreviations, plurals, other kind words; ordinary words still get the kind word');
+});
+
 await check('the graph numbers along its own collapse order', async () => {
   const div = dom.document.createElement('div');
   await go('#/graph?collapse=instance_of&sel=def-compact');
