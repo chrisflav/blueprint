@@ -187,6 +187,74 @@ async function route(d, hash) {
   await sleep(150);
 }
 
+/**
+ * The graph on screen draws every title with maths in it with KaTeX, inside a
+ * <foreignObject>: each such node has KaTeX output and no KaTeX error, and
+ * each of its lines lies inside the node's box, clear of its kind mark and
+ * expander and of every other node's box.  Measured in the graph's own
+ * coordinates, so the zoom does not loosen the tolerance.  A formula the
+ * project's macros cannot render stays as source; that is counted, not
+ * failed (see README, "What a failure means").
+ */
+async function mathTitles(d, dataUrl) {
+  const r = await d.js(`
+    return fetch(${j(dataUrl)}, { cache: 'no-cache' }).then(function (res) { return res.json(); }).then(function (snap) {
+      var title = {};
+      snap.objects.forEach(function (o) { title[o.id] = (o.attrs && o.attrs.title) || o.id; });
+      var hasMath = function (t) { return /\\$[^$]+\\$|\\\\\\(|\\\\\\[/.test(t); };
+      var ctm = document.querySelector('.glayer').getScreenCTM();
+      var g2 = function (r) {
+        return { left: (r.left - ctm.e) / ctm.a, top: (r.top - ctm.f) / ctm.d,
+                 right: (r.right - ctm.e) / ctm.a, bottom: (r.bottom - ctm.f) / ctm.d };
+      };
+      var inside = function (a, b) {
+        return a.left >= b.left - 0.5 && a.top >= b.top - 0.5 && a.right <= b.right + 0.5 && a.bottom <= b.bottom + 0.5;
+      };
+      var apart = function (a, b) {
+        return a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+      };
+      var all = Array.prototype.slice.call(document.querySelectorAll('.gnode:not(.junction)'));
+      var leaves = all.filter(function (g) { return !g.classList.contains('compound'); })
+        .map(function (g) { return { g: g, box: g2(g.querySelector('.shape').getBoundingClientRect()) }; });
+      var want = all.filter(function (g) { return hasMath(String(title[g.dataset.id])); });
+      var bad = [], leftover = [], rendered = 0, lines = 0;
+      want.forEach(function (g) {
+        var id = g.dataset.id;
+        var fo = g.querySelector(':scope > foreignObject.label');
+        if (!fo) { bad.push(id + ': drawn as plain text'); return; }
+        if (fo.querySelector('.katex-error')) bad.push(id + ': KaTeX error shown');
+        if (fo.querySelector('.katex')) rendered++;
+        var rest = fo.cloneNode(true);
+        Array.prototype.forEach.call(rest.querySelectorAll('.katex'), function (k) { k.remove(); });
+        if (hasMath(rest.textContent)) leftover.push(id);
+        var box = g2(g.querySelector('.shape').getBoundingClientRect());
+        Array.prototype.forEach.call(fo.querySelectorAll('.gm-line'), function (line) {
+          lines++;
+          var range = document.createRange();
+          range.selectNodeContents(line);
+          var ink = g2(range.getBoundingClientRect());
+          if (!inside(ink, box)) bad.push(id + ': a line spills out of the box');
+          ['.kindmark', '.expander'].forEach(function (sel) {
+            var o = g.querySelector(':scope > ' + sel);
+            if (o && !apart(ink, g2(o.getBoundingClientRect()))) bad.push(id + ': a line overlaps ' + sel);
+          });
+          leaves.forEach(function (other) {
+            if (other.g !== g && !apart(ink, other.box)) bad.push(id + ': a line is under ' + other.g.dataset.id);
+          });
+        });
+      });
+      return { nodes: all.length, want: want.length, rendered: rendered, lines: lines, bad: bad, leftover: leftover };
+    });
+  `);
+  if (!r.want) return { skip: true, evidence: `none of the ${r.nodes} nodes on screen has maths in its title` };
+  return {
+    ok: r.bad.length === 0 && r.rendered > 0,
+    evidence: `${r.want} of ${r.nodes} nodes have maths in their titles: ${r.rendered} rendered by KaTeX on ${r.lines} lines` +
+      (r.leftover.length ? `, ${r.leftover.length} still showing source the project's macros do not cover (${j(r.leftover.slice(0, 3))})` : '') +
+      `; problems: ${r.bad.length ? j(r.bad.slice(0, 5)) + ` (${r.bad.length})` : 'none'}`,
+  };
+}
+
 async function gotoGraph(d, query = '') {
   await route(d, '#/graph' + (query ? '?' + query : ''));
   return waitFor(d, GRAPH_IDLE, { timeout: 90000, label: 'graph layout' });
@@ -572,9 +640,11 @@ async function graphChecks(d, f) {
           return a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
         };
         var nodes = document.querySelectorAll('.gnode:not(.junction)');
-        var bad = [], lines = 0;
+        var bad = [], lines = 0, math = 0;
         for (var i = 0; i < nodes.length; i++) {
           var g = nodes[i], id = g.dataset.id;
+          // A title with maths is KaTeX's HTML: graph/math-titles-… checks it.
+          if (g.querySelector(':scope > foreignObject.label')) { math++; continue; }
           var label = g.querySelector('.label');
           var spans = label ? label.querySelectorAll('tspan') : [];
           var shown = Array.prototype.map.call(spans, function (s) { return s.textContent; }).join(' ');
@@ -588,14 +658,16 @@ async function graphChecks(d, f) {
             if (o && !apart(lb, o.getBBox())) bad.push(id + ': title overlaps ' + sel);
           });
         }
-        return { n: nodes.length, lines: lines, bad: bad };
+        return { n: nodes.length, lines: lines, math: math, bad: bad };
       });
     `);
     return {
-      ok: r.n > 0 && r.bad.length === 0,
-      evidence: `${r.n} nodes, up to ${r.lines} title lines; problems: ${r.bad.length ? j(r.bad.slice(0, 5)) + ` (${r.bad.length})` : 'none'}`,
+      ok: r.n > r.math && r.bad.length === 0,
+      evidence: `${r.n - r.math} plain-text titles (${r.math} with maths left to the next check), up to ${r.lines} title lines; problems: ${r.bad.length ? j(r.bad.slice(0, 5)) + ` (${r.bad.length})` : 'none'}`,
     };
   });
+
+  await check(d, 'graph/math-titles-render-and-fit-their-nodes', () => mathTitles(d, './blueprint.json'));
 
   // Each edge keeps its own route: two edges running along the same line
   // cannot be told apart, which is what `elk.layered.mergeEdges` used to do.
@@ -2373,6 +2445,14 @@ async function sampleChecks(d) {
       ok: s.objId === twoParents.id && s.chains >= 2 && s.h4.some((x) => /several branches/.test(x)),
       evidence: `${j(twoParents.id)}: ${s.chains} .chain rows, h4=${j(s.h4)}`,
     };
+  });
+
+  // The sample's titles carry maths in a leaf, in a long wrapped title, with
+  // \( \) delimiters, and in a section header, so expand everything.
+  await check(d, 'sample/math-titles-render-and-fit-their-nodes', async () => {
+    await gotoGraph(d, 'expand=' + [...order.expandable].map(encodeURIComponent).join(','));
+    await settle();
+    return mathTitles(d, './sample/blueprint.json');
   });
 
   await d.shot(`${SHOTS}/${d.name}-sample-graph.png`);

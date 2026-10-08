@@ -898,6 +898,25 @@ ul.objlist .role {
   stroke-dasharray: 4 3;
 }
 .gnode.compound .label { fill: var(--muted); font-size: 12.5px; }
+
+/* A title with maths: KaTeX's HTML in a <foreignObject> (see graph.js,
+   `measureMathTitles`).  The same font as the SVG labels, the colour from
+   `color` since HTML has no `fill`, and every line on one line: the lines were
+   broken when the node was measured, and must not be broken again. */
+/* Not selectable either: a drag that pans across it would paint it as a text
+   selection, which SVG text in the graph never shows. */
+.gnode foreignObject.label { overflow: visible; pointer-events: none; -webkit-user-select: none; user-select: none; }
+.gmath { font-size: 12px; font-weight: 550; line-height: 15px; color: var(--fg); text-align: center; }
+.gmath.section { font-size: 12.5px; color: var(--muted); text-align: left; }
+.gmath .gm-line, .gmath .gm-tok { white-space: nowrap; }
+.gmath .katex { font-size: 1.1em; }
+.gmath .katex-html { white-space: nowrap; }
+.gmath-measure {
+  position: absolute; left: -100000px; top: 0;
+  visibility: hidden; pointer-events: none; contain: layout style;
+}
+.gmath-measure .gm-tok { display: inline-block; }
+.gmath-measure .gm-line { width: max-content; }
 .gnode.junction .shape { fill: var(--graph-junction); stroke: var(--bg); stroke-width: 2; }
 .gnode.junction.selected .shape { fill: var(--accent); stroke: var(--accent); }
 

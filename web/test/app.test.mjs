@@ -755,6 +755,30 @@ await check('the watchdog deadline grows with the graph', () => {
   eq(graphMod.layoutDeadline(1000), 6000, 'a thousand nodes and edges');
 });
 
+await check('a title with maths breaks at spaces outside its formulas only', () => {
+  const show = (t) => graphMod.mathTokens(t)
+    .map((tok) => tok.map((p) => (p.tex !== undefined ? `<${p.tex}>` : p.text)).join(''));
+  eq(JSON.stringify(show('$2$-colimit')), JSON.stringify(['<2>-colimit']), 'glued to its word');
+  eq(JSON.stringify(show('The functor $\\operatorname{Pic}_{X/S} \\to G$ here')),
+    JSON.stringify(['The', 'functor', '<\\operatorname{Pic}_{X/S} \\to G>', 'here']), 'a formula with spaces is one token');
+  eq(JSON.stringify(show('Base case: \\(|I| = 1\\)')), JSON.stringify(['Base', 'case:', '<|I| = 1>']), '\\( \\)');
+  eq(JSON.stringify(show('$$a b$$ and \\[c\\]')), JSON.stringify(['<a b>', 'and', '<c>']), 'display delimiters');
+  eq(JSON.stringify(show('costs $5')), JSON.stringify(['costs', '$5']), 'an unclosed $ is text');
+});
+
+await check('without KaTeX a title with maths is laid out as its source text', () => {
+  const M = modelMod;
+  const model = app.model;
+  const expand = [...M.collapseOrder(model, 'refines').expandable];
+  const view = M.makeView(model, 'refines', expand);
+  const st = { collapse: 'refines', expand, ekinds: null, status: null, q: '', sel: null };
+  const { nodes } = graphMod.buildElk({ model }, st, view, M.quotient(view));
+  const n = nodes.get('thm-heine-borel');
+  ok(n && !n.bp.wrap.math, 'drawn as plain text');
+  eq(n.bp.wrap.lines.join(' '), M.titleOf(model.byId.get('thm-heine-borel')), 'the whole source');
+  eq(n.height, 36 + (n.bp.wrap.lines.length - 1) * 15, 'sized by its lines');
+});
+
 await check('a reversed kind is laid out and drawn tgt -> src, the rest src -> tgt', async () => {
   const M = modelMod;
   const model = app.model;

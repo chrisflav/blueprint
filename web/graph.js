@@ -338,19 +338,261 @@ function wrapTitle(text, max, section) {
     }
   }
   lines.push(cur); // a single word wider than `max` keeps a line of its own
-  out = { lines, width: Math.ceil(TEXT_SLACK * Math.max(...lines.map((l) => textWidth(l, section)))) };
+  out = {
+    lines,
+    width: Math.ceil(TEXT_SLACK * Math.max(...lines.map((l) => textWidth(l, section)))),
+    height: lines.length * LINE_H,
+  };
   if (wrapped.size > 20000) wrapped.clear();
   wrapped.set(key, out);
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// maths in titles
+// ---------------------------------------------------------------------------
+
+// A title such as "$2$-colimit" or "The Picard functor \(\operatorname{Pic}_{X/S}\)"
+// is drawn by KaTeX, as HTML inside an SVG <foreignObject>.  The node has to be
+// sized before ELK runs, and nothing but the browser knows how wide a formula
+// comes out, so `measureMathTitles` renders every such title of the graph into
+// one hidden container and reads the sizes back in a single reflow.  Only the
+// titles with maths in them take this path — on the Weil blueprint about one in
+// seventeen — and each is measured once and cached; the rest keep the canvas
+// measurement above.
+//
+// The lines are broken here too, between words and never inside a formula:
+// a title is cut into tokens at the spaces outside its formulas, so "$2$-colimit"
+// is one token and "$\mathbf G_m$-torsors over $X$" three.  The drawn line is
+// exactly the measured one (`white-space: nowrap`, the same classes), so the
+// box the browser fills is the box ELK was told about.
+//
+// KaTeX's fonts are another matter: nothing asks for them until a formula is
+// laid out, and the first measurement on a page is then taken in a fallback
+// font.  `mathSettled` notices, waits for the fonts and measures again before
+// ELK is asked for anything.
+//
+// Without KaTeX — the CDN did not answer, or the unit tests, which have no
+// layout either — a title is plain text and shows its TeX source.  KaTeX is a
+// `defer` script ahead of the `app.js` module in index.html, so by the time a
+// graph is drawn it has either arrived or failed; there is no later moment at
+// which to re-render.
+
+const MATH_DELIMS = [['$$', '$$'], ['\\[', '\\]'], ['$', '$'], ['\\(', '\\)']];
+const MATH_TEST = /\$|\\\(|\\\[/;
+
+function hasMath(text) {
+  return MATH_TEST.test(text);
+}
+
+/**
+ * A title cut into tokens, each a list of parts `{tex}` or `{text}`.  An
+ * opening delimiter without its closing one is ordinary text.
+ */
+export function mathTokens(text) {
+  const parts = [];
+  let i = 0;
+  let plain = '';
+  while (i < text.length) {
+    let found = null;
+    for (const [l, r] of MATH_DELIMS) {
+      if (!text.startsWith(l, i)) continue;
+      const end = text.indexOf(r, i + l.length);
+      if (end > i + l.length) found = { tex: text.slice(i + l.length, end), next: end + r.length };
+      break;
+    }
+    if (found) {
+      if (plain) parts.push({ text: plain });
+      plain = '';
+      parts.push({ tex: found.tex, source: text.slice(i, found.next) });
+      i = found.next;
+    } else {
+      plain += text[i];
+      i += 1;
+    }
+  }
+  if (plain) parts.push({ text: plain });
+
+  // Spaces outside formulas separate tokens; everything else glues together.
+  const tokens = [];
+  let cur = [];
+  const flush = () => { if (cur.length) tokens.push(cur); cur = []; };
+  for (const p of parts) {
+    if (p.tex !== undefined) { cur.push(p); continue; }
+    const words = p.text.split(/(\s+)/);
+    for (const w of words) {
+      if (!w) continue;
+      if (/^\s+$/.test(w)) flush();
+      else cur.push({ text: w });
+    }
+  }
+  flush();
+  return tokens;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+/** A token as HTML: KaTeX for its formulas, the source where KaTeX gives up. */
+function tokenHtml(token, opts) {
+  let html = '';
+  for (const p of token) {
+    if (p.tex === undefined) { html += escapeHtml(p.text); continue; }
+    try {
+      html += window.katex.renderToString(p.tex, opts);
+    } catch (e) {
+      // As elsewhere on the site: a formula the project's macros do not cover
+      // is the blueprint's bug, so say so once and show the source.
+      if (typeof console !== 'undefined' && console.warn) console.warn('KaTeX:', e && e.message ? e.message : e);
+      html += escapeHtml(p.source);
+    }
+  }
+  return html;
+}
+
+// ('s' | 'l') + title -> {math: true, provisional, lines (as HTML), width, height}
+const mathWrapped = new Map();
+let mathModel = null;          // the snapshot the cache was filled for (its macros)
+
+/**
+ * Measure, in one reflow, every title in `titles` ([text, section] pairs) that
+ * has maths in it and is not measured yet, and cache its lines.  A no-op
+ * without KaTeX or a document to measure in.
+ */
+function measureMathTitles(app, titles) {
+  if (typeof window === 'undefined' || !window.katex || typeof window.katex.renderToString !== 'function') return;
+  if (typeof document === 'undefined' || !document.body) return;
+  if (mathModel !== app.model) { mathWrapped.clear(); mathModel = app.model; }
+  const todo = new Map();
+  for (const [text, section] of titles) {
+    const key = (section ? 's' : 'l') + text;
+    if (hasMath(text) && !mathWrapped.has(key) && !todo.has(key)) todo.set(key, { text, section });
+  }
+  if (!todo.size) return;
+
+  const base = typeof app.katexOptions === 'function' ? app.katexOptions() : {};
+  const opts = {
+    macros: base.macros || {}, strict: base.strict, displayMode: false,
+    throwOnError: true, output: 'html',
+  };
+  // Inside the graph stage when there is one, so the labels' own font applies.
+  const host = (ui && ui.stage && ui.stage.isConnected) ? ui.stage : document.body;
+  const box = document.createElement('div');
+  box.className = 'gmath-measure';
+  host.appendChild(box);
+  try {
+    // Pass 1: every token on its own, to break the lines.
+    const jobs = [];
+    for (const job of todo.values()) {
+      const holder = document.createElement('div');
+      holder.className = 'gmath' + (job.section ? ' section' : '');
+      job.tokens = mathTokens(job.text).map((t) => tokenHtml(t, opts));
+      holder.innerHTML = '<span class="gm-tok">&nbsp;</span>' +
+        job.tokens.map((h) => '<span class="gm-tok">' + h + '</span>').join('');
+      job.holder = holder;
+      box.appendChild(holder);
+      jobs.push(job);
+    }
+    for (const job of jobs) {
+      const spans = job.holder.children;
+      const w = [];
+      for (let i = 0; i < spans.length; i += 1) w.push(spans[i].getBoundingClientRect().width);
+      const space = w.shift();
+      const max = job.section ? SECTION_TEXT_MAX : LEAF_TEXT_MAX;
+      const lines = [];
+      let cur = [], curW = 0;
+      job.tokens.forEach((h, i) => {
+        const next = cur.length ? curW + space + w[i] : w[i];
+        if (cur.length && next > max) { lines.push(cur); cur = [h]; curW = w[i]; }
+        else { cur.push(h); curW = next; }
+      });
+      if (cur.length) lines.push(cur);
+      job.html = lines.map((l) => l.join(' '));
+      job.ok = w.length > 0 && w.every((x) => x > 0);
+    }
+    // Pass 2: the lines as they will be drawn, for their real width and height.
+    for (const job of jobs) {
+      job.holder.innerHTML = job.html.map((h) => '<div class="gm-line">' + h + '</div>').join('');
+    }
+    // Laying these out is what asks for KaTeX's fonts, so the first titles
+    // with maths on a page are measured in a fallback font; see `mathSettled`.
+    const provisional = fontsLoading();
+    for (const job of jobs) {
+      const rows = [...job.holder.children].map((r) => r.getBoundingClientRect());
+      const width = Math.max(...rows.map((r) => r.width));
+      const height = rows.reduce((a, r) => a + r.height, 0);
+      // Nothing laid out (a hidden page, a DOM without layout): plain text it is.
+      if (!job.ok || !(width > 0) || !(height > 0)) continue;
+      mathWrapped.set((job.section ? 's' : 'l') + job.text, {
+        math: true,
+        provisional,
+        lines: job.html,
+        width: Math.ceil(TEXT_SLACK * width) + 1,
+        height: Math.max(LINE_H * rows.length, Math.ceil(height)),
+      });
+    }
+  } catch (e) {
+    // Leave whatever did not make it as plain text rather than break the graph.
+    if (typeof console !== 'undefined' && console.warn) console.warn('measuring maths in titles failed:', e);
+  } finally {
+    box.remove();
+  }
+  if (mathWrapped.size > 20000) mathWrapped.clear();
+}
+
+function fontsLoading() {
+  return typeof document !== 'undefined' && !!document.fonts && document.fonts.status === 'loading';
+}
+
+const FONT_WAIT_MS = 3000;
+
+/**
+ * Measure the titles with maths in them, and if that was done while KaTeX's
+ * fonts were still arriving, a promise that waits for them (for at most
+ * `FONT_WAIT_MS`) and measures again; `null` when there is nothing to wait
+ * for, which is always the case for a graph without maths, so the plain path
+ * never yields.  A size measured in the fallback font is a few pixels off,
+ * enough for a formula to stick out of its box.
+ */
+function mathSettled(app, titles) {
+  measureMathTitles(app, titles);
+  const keys = titles.map(([text, section]) => (section ? 's' : 'l') + text);
+  const early = keys.filter((k) => { const w = mathWrapped.get(k); return w && w.provisional; });
+  if (!early.length) return null;
+  return Promise.race([
+    document.fonts.ready,
+    new Promise((resolve) => setTimeout(resolve, FONT_WAIT_MS)),
+  ]).then(() => {
+    for (const k of early) mathWrapped.delete(k);
+    measureMathTitles(app, titles);
+  });
+}
+
+/** [title, drawn expanded] of every object the view could draw as a box. */
+function boxTitles(m, view) {
+  const out = [];
+  for (const id of new Set([...view.visible, ...view.expanded])) {
+    const o = m.byId.get(id);
+    if (o && (o.boundary.length === 0 || view.isExpanded(id))) out.push([M.titleOf(o), view.isExpanded(id)]);
+  }
+  return out;
+}
+
+/** The wrapped title of a node: KaTeX's lines when measured, plain text otherwise. */
+function titleWrap(text, section) {
+  return mathWrapped.get((section ? 's' : 'l') + text) ||
+    wrapTitle(text, section ? SECTION_TEXT_MAX : LEAF_TEXT_MAX, section);
+}
+
 /** Size a leaf (or a section with nothing left inside) to its whole title. */
 function sizeLeaf(node, expandable, section) {
-  const { lines, width } = node.bp.wrap;
+  const { width, height } = node.bp.wrap;
   const pad = section ? SECTION_PAD_L + SECTION_PAD_R : 2 * LEAF_PAD + (expandable ? 10 : 0);
   const prog = node.bp.prog;
   node.width = Math.max(section ? 120 : 104, width + pad);
-  node.height = (section || (prog && prog.total > 1) ? NODE_H2 : NODE_H) + (lines.length - 1) * LINE_H;
+  node.height = (section || (prog && prog.total > 1) ? NODE_H2 : NODE_H) + height - LINE_H;
 }
 
 /**
@@ -399,14 +641,14 @@ export function buildElk(app, st, view, quot) {
       id,
       bp: {
         kind: 'object', id, object: o, compound, title, prog,
-        wrap: wrapTitle(title, compound ? SECTION_TEXT_MAX : LEAF_TEXT_MAX, compound),
+        wrap: titleWrap(title, compound),
       },
       children: [],
       layoutOptions: {},
     };
     if (compound) {
-      const { lines, width } = node.bp.wrap;
-      const head = SECTION_HEAD + (lines.length - 1) * LINE_H;
+      const { width, height } = node.bp.wrap;
+      const head = SECTION_HEAD + height - LINE_H;
       node.layoutOptions['elk.padding'] = `[top=${head},left=16,bottom=16,right=16]`;
       node.layoutOptions['elk.spacing.nodeNode'] = '22';
       node.layoutOptions['elk.algorithm'] = 'layered';
@@ -422,6 +664,8 @@ export function buildElk(app, st, view, quot) {
     return node;
   };
 
+  // Titles with maths are measured by the browser, all of them in one go.
+  measureMathTitles(app, [...nodeIds].map((id) => [M.titleOf(m.byId.get(id)), view.isExpanded(id)]));
   for (const id of nodeIds) nodes.set(id, mk(id));
 
   const rootChildren = [];
@@ -626,8 +870,17 @@ async function scheduleLayout(app, st, view, quot) {
   const structureChanged = sig !== lastSignature;
   lastSignature = sig;
 
-  const { graph, nodes, edgeMeta, implied } = buildElk(app, st, view, quot);
   const token = ++layoutToken;
+  // The first titles with maths on the page wait for KaTeX's fonts before
+  // they are measured for good; a graph without maths goes straight on.
+  const fonts = mathSettled(app, boxTitles(app.model, view));
+  if (fonts) {
+    ui.stage.classList.add('laying-out');
+    await fonts;
+    if (token !== layoutToken) return; // superseded while waiting
+  }
+
+  const { graph, nodes, edgeMeta, implied } = buildElk(app, st, view, quot);
 
   const n = countNodes(graph);
   status.textContent = `laying out ${n.toLocaleString()} node${n === 1 ? '' : 's'}\u2026`;
@@ -1026,14 +1279,33 @@ function drawNode(app, box, meta, st, view) {
 
   // The whole title, on the lines `buildElk` sized the node for: a section's
   // at the top left after the expander, a leaf's centred above its progress bar.
-  const lines = meta.wrap ? meta.wrap.lines : [M.titleOf(o)];
+  const wrap = meta.wrap || { lines: [M.titleOf(o)], width: 0, height: LINE_H };
+  const lines = wrap.lines;
   const expandable = view.isExpandable(o.id);
   const bar = !meta.compound && meta.prog && meta.prog.total > 1 ? 10 : 0;
   const tx = meta.compound ? SECTION_PAD_L - 4 : box.w / 2 + (expandable ? 5 : 0);
-  const ty = meta.compound ? 21 : (box.h - bar) / 2 + 4 - (lines.length - 1) * LINE_H / 2;
-  g.appendChild(svgEl('text', {
-    class: 'label', 'text-anchor': meta.compound ? 'start' : 'middle',
-  }, ...lines.map((line, i) => svgEl('tspan', { x: tx, y: ty + i * LINE_H }, line))));
+  // The top of the block of lines; a plain line's baseline sits 11.5px below.
+  const top = meta.compound ? 21 - LINE_H / 2 - 4 : (box.h - bar) / 2 - wrap.height / 2;
+  if (wrap.math) {
+    // KaTeX's HTML, on the lines `measureMathTitles` measured.  The events go
+    // to the shape underneath, so hovering, clicking and the tooltip behave
+    // as on any other node.
+    const fo = svgEl('foreignObject', {
+      class: 'label math',
+      x: meta.compound ? tx : tx - wrap.width / 2, y: top,
+      width: wrap.width, height: wrap.height,
+    });
+    fo.appendChild(app.el('div', {
+      class: 'gmath' + (meta.compound ? ' section' : ''),
+      html: lines.map((h) => '<div class="gm-line">' + h + '</div>').join(''),
+    }));
+    g.appendChild(fo);
+  } else {
+    const ty = top + LINE_H / 2 + 4;
+    g.appendChild(svgEl('text', {
+      class: 'label', 'text-anchor': meta.compound ? 'start' : 'middle',
+    }, ...lines.map((line, i) => svgEl('tspan', { x: tx, y: ty + i * LINE_H }, line))));
+  }
 
   g.appendChild(svgEl('text', {
     class: 'kindmark', x: box.w - 6, y: 12, 'text-anchor': 'end',
@@ -1051,7 +1323,10 @@ function drawNode(app, box, meta, st, view) {
       view.isExpanded(o.id) ? '\u2212' : '+'));
   }
 
-  const title2 = `${o.id}\n${o.kind}` + (status ? `\nstatus: ${M.STATUS_LABEL[status]}` : '') +
+  // A drawn formula cannot be copied or read back as TeX, so the tooltip has
+  // the source of such a title first.
+  const title2 = (wrap.math ? M.titleOf(o) + '\n' : '') +
+    `${o.id}\n${o.kind}` + (status ? `\nstatus: ${M.STATUS_LABEL[status]}` : '') +
     (prog ? `\nprogress: ${prog.proved}/${prog.total}` : '');
   g.appendChild(svgEl('title', title2));
   wireNode(app, g, o.id, view);
@@ -1065,7 +1340,7 @@ function drawNode(app, box, meta, st, view) {
  */
 function drawTitleStrip(app, box, g, meta, view) {
   const id = meta.object.id;
-  const height = SECTION_HEAD - 4 + (meta.wrap.lines.length - 1) * LINE_H;
+  const height = SECTION_HEAD - 4 + meta.wrap.height - LINE_H;
   const strip = app.svgEl('g', {
     class: 'gtitle',
     transform: `translate(${box.x},${box.y})`,
@@ -1417,7 +1692,7 @@ function renderSide(app, st, view, quot) {
   }
 
   const status = M.statusOf(m, id);
-  side.appendChild(el('h2', M.titleOf(o)));
+  const heading = side.appendChild(el('h2', M.titleOf(o)));
   side.appendChild(el('div.meta', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status)));
   side.appendChild(el('div.obj-id', id));
 
@@ -1475,6 +1750,11 @@ function renderSide(app, st, view, quot) {
 
   side.appendChild(el('section',
     el('a', { href: app.objectHref(id) }, 'Open object page \u2192')));
+
+  // Titles carry maths, the heading's and the listed objects' alike.  After
+  // the prose, which `renderBody` has rendered already.
+  app.renderMath(heading);
+  for (const list of side.querySelectorAll('ul.objlist')) app.renderMath(list);
 }
 
 // A listing behind a disclosure: shut until the reader opens it, the count in

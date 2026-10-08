@@ -135,7 +135,7 @@
       "id": "sec-applications",
       "kind": "section",
       "boundary": [],
-      "attrs": { "title": "Applications", "order": 3 },
+      "attrs": { "title": "Applications to $\\mathbb{R}^n$ and $\\beta X$", "order": 3 },
       "body": "Heine–Borel and the Stone–Čech compactification, as consumers of the main theorem.",
       "source": { "file": "blueprint/applications/_section.md", "anonymous": false },
       "depth": 0
@@ -263,7 +263,7 @@
       "kind": "lemma",
       "boundary": [],
       "attrs": {
-        "title": "Base case: a single factor",
+        "title": "Base case: \\(|I| = 1\\)",
         "lean": ["Compact.baseCase"],
         "review": "reviewed",
         "order": 1
@@ -277,7 +277,7 @@
       "kind": "lemma",
       "boundary": [],
       "attrs": {
-        "title": "Coordinatewise limits exist",
+        "title": "Coordinatewise limits $x_i = \\lim \\pi_{i*}\\mathcal{U}$ exist",
         "lean": ["Compact.inductiveStep"],
         "review": "draft",
         "order": 2
@@ -306,7 +306,7 @@
       "kind": "theorem",
       "boundary": [],
       "attrs": {
-        "title": "Heine–Borel",
+        "title": "Heine–Borel: the compact subsets of $\\mathbb{R}^n$ are the closed and bounded ones",
         "lean": ["Compact.heineBorel"],
         "review": "draft",
         "tags": ["application"],
