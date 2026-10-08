@@ -77,9 +77,9 @@ All state lives in the URL hash, so every view is a shareable link.
 The graph route carries its full view state as query parameters:
 `collapse=<kind>`, `expand=<comma separated ids>`, `ekinds=<edge kinds>`,
 `status=<derived statuses>`, `q=<search>`, `sel=<selected id>`, and
-`reduce=1` when *hide implied* is on.
+`reduce=0` when *hide implied* is off.
 
-*Hide implied* (off by default) draws the transitive reduction of the graph as
+*Hide implied* (on by default) draws the transitive reduction of the graph as
 drawn: an arc is left out when a longer path of the same kind already joins
 its ends, so of "A uses B, B uses C, A uses C" only the first two are drawn.
 The reduction (`transitiveReduction` in `model.js`) works
