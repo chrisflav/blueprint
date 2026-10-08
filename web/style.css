@@ -291,8 +291,13 @@ label.chk input { margin: 0; }
    viewport instead (the graph did: `calc(100vh - var(--topbar-h))`) cannot
    know whether the banner is there, and while a historical snapshot was on
    screen the graph ran 47px off the bottom, taking the status line and the
-   legend with it. */
+   legend with it.
+   The top bar and the banner keep their own height: a flex item shrinks by
+   default, and on any page taller than the window the column squeezed the
+   52px top bar to the 33px of its tallest child, so the tabs sat cramped on
+   every page but the graph, the one page that fits the window exactly. */
 body { display: flex; flex-direction: column; }
+.topbar, .banner { flex: none; }
 .app { flex: 1 1 auto; min-height: 0; }
 
 .page {
