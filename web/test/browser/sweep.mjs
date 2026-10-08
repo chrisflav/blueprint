@@ -302,6 +302,12 @@ async function loadFixtures(origin) {
     const o = m.byId.get(id);
     return o && o.boundary.length === 0;
   });
+  // The side panel's layout (taxis #527): a node on screen with prose and the
+  // most incident objects, whose listing is the long one folded away.
+  const incidents = (id) => M.incidentTo(m, id).length;
+  const panel = visibleNodeIds.map((id) => m.byId.get(id))
+    .filter((o) => o.body && o.body.trim() && incidents(o.id) > 0)
+    .reduce((best, o) => (!best || incidents(o.id) > incidents(best.id) ? o : best), null);
 
   return {
     snapshot, m, kind, order,
@@ -322,6 +328,7 @@ async function loadFixtures(origin) {
     midFocus,
     ref, refFar, refNear, brokenRef,
     bench: bench && bench.id,
+    panel: panel && panel.id,
     benchKids: bench ? M.childrenOf(order, bench.id) : [],
     defaultNodeCount: visibleNodeIds.length,
     defaultEdgeCount: quot.edges.length,
@@ -942,6 +949,54 @@ async function graphChecks(d, f) {
     return {
       ok: r.selId === id && r.compound.includes(id) && r.selected > 0,
       evidence: `reloaded ${j(hash)}: side .obj-id=${j(r.selId)}, ${r.selected} .selected, compounds=${j(r.compound)}, ${r.nodes} nodes, status=${j(status)}`,
+    };
+  });
+
+  // --- the side panel's order (taxis #527) ----------------------------------
+  // The prose comes first and is on screen without scrolling the panel; the
+  // incident objects follow, folded shut so their rows take no room, and a
+  // real click on the summary opens them, and another shuts them again.  A
+  // shut <details> still lays its rows out (its content is only
+  // `content-visibility: hidden`), so their own boxes say nothing: what counts
+  // is whether they are drawn and how tall the section is.
+  await check(d, 'graph/side-panel-prose-first-incidents-folded', async () => {
+    if (!f.panel) return { skip: true, evidence: 'no node on screen with both prose and incident objects' };
+    await gotoGraph(d, `collapse=${encodeURIComponent(f.kind)}&sel=${encodeURIComponent(f.panel)}`);
+    const LAYOUT = `
+      var side = document.querySelector('aside.side');
+      side.scrollTop = 0;
+      var sections = Array.prototype.slice.call(side.querySelectorAll('section'));
+      var name = function (s) { var h = s.querySelector('h3, summary'); return h ? h.textContent : ''; };
+      var prose = sections.filter(function (s) { return name(s) === 'Prose'; })[0];
+      var fold = sections.filter(function (s) { return /^Incident objects/.test(name(s)); })[0];
+      if (!prose || !fold) return { names: sections.map(name) };
+      var details = fold.querySelector('details');
+      var row = fold.querySelector('ul.objlist li');
+      var S = side.getBoundingClientRect();
+      var drawn = !row ? null : row.checkVisibility ? row.checkVisibility() : row.getClientRects().length > 0;
+      return { names: sections.map(name), proseIdx: sections.indexOf(prose), foldIdx: sections.indexOf(fold),
+               proseTop: Math.round(prose.getBoundingClientRect().top - S.top), panelH: Math.round(S.height),
+               open: details.open, drawn: drawn, foldH: Math.round(fold.getBoundingClientRect().height),
+               summary: fold.querySelector('summary').textContent };
+    `;
+    const before = await d.js(LAYOUT);
+    if (before.proseIdx === undefined) return { ok: false, evidence: `sections ${j(before.names)}: no Prose or no Incident objects` };
+    const sum = await d.js(elBox('aside.side section.fold summary'));
+    await d.click(sum.x, sum.y);
+    await sleep(250);
+    const opened = await d.js(LAYOUT);
+    const sum2 = await d.js(elBox('aside.side section.fold summary'));
+    await d.click(sum2.x, sum2.y);
+    await sleep(250);
+    const shut = await d.js(LAYOUT);
+    return {
+      ok: before.proseIdx < before.foldIdx && before.proseTop < before.panelH && !before.open && before.drawn === false
+        && opened.open && opened.drawn && opened.foldH > before.foldH + 20
+        && !shut.open && shut.drawn === false && shut.foldH === before.foldH,
+      evidence: `${j(f.panel)}: sections ${j(before.names)}; prose at ${before.proseTop}px of a ${before.panelH}px panel; `
+        + `${j(before.summary)} open=${before.open} (rows drawn=${before.drawn}, section ${before.foldH}px), `
+        + `after a click open=${opened.open} (drawn=${opened.drawn}, ${opened.foldH}px), `
+        + `after another open=${shut.open} (drawn=${shut.drawn}, ${shut.foldH}px)`,
     };
   });
 
@@ -2346,7 +2401,7 @@ async function main() {
     withFacts: f.withFacts, withoutFacts: f.withoutFacts, section: f.section, sugar: f.sugar,
     twoParents: f.twoParents, katex: f.katex, slug: f.slug, bench: f.bench,
     chapter: f.chapter, deepLeaf: f.deepLeaf, deepLeafPage: f.deepLeafPage, midFocus: f.midFocus,
-    ref: f.ref, refFar: f.refFar, refNear: f.refNear, brokenRef: f.brokenRef,
+    ref: f.ref, refFar: f.refFar, refNear: f.refNear, brokenRef: f.brokenRef, panel: f.panel,
     defaultNodeCount: f.defaultNodeCount,
   })}\n`);
 

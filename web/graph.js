@@ -144,7 +144,9 @@ function mount(root, app) {
   stage.appendChild(el('div.graph-status', { id: 'graph-status' }));
   stage.appendChild(legend(app));
 
-  ui = { page, toolbar, stage, svg, layer, side, transform: { x: 40, y: 40, k: 1 }, fitted: false };
+  // `folded`: the side panel's listings the reader has opened (see `fold`).
+  ui = { page, toolbar, stage, svg, layer, side, transform: { x: 40, y: 40, k: 1 }, fitted: false,
+    folded: new Set() };
   installPanZoom(app);
   prevPos = new Map();
   lastSignature = null;
@@ -1430,28 +1432,8 @@ function renderSide(app, st, view, quot) {
         ' (', String(M.childrenOf(view.order, id).length), ' children)')));
   }
 
-  if (o.boundary.length) {
-    side.appendChild(el('section', el('h3', 'Boundary'),
-      el('ul.objlist', ...o.boundary.map((b) =>
-        el('li', el('span.role', b.role), app.objLink(m, b.id))))));
-  }
-
-  const inc = M.incidentTo(m, id);
-  if (inc.length) {
-    side.appendChild(el('section', el('h3', `Incident objects (${inc.length})`),
-      el('ul.objlist', ...inc.slice(0, 14).map((r) =>
-        el('li', el('span.role', r.role), app.objLink(m, r.object.id),
-          el('span.chip', r.object.kind))),
-      inc.length > 14 ? el('li.muted.small', `+${inc.length - 14} more`) : null)));
-  }
-
-  const hidden = quot.internal.get(id);
-  if (hidden && hidden.length) {
-    side.appendChild(el('section', el('h3', `Hidden inside (${hidden.length})`),
-      el('p.hint', 'Relations whose ends all collapse into this object.'),
-      el('ul.objlist', ...hidden.slice(0, 10).map((h) => el('li', app.objLink(m, h))))));
-  }
-
+  // What the object says comes first, then what is wrong with it; only then
+  // its neighbourhood, which on a real project easily runs to dozens of rows.
   if (o.body && o.body.trim()) {
     const box = el('div.excerpt.body-prose');
     side.appendChild(el('section', el('h3', 'Prose'), box));
@@ -1465,8 +1447,48 @@ function renderSide(app, st, view, quot) {
         el('li', app.levelBadge(c.level), ' ', el('span.small', c.message))))));
   }
 
+  // A relation's boundary is what the relation is, and only a few rows long,
+  // so it stays open.
+  if (o.boundary.length) {
+    side.appendChild(el('section', el('h3', 'Boundary'),
+      el('ul.objlist', ...o.boundary.map((b) =>
+        el('li', el('span.role', b.role), app.objLink(m, b.id))))));
+  }
+
+  const inc = M.incidentTo(m, id);
+  if (inc.length) {
+    side.appendChild(fold(el, 'incident', `Incident objects (${inc.length})`,
+      el('ul.objlist', ...inc.slice(0, 14).map((r) =>
+        el('li', el('span.role', r.role), app.objLink(m, r.object.id),
+          el('span.chip', r.object.kind))),
+      inc.length > 14 ? el('li.muted.small', `+${inc.length - 14} more`) : null)));
+  }
+
+  const hidden = quot.internal.get(id);
+  if (hidden && hidden.length) {
+    side.appendChild(fold(el, 'hidden', `Hidden inside (${hidden.length})`,
+      el('p.hint', 'Relations whose ends all collapse into this object.'),
+      el('ul.objlist', ...hidden.slice(0, 10).map((h) => el('li', app.objLink(m, h))),
+        hidden.length > 10 ? el('li.muted.small', `+${hidden.length - 10} more`) : null)));
+  }
+
   side.appendChild(el('section',
     el('a', { href: app.objectHref(id) }, 'Open object page \u2192')));
+}
+
+// A listing behind a disclosure: shut until the reader opens it, the count in
+// the summary saying what is there. The panel is rebuilt on every route change
+// (a checkbox, an expand, the next selection), so whether it is open is kept in
+// `ui.folded` under `key` rather than snapping shut each time.
+function fold(el, key, title, ...children) {
+  return el('section.fold',
+    el('details', {
+      open: ui.folded.has(key),
+      ontoggle: (ev) => {
+        if (ev.target.open) ui.folded.add(key);
+        else ui.folded.delete(key);
+      },
+    }, el('summary', title), ...children));
 }
 
 function excerpt(body, n) {
