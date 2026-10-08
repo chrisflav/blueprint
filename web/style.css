@@ -621,6 +621,14 @@ table.grid tr:last-child td { border-bottom: 0; }
 }
 .panel > h2:first-child, .panel > h3:first-child { margin-top: 0; }
 
+/* A panel behind a disclosure (the object page's long listings): its heading
+   is the summary, with the browser's own marker in front saying it opens, and
+   a shut panel is that one line. */
+details.panel > summary { cursor: pointer; }
+details.panel > summary > h3 { display: inline; margin: 0; }
+details.panel > summary:hover > h3 { color: var(--accent); }
+details.panel[open] > summary { margin-bottom: .6rem; }
+
 dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: .25em .9em; margin: 0; }
 dl.kv dt { color: var(--muted); font-size: .85rem; }
 dl.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
