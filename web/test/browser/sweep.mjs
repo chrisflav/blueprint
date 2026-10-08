@@ -1022,6 +1022,28 @@ async function layoutChecks(d, f) {
     };
   });
 
+  await check(d, 'layout/top-bar-is-the-same-on-every-page', async () => {
+    // The body is a flex column, and a top bar left to shrink was squeezed to
+    // its tallest child on every page taller than the window: all but the
+    // graph.  The tall pages are scrolled, too, so the bar is measured stuck.
+    const heights = {};
+    for (const hash of ['#/graph', '#/document', '#/progress', '#/checks', '#/object/' + encodeURIComponent((f.withFacts || f.section))]) {
+      await route(d, hash);
+      await sleep(900);
+      heights[hash.split('/')[1]] = await d.js(`window.scrollTo(0, 600);
+        var r = document.querySelector('.topbar').getBoundingClientRect();
+        return { h: Math.round(r.height * 10) / 10, top: Math.round(r.top),
+                 want: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h')) };`);
+    }
+    const hs = Object.values(heights);
+    return {
+      ok: hs.every((x) => x.h === hs[0].h && x.top === 0) && hs[0].h >= hs[0].want,
+      evidence: `top bar ${j(Object.fromEntries(Object.entries(heights).map(([k, v]) => [k, v.h])))}, --topbar-h ${hs[0].want}px`,
+    };
+  });
+  await gotoGraph(d, `collapse=${encodeURIComponent(f.kind)}`);
+  await settle();
+
   await check(d, 'layout/hidden-banner-takes-no-space', async () => {
     const s = await d.js(`
       var b = document.getElementById('banner');
