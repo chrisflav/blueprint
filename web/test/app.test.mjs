@@ -620,6 +620,45 @@ await check('in the document a reference leads to where the entry is written out
 });
 
 // ---------------------------------------------------------------------------
+// 2d. the graph's side panel puts what the object says first
+// ---------------------------------------------------------------------------
+
+/** The side panel's sections, each named by its heading or summary. */
+const sideSections = () => [...root.querySelectorAll('aside.side section')].map((s) => {
+  const h = s.querySelector('h3') || s.querySelector('summary');
+  return h ? h.textContent : s.textContent;
+});
+
+await check('the side panel reads prose first and folds the long listings', async () => {
+  // sec-foundations, collapsed, has prose, incident objects and relations
+  // hidden inside it.
+  await go('#/graph?sel=sec-foundations');
+  const names = sideSections();
+  const at = (re) => names.findIndex((n) => re.test(n));
+  ok(at(/^Prose$/) >= 0, `no prose in ${JSON.stringify(names)}`);
+  ok(at(/^Incident objects \(6\)$/) > at(/^Prose$/), `incident objects before the prose: ${JSON.stringify(names)}`);
+  ok(at(/^Hidden inside \(3\)$/) > at(/^Incident objects/), `hidden inside before the incidents: ${JSON.stringify(names)}`);
+  const folds = root.querySelectorAll('aside.side section.fold details');
+  eq(folds.length, 2, 'the two listings are disclosures');
+  for (const d of folds) ok(!d.hasAttribute('open'), `${d.querySelector('summary').textContent} starts open`);
+  eq(folds[0].querySelectorAll('ul.objlist li').length, 6, 'the incident rows are there, only shut');
+});
+
+await check('an opened listing stays open while the panel is rebuilt', async () => {
+  await go('#/graph?sel=sec-foundations');
+  const incident = () => root.querySelector('aside.side section.fold details');
+  const d = incident();
+  fire(d, 'toggle', { target: { open: true } });
+  // Another route change rebuilds the panel; the listing is open on the next
+  // selection too, and shut again once the reader shuts it.
+  await go('#/graph?sel=sec-main');
+  ok(incident().hasAttribute('open'), 'the incident listing snapped shut');
+  fire(incident(), 'toggle', { target: { open: false } });
+  await go('#/graph?sel=sec-foundations');
+  ok(!incident().hasAttribute('open'), 'the incident listing stayed open after it was shut');
+});
+
+// ---------------------------------------------------------------------------
 // 3. the graph lays out in a worker
 // ---------------------------------------------------------------------------
 

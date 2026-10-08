@@ -585,6 +585,18 @@ table.grid tr:last-child td { border-bottom: 0; }
   color: var(--muted);
   font-weight: 600;
 }
+/* A long listing behind a disclosure: the summary reads as the other sections'
+   headings, with the browser's own marker in front saying it opens. */
+.side section.fold > details > summary {
+  cursor: pointer;
+  font-size: .76rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.side section.fold > details > summary:hover { color: var(--fg); }
+.side section.fold > details[open] > summary { margin-bottom: .35rem; }
 .side ul { margin: 0; padding-left: 1.05rem; }
 .side li { margin: .12em 0; }
 .side .hint { color: var(--faint); font-size: .84rem; }
