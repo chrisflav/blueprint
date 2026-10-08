@@ -73,8 +73,9 @@ function readState(app) {
     status: p.has('status') ? split('status') : null, // null = all
     q: p.get('q') || '',
     sel: p.get('sel') || null,
-    // Hide arcs implied by a longer path of their kind; off unless asked for.
-    reduce: p.get('reduce') === '1',
+    // Hide arcs implied by a longer path of their kind: on unless turned off,
+    // since on a real blueprint those arcs are most of the ink.
+    reduce: p.get('reduce') !== '0',
   };
 }
 
@@ -247,7 +248,7 @@ function renderToolbar(app, st) {
     el('label.chk', { title: 'hide arcs already implied by a longer path of the same kind' },
       el('input', {
         type: 'checkbox', checked: st.reduce,
-        onchange: (e) => writeState(app, { reduce: e.target.checked ? '1' : null }),
+        onchange: (e) => writeState(app, { reduce: e.target.checked ? null : '0' }),
       }), 'hide implied')));
 
   bar.appendChild(el('div.sep'));
