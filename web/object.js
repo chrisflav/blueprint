@@ -76,8 +76,7 @@ export function render(root, app) {
   // ---------------------------------------------------------------- checks
   const checks = M.checksFor(m, o.id);
   if (checks.length) {
-    page.appendChild(el('div.panel',
-      el('h3', `Checks mentioning this object (${checks.length})`),
+    page.appendChild(foldPanel(app, 'checks', `Checks mentioning this object (${checks.length})`,
       ...checks.map((c) => el('div', { class: 'check level-' + c.level },
         app.levelBadge(c.level),
         el('span.code', c.code),
@@ -97,6 +96,28 @@ export function render(root, app) {
 
 function cssId(id) {
   return String(id).replace(/[^A-Za-z0-9_-]/g, '_');
+}
+
+// The panels the reader has opened, by key.  The page is rebuilt on every
+// visit, and a reader going from object to object to follow the incident
+// objects should not have to open that listing again each time.
+const opened = new Set();
+
+/**
+ * A panel behind a disclosure, shut until the reader opens it: the long and
+ * secondary listings (incident objects, attributes, the positions in the
+ * collapse orders, checks), so that what the object says comes first and the
+ * page is not a scroll through hundreds of rows to reach it.
+ */
+function foldPanel(app, key, title, ...children) {
+  return app.el('details.panel.fold', {
+    open: opened.has(key),
+    'data-fold': key,
+    ontoggle: (ev) => {
+      if (ev.target.open) opened.add(key);
+      else opened.delete(key);
+    },
+  }, app.el('summary', app.el('h3', title)), ...children);
 }
 
 function kindOf(m, id) {
@@ -150,7 +171,7 @@ function attrsPanel(app, o) {
   }
   rows.push(el('dt', 'kind'), el('dd', el('code', o.kind)));
   rows.push(el('dt', 'depth'), el('dd', String(o.depth)));
-  return el('div.panel', el('h3', 'Declared attributes'), el('dl.kv', ...rows));
+  return foldPanel(app, 'attrs', `Declared attributes (${rows.length / 2})`, el('dl.kv', ...rows));
 }
 
 function leanPanel(app, o, facts) {
@@ -215,8 +236,7 @@ function incidencePanel(app, o) {
     byRole.get(r.role).push(r.object);
   }
   const groups = [...byKind.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
-  return el('div.panel',
-    el('h3', `Incident objects (${inc.length})`),
+  return foldPanel(app, 'incident', `Incident objects (${inc.length})`,
     el('p.muted.small', 'Every object whose boundary mentions this one, grouped by kind and role.'),
     ...groups.map(([kind, byRole]) =>
       el('div', { style: { marginTop: '.6rem' } },
@@ -255,8 +275,7 @@ function collapsePanel(app, o, kind) {
       el('p.muted.small', 'Isolated: no ', el('code', kind), ' edge touches this object.'));
   }
 
-  return el('div.panel',
-    el('h3', `Position in the ${kind} order`),
+  return foldPanel(app, 'order:' + kind, `Position in the ${kind} order`,
     chains.length
       ? el('div',
           el('h4', { style: { margin: '.2rem 0' } }, chains.length > 1 ? 'Ancestors (several branches)' : 'Ancestors'),

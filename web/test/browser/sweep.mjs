@@ -1250,6 +1250,40 @@ async function objectChecks(d, f) {
     evidence: `.katex=${s.katex}, leftover $…$ runs in text=${s.rawDollar}, snapshot formulas KaTeX could not parse=${s.katexError}`,
   }));
 
+  await check(d, 'object/long-listings-are-folded', async () => {
+    // Incident objects, attributes, the positions in the collapse orders and
+    // the checks start shut, one line each; a real click opens one, and it is
+    // still open on the next object page, until it is shut again.
+    const id = f.panel || f.section || f.withFacts;
+    if (!id) return { skip: true, evidence: 'no object with incident objects' };
+    const state = `
+      return Array.prototype.slice.call(document.querySelectorAll('details.panel')).map(function (p) {
+        var row = p.querySelector('ul.objlist li, dl.kv dt, .check, .chain');
+        return { key: p.getAttribute('data-fold'), open: p.open, h: Math.round(p.getBoundingClientRect().height),
+                 shown: row ? row.checkVisibility() : null };
+      });`;
+    await openObject(d, id);
+    const shut = await d.js(state);
+    const sum = await d.js(elBox('details.panel[data-fold="incident"] > summary'));
+    if (!sum) return { ok: false, evidence: `${j(id)}: no incident summary; folds ${j(shut)}` };
+    await d.click(sum.x, sum.y);
+    await sleep(300);
+    const opened = (await d.js(state)).find((p) => p.key === 'incident');
+    await openObject(d, f.withFacts || id);
+    const carried = (await d.js(state)).find((p) => p.key === 'incident');
+    const again = await d.js(elBox('details.panel[data-fold="incident"] > summary'));
+    if (again) { await d.click(again.x, again.y); await sleep(300); }
+    const closed = (await d.js(state)).find((p) => p.key === 'incident');
+    const keys = shut.map((p) => p.key);
+    return {
+      ok: shut.length >= 3 && shut.every((p) => !p.open && p.shown !== true && p.h < 60)
+        && ['attrs', 'incident'].every((k) => keys.includes(k)) && keys.some((k) => /^order:/.test(k))
+        && opened && opened.open && opened.shown === true
+        && (!carried || carried.open) && (!closed || !closed.open),
+      evidence: `${j(id)}: shut ${j(shut)}; after a click incident ${j(opened)}; on the next page ${j(carried)}; clicked shut ${j(closed)}`,
+    };
+  });
+
   await check(d, 'object/slug-link-navigates', async () => {
     if (!f.slug) return { skip: true, evidence: 'no [slug] in any body resolves to an object' };
     await openObject(d, f.slug.id);
