@@ -1,0 +1,35 @@
+/* themes/outline.css: an experimental style of the site, loaded after
+   style.css when the reader picks it in the top bar's style menu (or with
+   ?theme=outline).  pretext.css with the
+   outline sidebar (every chapter, the one being read opened in place) and
+   without its heavy colours; the style menu also sets data-sidebar="outline". */
+
+@import "pretext.css";
+
+/* ------------------------------------------------------- contents */
+
+/* Kiran's sidebar without its colours: every top-level entry on its own
+   line under a hairline, the one this page is in opened in place with its
+   entries indented below it, a blue bar beside the way down and this page. */
+/* Wide screens only: below 901px style.css sets the document in one column. */
+@media (min-width: 901px) {
+  .doc-layout { grid-template-columns: 17rem minmax(0, 40rem); gap: 3rem; justify-content: center; }
+}
+.toc-outline .toc-head { display: none; }
+.toc-outline > ul { border-top: 1px solid var(--border); }
+.toc-outline > ul > li { border-bottom: 1px solid var(--border); }
+.toc-outline li > a {
+  padding: .4em .6em .4em .75em;
+  border-radius: 0;
+  border-left: 3px solid transparent;
+  font-size: .93rem;
+  line-height: 1.3;
+}
+.toc-outline li > a .num { color: var(--muted); margin-right: .2em; }
+.toc-outline li > a:hover { background: var(--panel-2); }
+.toc-outline li.on-path > a { color: var(--ptx-blue-text); font-weight: 600; border-left-color: var(--ptx-blue-text); }
+.toc-outline li.on-path > a .num { color: var(--ptx-blue-text); }
+.toc-outline li > ul { margin: 0 0 .35em; padding: 0; border-left: 0; }
+.toc-outline li > ul > li > a { padding-left: 1.6em; font-size: .87rem; }
+.toc-outline li > ul > li > ul > li > a { padding-left: 2.4em; font-size: .84rem; }
+.toc-outline li.current > a { background: var(--accent-soft); color: var(--fg); border-left-color: var(--ptx-blue-text); }

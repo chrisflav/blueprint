@@ -277,7 +277,26 @@ export function render(root, app) {
 
   let tocShown = false;
   const showToc = () => {
-    if (tocShown || !tocList.firstChild) return;
+    if (tocShown) return;
+    // The whole document's outline, opened along the way to this page, when
+    // the site asks for it; else what this page writes out.
+    if (sidebarMode() === 'outline') {
+      tocShown = true;
+      toc.classList.add('toc-outline');
+      toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
+      toc.appendChild(outlineSidebar(app, outline, pageEntry, levels, href, scrollTo));
+      // This page's entry in view inside the sidebar, which scrolls on its
+      // own: the page itself does not move.  The sidebar is the entry's
+      // offset parent (it is sticky), so `offsetTop` is already from its top.
+      const here = toc.querySelector('li.current');
+      if (here && typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => {
+          toc.scrollTop = Math.max(0, here.offsetTop - toc.clientHeight / 3);
+        });
+      }
+      return;
+    }
+    if (!tocList.firstChild) return;
     tocShown = true;
     toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
     toc.appendChild(tocList);
@@ -503,6 +522,57 @@ function proofBlock(app, o, outline, known, refs) {
   // An id, so `?focus=` on a proof lands on it.
   block.setAttribute('id', 'doc-' + cssId(o.id));
   return block;
+}
+
+/** Which sidebar the site asks for: `outline` when its page says
+ *  `<html data-sidebar="outline">`, else the default. */
+function sidebarMode() {
+  try {
+    const root = document.documentElement;
+    return (root && typeof root.getAttribute === 'function' && root.getAttribute('data-sidebar')) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * The outline sidebar: every top-level entry of the document, and under each
+ * entry on the way down to this page its own entries, so the reader sees
+ * where the page sits and what is next to it.  The page itself is marked;
+ * an entry on this page scrolls to it, any other opens its page.
+ */
+function outlineSidebar(app, outline, pageEntry, levels, href, scrollTo) {
+  const { el } = app;
+  const pageId = pageEntry ? pageEntry.id : null;
+  const path = new Set();
+  for (let e = pageEntry; e; e = e.parent) path.add(e.id);
+  const link = (e) => {
+    // Written out on this page (whatever `depth=` says): scroll there.
+    // Otherwise its own page if it has one, else the page it is read on.
+    const onPage = e !== pageEntry && M.documentPageShows(outline, pageId, levels, e.id);
+    const target = e.children.length ? href(e.id) : href(M.documentPageOf(outline, e.id), e.id);
+    return el('a', onPage
+      ? { href: href(pageId, e.id), onclick: scrollTo('doc-' + cssId(e.id)) }
+      : { href: target },
+    el('span.num', e.number), ' ', M.titleOf(e.object));
+  };
+  const list = (entries) => {
+    const ul = el('ul');
+    for (const e of entries) {
+      if (e.duplicate) continue;
+      const open = path.has(e.id) && e.children.length > 0;
+      const li = el('li', {
+        class: 'depth-' + e.depth + (open ? ' open' : '') + (pageEntry && e === pageEntry ? ' current' : '') +
+          (path.has(e.id) ? ' on-path' : ''),
+      }, link(e));
+      if (open) li.appendChild(list(e.children));
+      ul.appendChild(li);
+    }
+    return ul;
+  };
+  const nav = list(outline.roots);
+  app.renderMath(nav); // titles carry maths
+  return nav;
 }
 
 function pickKind(app) {

@@ -738,6 +738,85 @@ function dataUrlFromQuery() {
 }
 
 // ---------------------------------------------------------------------------
+// themes
+// ---------------------------------------------------------------------------
+
+// The styles a reader can pick in the top bar: `themes/<id>.css`, loaded
+// after style.css, which stays the default.  Experimental: they are here so
+// that the styles can be tried on the real site before one is chosen.  A
+// theme may also ask for a sidebar (`data-sidebar` on <html>, read by
+// document.js).  The choice comes from `?theme=<id>` in the page's URL, else
+// from the reader's last pick, kept in localStorage.
+export const THEMES = [
+  { id: '', label: 'Default' },
+  { id: 'drafting', label: 'Drafting' },
+  { id: 'article', label: 'Article' },
+  { id: 'textbook', label: 'Textbook' },
+  { id: 'pretext', label: 'PreTeXt' },
+  { id: 'outline', label: 'Outline', sidebar: 'outline' },
+];
+const THEME_KEY = 'blueprint.theme';
+
+function knownTheme(id) {
+  return THEMES.find((t) => t.id === id) || null;
+}
+
+/** The theme the page should show: `?theme=`, else the reader's pick. */
+export function currentTheme() {
+  try {
+    const q = new URLSearchParams(location.search).get('theme');
+    if (q !== null && knownTheme(q)) return q;
+  } catch (e) { /* no location: the tests */ }
+  try {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(THEME_KEY) : null;
+    if (saved && knownTheme(saved)) return saved;
+  } catch (e) { /* private mode */ }
+  return '';
+}
+
+/** Load a theme's stylesheet (or none) and set the sidebar it asks for. */
+export function applyTheme(id) {
+  const theme = knownTheme(id) || THEMES[0];
+  let link = document.getElementById('theme-css');
+  if (theme.id) {
+    if (!link) {
+      link = el('link', { id: 'theme-css', rel: 'stylesheet' });
+      (document.head || document.documentElement).appendChild(link);
+    }
+    link.setAttribute('href', 'themes/' + theme.id + '.css');
+  } else if (link && link.parentNode) {
+    link.parentNode.removeChild(link);
+  }
+  const root = document.documentElement;
+  if (theme.sidebar) root.setAttribute('data-sidebar', theme.sidebar);
+  else root.removeAttribute('data-sidebar');
+  app.theme = theme.id;
+}
+
+/** Pick a theme: remember it, drop a `?theme=` that would contradict it, and
+ *  draw the page again, since a theme may change its sidebar. */
+function setTheme(id) {
+  try { localStorage.setItem(THEME_KEY, id); } catch (e) { /* private mode */ }
+  try {
+    const url = new URL(location.href);
+    if (url.searchParams.has('theme')) {
+      url.searchParams.delete('theme');
+      history.replaceState(null, '', url.href);
+    }
+  } catch (e) { /* no URL API: leave it */ }
+  applyTheme(id);
+  render();
+}
+
+function themeMenu() {
+  return el('select.theme-select', {
+    title: 'The style of the site (experimental: to try the candidates)',
+    'aria-label': 'Style of the site',
+    onchange: (ev) => setTheme(ev.target.value),
+  }, ...THEMES.map((t) => el('option', { value: t.id, selected: t.id === (app.theme || '') }, t.label)));
+}
+
+// ---------------------------------------------------------------------------
 // chrome: title, tabs, banner
 // ---------------------------------------------------------------------------
 
@@ -748,6 +827,7 @@ function updateChrome() {
 
   const aside = document.getElementById('topbar-aside');
   clear(aside);
+  aside.appendChild(themeMenu());
   if (app.model) {
     const { counts, total } = model.statusCounts(app.model);
     const pct = total ? Math.round((100 * counts.proved) / total) : 0;
@@ -1007,6 +1087,7 @@ function showLoadError(err, url) {
 }
 
 async function boot() {
+  applyTheme(currentTheme()); // before anything is drawn, so nothing flashes
   const url = dataUrlFromQuery();
   app.dataUrlOriginal = url;
   try {
