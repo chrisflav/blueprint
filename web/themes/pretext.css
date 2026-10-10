@@ -21,6 +21,7 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 4px 14px rgba(0, 0, 0, .08);
 
   --ptx-blue: #195684;
+  --ptx-blue-text: #195684;
   --ptx-red: #932c1c;
   --ptx-rule: #6087a9;
   --ptx-head-bg: #fafafa;
@@ -45,7 +46,8 @@
     --accent-soft: #23384b;
     --accent-fg: #1e1f21;
 
-    --ptx-blue: #23527a;
+    --ptx-blue: #23527a;     /* bars and blocks */
+    --ptx-blue-text: #8ab8e0; /* text on the dark ground */
     --ptx-red: #8a3324;
     --ptx-rule: #5a7c9b;
     --ptx-head-bg: #26282b;
@@ -62,7 +64,7 @@ a.objlink { font-weight: 600; }
 /* The book's title in blue serif over a light band, the controls in a grey
    one below it — here in one band, the title set as the book's. */
 .topbar { background: var(--ptx-head-bg); border-bottom: 1px solid var(--border-strong); }
-.brand { font-family: var(--serif); font-size: 1.35rem; font-weight: 700; color: var(--ptx-blue); }
+.brand { font-family: var(--serif); font-size: 1.35rem; font-weight: 700; color: var(--ptx-blue-text); }
 .brand-mark { display: none; }
 .tabs a { border-radius: 0; color: var(--fg); }
 .tabs a:hover { background: var(--ptx-nav-bg); }
@@ -74,7 +76,10 @@ button, select, input[type="text"], input[type="search"] { border-radius: 0; }
 
 /* The contents as PreTeXt draws them: one blue block per entry, white text,
    a white rule between; deeper entries on white under a steel rule. */
-.doc-layout { grid-template-columns: 15rem minmax(0, 40rem); gap: 3rem; justify-content: center; }
+/* Wide screens only: below 901px style.css sets the document in one column. */
+@media (min-width: 901px) {
+  .doc-layout { grid-template-columns: 15rem minmax(0, 40rem); gap: 3rem; justify-content: center; }
+}
 .toc-head { display: none; }
 .toc ul { border-top: 1px solid var(--ptx-blue); }
 .toc li { margin: 0; }

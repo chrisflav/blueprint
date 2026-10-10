@@ -125,7 +125,10 @@ table.grid td { border-bottom-color: var(--border); }
 
 /* ------------------------------------------------------- document */
 
-.doc-layout { grid-template-columns: 15rem minmax(0, 40rem); gap: 3.5rem; }
+/* Wide screens only: below 901px style.css sets the document in one column. */
+@media (min-width: 901px) {
+  .doc-layout { grid-template-columns: 15rem minmax(0, 40rem); gap: 3.5rem; }
+}
 .toc-head { font-size: 1rem; color: var(--fg); font-weight: 700; }
 .toc a { color: var(--fg); }
 .toc a:hover { color: var(--accent); }

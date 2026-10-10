@@ -11,7 +11,10 @@
 /* Kiran's sidebar without its colours: every top-level entry on its own
    line under a hairline, the one this page is in opened in place with its
    entries indented below it, a blue bar beside the way down and this page. */
-.doc-layout { grid-template-columns: 17rem minmax(0, 40rem); gap: 3rem; justify-content: center; }
+/* Wide screens only: below 901px style.css sets the document in one column. */
+@media (min-width: 901px) {
+  .doc-layout { grid-template-columns: 17rem minmax(0, 40rem); gap: 3rem; justify-content: center; }
+}
 .toc-outline .toc-head { display: none; }
 .toc-outline > ul { border-top: 1px solid var(--border); }
 .toc-outline > ul > li { border-bottom: 1px solid var(--border); }
@@ -24,9 +27,9 @@
 }
 .toc-outline li > a .num { color: var(--muted); margin-right: .2em; }
 .toc-outline li > a:hover { background: var(--panel-2); }
-.toc-outline li.on-path > a { color: var(--ptx-blue); font-weight: 600; border-left-color: var(--ptx-blue); }
-.toc-outline li.on-path > a .num { color: var(--ptx-blue); }
+.toc-outline li.on-path > a { color: var(--ptx-blue-text); font-weight: 600; border-left-color: var(--ptx-blue-text); }
+.toc-outline li.on-path > a .num { color: var(--ptx-blue-text); }
 .toc-outline li > ul { margin: 0 0 .35em; padding: 0; border-left: 0; }
 .toc-outline li > ul > li > a { padding-left: 1.6em; font-size: .87rem; }
 .toc-outline li > ul > li > ul > li > a { padding-left: 2.4em; font-size: .84rem; }
-.toc-outline li.current > a { background: var(--accent-soft); color: var(--fg); border-left-color: var(--ptx-blue); }
+.toc-outline li.current > a { background: var(--accent-soft); color: var(--fg); border-left-color: var(--ptx-blue-text); }

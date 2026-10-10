@@ -302,10 +302,13 @@ table.grid th {
   color: var(--accent);
 }
 
-.doc-layout {
-  grid-template-columns: 15rem minmax(0, 42rem);
-  gap: 3rem;
-  justify-content: center;
+/* Wide screens only: below 901px style.css sets the document in one column. */
+@media (min-width: 901px) {
+  .doc-layout {
+    grid-template-columns: 15rem minmax(0, 42rem);
+    gap: 3rem;
+    justify-content: center;
+  }
 }
 
 .doc-crumbs {

@@ -143,7 +143,10 @@ details.panel > summary > h3 { font-size: 1.1rem; }
 
 /* ------------------------------------------------------- document */
 
-.doc-layout { grid-template-columns: 14rem minmax(0, 38rem); gap: 3.5rem; }
+/* Wide screens only: below 901px style.css sets the document in one column. */
+@media (min-width: 901px) {
+  .doc-layout { grid-template-columns: 14rem minmax(0, 38rem); gap: 3.5rem; }
+}
 .toc a { color: var(--fg); }
 .toc a:hover { color: var(--accent); }
 .toc-head { font-family: var(--text); font-weight: 700; font-size: 1.1rem; color: var(--fg); }

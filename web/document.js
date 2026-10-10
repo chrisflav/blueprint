@@ -284,13 +284,14 @@ export function render(root, app) {
       tocShown = true;
       toc.classList.add('toc-outline');
       toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
-      toc.appendChild(outlineSidebar(app, outline, pageEntry, href, scrollTo));
+      toc.appendChild(outlineSidebar(app, outline, pageEntry, levels, href, scrollTo));
       // This page's entry in view inside the sidebar, which scrolls on its
-      // own: the page itself does not move.
+      // own: the page itself does not move.  The sidebar is the entry's
+      // offset parent (it is sticky), so `offsetTop` is already from its top.
       const here = toc.querySelector('li.current');
       if (here && typeof requestAnimationFrame === 'function') {
         requestAnimationFrame(() => {
-          toc.scrollTop = Math.max(0, here.offsetTop - toc.offsetTop - toc.clientHeight / 3);
+          toc.scrollTop = Math.max(0, here.offsetTop - toc.clientHeight / 3);
         });
       }
       return;
@@ -540,15 +541,18 @@ function sidebarMode() {
  * where the page sits and what is next to it.  The page itself is marked;
  * an entry on this page scrolls to it, any other opens its page.
  */
-function outlineSidebar(app, outline, pageEntry, href, scrollTo) {
+function outlineSidebar(app, outline, pageEntry, levels, href, scrollTo) {
   const { el } = app;
+  const pageId = pageEntry ? pageEntry.id : null;
   const path = new Set();
   for (let e = pageEntry; e; e = e.parent) path.add(e.id);
   const link = (e) => {
-    const onPage = pageEntry && (e.parent === pageEntry || e === pageEntry);
+    // Written out on this page (whatever `depth=` says): scroll there.
+    // Otherwise its own page if it has one, else the page it is read on.
+    const onPage = e !== pageEntry && M.documentPageShows(outline, pageId, levels, e.id);
     const target = e.children.length ? href(e.id) : href(M.documentPageOf(outline, e.id), e.id);
-    return el('a', onPage && e !== pageEntry
-      ? { href: href(pageEntry.id, e.id), onclick: scrollTo('doc-' + cssId(e.id)) }
+    return el('a', onPage
+      ? { href: href(pageId, e.id), onclick: scrollTo('doc-' + cssId(e.id)) }
       : { href: target },
     el('span.num', e.number), ' ', M.titleOf(e.object));
   };
