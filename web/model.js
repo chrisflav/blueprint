@@ -338,13 +338,40 @@ export function collapseOrder(model, kind) {
     children.set(o.id, []);
   }
 
-  const seenPair = new Set();
+  // A detail of an object attached to another (a lemma refining a proof) is
+  // a detail of what it is attached to, the proof's statement: the proof is
+  // not in the order itself, so its details hang where it does.  Along a
+  // chain of attachments, and not for an attached object with a parent of
+  // its own (DESIGN 2.5; `Collapse.of` in View.lean decides the same).
+  const hasParent = new Set();
   for (const o of model.objects) {
     if (o.kind !== kind) continue;
     const src = boundaryEntry(o, 'src');
     const tgt = boundaryEntry(o, 'tgt');
-    if (src == null || tgt == null) continue;
-    if (!parents.has(src) || !parents.has(tgt)) continue; // dangling ref
+    // only edges whose ends both exist, as below and in View.lean
+    if (src != null && tgt != null && parents.has(src) && parents.has(tgt)) hasParent.add(src);
+  }
+  const lift = (id) => {
+    let cur = id;
+    const seen = new Set([id]);
+    for (;;) {
+      if (hasParent.has(cur)) return cur;
+      const next = attachedTo(model.byId.get(cur));
+      if (next == null || !parents.has(next)) return cur;
+      if (seen.has(next)) return id;
+      seen.add(next);
+      cur = next;
+    }
+  };
+
+  const seenPair = new Set();
+  for (const o of model.objects) {
+    if (o.kind !== kind) continue;
+    const src = boundaryEntry(o, 'src');
+    const raw = boundaryEntry(o, 'tgt');
+    if (src == null || raw == null) continue;
+    if (!parents.has(src) || !parents.has(raw)) continue; // dangling ref
+    const tgt = lift(raw);
     if (src === tgt) continue; // degenerate, ignore
     // `includes` on the parent list would be quadratic in a wide fan-in, and a
     // real blueprint has sections with hundreds of children.

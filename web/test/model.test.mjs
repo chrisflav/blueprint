@@ -1094,6 +1094,38 @@ check('a proof is introduced by what it proves', () => {
   eq(M.proofLeadRest(p('by induction')), ' (by induction).', 'anything else');
 });
 
+check('a detail of a proof is a detail of its statement', () => {
+  // A small snapshot of its own: a statement, its proof, and a lemma that
+  // refines the proof.
+  const mini = M.buildModel({
+    schema: { defaultCollapse: 'refines', kinds: {
+      theorem: { boundary: {}, countable: true }, lemma: { boundary: {}, countable: true },
+      section: { boundary: {} },
+      refines: { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } }, collapse: true },
+      uses: { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } } },
+      proof: { boundary: { of: { min: 1, max: 1 } } } } },
+    objects: [
+      { id: 'sec', kind: 'section', boundary: [], attrs: {}, body: 'S.' },
+      { id: 'thm', kind: 'theorem', boundary: [], attrs: {}, body: 'T.' },
+      { id: 'proof/thm', kind: 'proof', boundary: [{ role: 'of', id: 'thm' }], attrs: {}, body: 'P.' },
+      { id: 'step', kind: 'lemma', boundary: [], attrs: {}, body: 'L.' },
+      { id: 'refines/thm/sec', kind: 'refines', boundary: [{ role: 'src', id: 'thm' }, { role: 'tgt', id: 'sec' }], attrs: {}, body: '' },
+      { id: 'refines/step/proof~thm', kind: 'refines', boundary: [{ role: 'src', id: 'step' }, { role: 'tgt', id: 'proof/thm' }], attrs: {}, body: '' },
+    ],
+  });
+  const ord = M.collapseOrder(mini, 'refines');
+  sameSet(M.parentsOf(ord, 'step'), ['thm'], 'the step hangs under the statement');
+  has(ord.expandable, 'thm', 'the statement can be expanded');
+  hasNot(ord.expandable, 'proof/thm', 'the proof is not in the order');
+  const v = M.makeView(mini, 'refines', ['sec']);
+  sameSet(v.rep('step'), ['thm'], 'collapsed: inside the statement');
+  const v2 = M.makeView(mini, 'refines', ['sec', 'thm']);
+  has(v2.visible, 'step', 'expanded: visible');
+  const outline = M.documentOutline(mini, 'refines');
+  eq(outline.byId.get('step').parent.id, 'thm', 'the document sets it under the statement');
+  eq(outline.stepOf.get('proof/thm'), 'thm', 'and the proof stays with its statement');
+});
+
 check('the document files a proof under its statement', () => {
   const outline = M.documentOutline(model, 'refines');
   sameSet((outline.proofs.get('thm-heine-borel') || []).map((o) => o.id), [PROOF], 'filed');

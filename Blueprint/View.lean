@@ -26,21 +26,46 @@ structure Collapse where
   children : Array (Array Nat)
   deriving Inhabited
 
-/-- Build the collapse relation for kind `k`. -/
+/-- Build the collapse relation for kind `k`.
+
+A detail of an object attached to another — a lemma that refines a proof —
+is a detail of what that object is attached to, the proof's statement: the
+proof is not in the order itself (it stands for its statement, see `anchor`),
+so its details hang where it does.  That holds along a chain of attachments,
+and not for an attached object that has a `K`-parent of its own.
+`DESIGN.md` §2.5. -/
 def Collapse.of (b : Blueprint) (k : String) : Collapse := Id.run do
   let n := b.objects.size
-  let mut parents : Array (Array Nat) := Array.replicate n #[]
-  let mut children : Array (Array Nat) := Array.replicate n #[]
-  for o in b.objects do
-    if o.kind != k then continue
+  let edges : Array (Nat × Nat) := b.objects.foldl (init := #[]) fun acc o =>
+    if o.kind != k then acc else
     match o.src?, o.tgt? with
     | some s, some t =>
       match b.findIdx? s, b.findIdx? t with
-      | some si, some ti =>
-        parents := parents.modify si (·.push ti)
-        children := children.modify ti (·.push si)
-      | _, _ => pure ()
-    | _, _ => pure ()
+      | some si, some ti => acc.push (si, ti)
+      | _, _ => acc
+    | _, _ => acc
+  let hasParent : Array Bool := edges.foldl (init := Array.replicate n false)
+    fun acc (si, _) => acc.set! si true
+  -- the object a detail of `t` hangs under: `t`, or what `t` is attached to
+  let lift (t : Nat) : Nat := Id.run do
+    let mut j := t
+    let mut seen : Array Nat := #[t]
+    for _ in [0 : n] do
+      if hasParent[j]! then break
+      match b.objects[j]!.attachedTo? >>= b.findIdx? with
+      | some a =>
+        if seen.contains a then return t
+        seen := seen.push a
+        j := a
+      | none => break
+    return j
+  let mut parents : Array (Array Nat) := Array.replicate n #[]
+  let mut children : Array (Array Nat) := Array.replicate n #[]
+  for (si, t) in edges do
+    let ti := lift t
+    if si == ti then continue
+    parents := parents.modify si (·.push ti)
+    children := children.modify ti (·.push si)
   return { kind := k, parents, children }
 
 /-- Nodes reachable from `starts` along `adj`, as a membership array.  The
