@@ -445,20 +445,23 @@ migrated blueprint changes nothing.
   that refines it, so a `_section.md` stays its directory's object.  A word
   the schema has no kind for is reported and left alone.
 * **Split.**  Every proof in the body of a statement the `proof` kind may
-  attach to moves into a file of its own next to it.  A proof is the section of a `Proof` heading (`## Proof` or
-  `## Proof.`, at any level), up to the next heading of the same or a
-  higher level, or a paragraph opened by an inline marker (`*Proof.*`,
-  `**Proof.**`, `*Proof of (i).*`), up to the next such marker or the next
-  heading that closes the one it sits under.  Markers inside a proof are
-  part of it.  The first proof goes to `<stem>.proof.md` with the derived
-  id `proof/<id>`; the `k`-th to `<stem>.proof-<k>.md` with the id
+  attach to moves into a file of its own next to it.  A proof is the
+  section of a `Proof` heading (`## Proof` or `## Proof.`, at any level), up
+  to the next heading of the same or a higher level, markers inside it
+  included; or a paragraph opened by an inline marker (`*Proof.*`,
+  `**Proof.**`, `*Proof of (i).*`, `*Proof sketch.*`), up to the next such
+  marker or the next heading that closes the one it sits under.  Fenced
+  code is never cut.  The first proof goes to `<stem>.proof.md` with the
+  derived id `proof/<id>`; the `k`-th to `<stem>.proof-<k>.md` with the id
   `proof/<id>/<k>`, and with several each gets an `order`.  The stem is the
   file's name, or the id for a directory's `_section.md`.  Proofs found
-  after an earlier run are numbered after the ones split off then.  A proof that
-  follows a restatement or claim under a heading of its own (a `Detailed
-  form`) is titled after it, `of the detailed form`, and the site reads it
-  as *Proof of the detailed form.*; `*Proof of (i).*` gives `of (i)`.  The
-  restatement stays with the statement.
+  after an earlier run are numbered after the ones split off then.  A proof
+  that follows a restatement or claim under a heading of its own (a
+  `Detailed form`) is titled after it, `of the detailed form`, and the site
+  reads it as *Proof of the detailed form.*  A marker gives its own title:
+  `*Proof of (i).*` gives `of (i)` (*Proof of (i).*), `*Proof sketch.*` and
+  `*Proof (sketch).*` give `sketch` (*Proof (sketch).*).  The restatement
+  stays with the statement.
 * **Move uses.**  With Lean facts that split each declaration's
   dependencies (`typeDeps` and `valueDeps`, from this version of
   `blueprint extract`), a use in the statement's `uses` key that Lean needs

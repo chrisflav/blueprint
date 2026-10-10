@@ -321,8 +321,11 @@ def factChecks (b : Blueprint) (f : Facts) : Array Check := Id.run do
       let proofs := (b.proofsOf o.id).map (·.id)
       let stmtU := usesOf o.id
       let proofU := sortDedup (proofs.foldl (init := #[]) fun acc p => acc ++ usesOf p)
-      -- where a proof's edge is reported: the proof, or the first of several
+      -- where a proof's edge is reported: the proof that declares it, else the
+      -- first proof
       let proofId := proofs[0]?.getD o.id
+      let declarer (t : String) : String :=
+        (proofs.find? fun p => (usesOf p).contains t).getD proofId
       if proofs.isEmpty || !split o then
         -- one dependency set, against everything declared on the object and
         -- its proofs together
@@ -334,7 +337,7 @@ def factChecks (b : Blueprint) (f : Facts) : Array Check := Id.run do
               s!"Lean shows '{o.id}' depends on '{t}', but no 'uses' edge declares it" #[o.id, t]
         for t in declaredHere do
           if isMapped t && !actual.contains t then
-            let src := if stmtU.contains t then o.id else proofId
+            let src := if stmtU.contains t then o.id else declarer t
             cs := cs.push <| Check.info "declared-not-actual"
               s!"'uses' edge {src} -> {t} is declared, but the Lean dependency graph does not show it"
               #[src, t]
@@ -346,8 +349,8 @@ def factChecks (b : Blueprint) (f : Facts) : Array Check := Id.run do
           if stmtU.contains t then continue
           if proofU.contains t then
             cs := cs.push <| Check.info "use-belongs-to-statement"
-              s!"'uses' edge {proofId} -> {t} is declared on the proof, but Lean needs '{t}' to state '{o.id}'"
-              #[proofId, t]
+              s!"'uses' edge {declarer t} -> {t} is declared on the proof, but Lean needs '{t}' to state '{o.id}'"
+              #[declarer t, t]
           else
             cs := cs.push <| Check.warning "actual-not-declared"
               s!"Lean shows the statement of '{o.id}' depends on '{t}', but no 'uses' edge declares it"
@@ -370,8 +373,8 @@ def factChecks (b : Blueprint) (f : Facts) : Array Check := Id.run do
         for t in proofU do
           if isMapped t && !typeD.contains t && !valueD.contains t then
             cs := cs.push <| Check.info "declared-not-actual"
-              s!"'uses' edge {proofId} -> {t} is declared, but the Lean dependency graph does not show it"
-              #[proofId, t]
+              s!"'uses' edge {declarer t} -> {t} is declared, but the Lean dependency graph does not show it"
+              #[declarer t, t]
   return cs
 
 /-! ## Everything together -/

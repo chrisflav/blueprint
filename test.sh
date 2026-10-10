@@ -328,6 +328,12 @@ printf '+++\nid    = "sk-prop"\nkind  = "section"\ntitle = "Sketched"\n+++\n*Pro
   > "$TMP/mig/blueprint/induction/sketchy/_section.md"
 printf '+++\nkind  = "lemma"\ntitle = "Detail"\n+++\nA detail.\n' \
   > "$TMP/mig/blueprint/induction/sketchy/sk-detail.md"
+# The review's cases: a string-valued key and an escaped array value next to
+# the keys the migration rewrites; a marker with text on its line; a lead-in
+# with text on its line; a `#` line in fenced code inside a proof.
+mkdir -p "$TMP/mig/blueprint/induction/sketchy2"
+printf '+++\nid    = "sk-two"\nkind  = "section"\ntags  = "draft"\nuses  = ["key-prop"]\nowner = "a\\\\b"\n+++\n*Lemma (sketch).* All of\nthis holds.\n\n*Proof sketch.* Easy\nenough.\n\n```\n# not a heading\n```\n\nDone.\n' \
+  > "$TMP/mig/blueprint/induction/sketchy2/_section.md"
 "$BP" migrate --root "$TMP/mig" > "$TMP/mig.1" 2>&1
 MP="$TMP/mig/blueprint/induction/main-theorem.proof.md"
 KP="$TMP/mig/blueprint/induction/key-prop"
@@ -341,7 +347,7 @@ else
   bad "every proof of a body gets a file, the restatement's titled after it"; cat "$TMP/mig.1" "$KP".*
 fi
 SK="$TMP/mig/blueprint/induction/sketchy"
-if grep -q 'turned 1 sketch' "$TMP/mig.1" && grep -q '^kind  = "proposition"$' "$SK/_section.md" \
+if grep -q 'turned 2 sketch' "$TMP/mig.1" && grep -q '^kind  = "proposition"$' "$SK/_section.md" \
    && grep -q '^tags = \["sketch"\]$' "$SK/_section.md" && ! grep -q 'sketch)' "$SK/_section.md" \
    && grep -q '^Everything holds\.$' "$SK/_section.md" && grep -q '^of    = "sk-prop"$' "$SK/sk-prop.proof.md" \
    && "$BP" build --root "$TMP/mig" -o "$TMP/mig.json" > /dev/null 2>&1 \
@@ -350,13 +356,24 @@ if grep -q 'turned 1 sketch' "$TMP/mig.1" && grep -q '^kind  = "proposition"$' "
 else
   bad "a sketch section becomes its statement, keeps its details, and its proof is split off"; cat "$TMP/mig.1" "$SK/_section.md"
 fi
+SK2="$TMP/mig/blueprint/induction/sketchy2"
+if grep -q '^tags  = \["draft", "sketch"\]$' "$SK2/_section.md" \
+   && grep -q '^uses  = \["key-prop"\]$' "$SK2/_section.md" \
+   && [ "$(awk 'n >= 2; /^[+][+][+]$/ { n++ }' "$SK2/_section.md")" = "$(printf 'All of\nthis holds.')" ] \
+   && grep -q '^title = "sketch"$' "$SK2/sk-two.proof.md" \
+   && [ "$(awk 'n >= 2; /^[+][+][+]$/ { n++ }' "$SK2/sk-two.proof.md" | head -3)" = "$(printf 'Easy\nenough.\n')" ] \
+   && grep -q '^# not a heading$' "$SK2/sk-two.proof.md" && grep -q '^Done\.$' "$SK2/sk-two.proof.md"; then
+  ok "string keys, lead-ins and markers with text, and fenced code survive the migration"
+else
+  bad "string keys, lead-ins and markers with text, and fenced code survive the migration"; cat "$SK2"/*
+fi
 if grep -q '^By definition\.$' "$TMP/mig/blueprint/induction/base-case.proof.md" \
    && ! grep -q 'Proof' "$TMP/mig/blueprint/induction/base-case.md"; then
   ok "an inline *Proof.* marker opens a proof too"
 else
   bad "an inline *Proof.* marker opens a proof too"; cat "$TMP/mig.1"
 fi
-if grep -q 'split 5 proof' "$TMP/mig.1" && grep -q '^of    = "main-theorem"$' "$MP" \
+if grep -q 'split 6 proof' "$TMP/mig.1" && grep -q '^of    = "main-theorem"$' "$MP" \
    && grep -q '^By \[key-prop\]\.$' "$MP" && ! grep -q '^uses' "$MP" \
    && ! grep -q 'Proof' "$TMP/mig/blueprint/induction/main-theorem.md" \
    && grep -q '^Sharp\.$' "$TMP/mig/blueprint/induction/main-theorem.md"; then

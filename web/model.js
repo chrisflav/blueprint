@@ -648,16 +648,19 @@ export function makeView(model, kind, expandedIds = []) {
 
   // anchor(id): what `id` stands for.  An object attached to a single object
   // (a proof) and with no parent of its own stands for that object, and so on
-  // down the chain; anything else stands for itself (DESIGN 3).
+  // down the chain; anything else stands for itself, and so does an object
+  // whose chain runs in a circle, as `anchor` in View.lean decides (DESIGN 3).
   function anchor(id) {
     let cur = id;
-    for (let i = 0; i < 64; i++) {
-      if (parentsOf(order, cur).length > 0) break;
+    const seen = new Set([id]);
+    for (;;) {
+      if (parentsOf(order, cur).length > 0) return cur;
       const next = attachedTo(model.byId.get(cur));
-      if (next == null || next === cur || !model.byId.has(next)) break;
+      if (next == null || !model.byId.has(next)) return cur;
+      if (seen.has(next)) return id;
+      seen.add(next);
       cur = next;
     }
-    return cur;
   }
 
   const view = {

@@ -133,6 +133,12 @@ class Handler(SimpleHTTPRequestHandler):
         object_id = self.object_id()
         if object_id is None:
             return
+        # Only the site's own fetch, which sends JSON: a form on another page
+        # cannot set this type without a CORS preflight, which this server
+        # never answers, so it cannot post comments through a visitor's browser.
+        ctype = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
+        if ctype != "application/json":
+            return self.send_json(415, {"error": "comments are posted as application/json"})
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:

@@ -71,7 +71,10 @@ def inlineProofMarker? (line : String) : Option (Option String × String) := Id.
       if inner == "Proof" || inner == "Proof." then
         return some (none, trim (d.intercalate rest))
       if inner.startsWith "Proof " && inner.endsWith "." then
+        -- `Proof of (i).` says what it proves; `Proof sketch.` or
+        -- `Proof (sketch).` says what kind of proof it is
         let t := trim ((inner.drop 6).dropEnd 1).copy
+        let t := if t.startsWith "(" && t.endsWith ")" then trim ((t.drop 1).dropEnd 1).copy else t
         return some (some t, trim (d.intercalate rest))
     | _ => pure ()
   return none
@@ -87,14 +90,27 @@ def titleAfterHeading (heading : String) : String :=
 
 /-- Cut every proof out of a statement's body: the statement's remaining text
 and the proofs, in order.  A proof is a `Proof` heading's section, up to the
-next heading of the same or a higher level, or a paragraph opened by an
-inline marker (`*Proof.*`), up to the next such marker or the next heading
-that closes the heading it sits under.  A proof that follows a claim under a
-heading of its own (a `Detailed form`) is titled after it; markers inside a
-proof are part of it.  `none` when there is no proof. -/
+next heading of the same or a higher level, with any markers inside it, or a
+paragraph opened by an inline marker (`*Proof.*`), up to the next such marker
+or the next heading that closes the heading it sits under.  A proof that
+follows a claim under a heading of its own (a `Detailed form`) is titled
+after it, `*Proof of (i).*` by what it names.  Fenced code is never cut.
+`none` when there is no proof. -/
 def splitProofs? (body : String) : Option (String × Array CutProof) := Id.run do
   let lines := splitLines body
   let n := lines.size
+  -- lines inside a fenced code block (the fences included) are never
+  -- headings or markers
+  let mut fenced : Array Bool := #[]
+  let mut open_ := false
+  for l in lines do
+    let t := trim l
+    let fence := t.startsWith "```" || t.startsWith "~~~"
+    fenced := fenced.push (open_ || fence)
+    if fence then open_ := !open_
+  let level? (j : Nat) : Option Nat := if fenced[j]! then none else headingLevel? lines[j]!
+  let marker? (j : Nat) : Option (Option String × String) :=
+    if fenced[j]! then none else inlineProofMarker? lines[j]!
   let mut stmt : Array String := #[]
   let mut proofs : Array CutProof := #[]
   -- the latest heading that is not a proof's, since the last proof
@@ -104,32 +120,35 @@ def splitProofs? (body : String) : Option (String × Array CutProof) := Id.run d
   for _ in [0 : n] do
     if i ≥ n then break
     let l := lines[i]!
-    if isProofHeading l then
+    if !fenced[i]! && isProofHeading l then
       let lvl := (headingLevel? l).getD 2
       let mut stop := n
       for j in [i + 1 : n] do
-        if (headingLevel? lines[j]!).any (· ≤ lvl) then
+        if (level? j).any (· ≤ lvl) then
           stop := j
           break
       proofs := proofs.push { title := claim.map (titleAfterHeading ·.1),
                               text := joinBlocks #[lines.extract (i + 1) stop] }
       claim := none
       i := stop
-    else if let some (t, rest) := inlineProofMarker? l then
+    else if let some (t, rest) := marker? i then
       let closeAt := enclosing.getD 6
       let mut stop := n
       for j in [i + 1 : n] do
-        if (headingLevel? lines[j]!).any (· ≤ closeAt) || (inlineProofMarker? lines[j]!).isSome then
+        if (level? j).any (· ≤ closeAt) || (marker? j).isSome then
           stop := j
           break
       let title := match t with
-        | some t => some (if t.startsWith "of " then t else "of " ++ t)
+        | some t => some t
         | none => claim.map (titleAfterHeading ·.1)
-      proofs := proofs.push { title, text := joinBlocks #[#[rest], lines.extract (i + 1) stop] }
+      -- text on the marker's line opens the paragraph that follows it
+      let opening : Array String := if rest.isEmpty then #[] else #[rest]
+      proofs := proofs.push
+        { title := title, text := joinBlocks #[opening ++ lines.extract (i + 1) stop] }
       claim := none
       i := stop
     else
-      if let some lvl := headingLevel? l then
+      if let some lvl := level? i then
         claim := some (l, lvl)
         enclosing := some lvl
       stmt := stmt.push l
@@ -165,18 +184,28 @@ several lines is replaced as a whole. -/
 def setArrayKey (key : String) (front : Array String) (ids : Array String) :
     Array String := Id.run do
   let render (lhs : String) : String :=
-    lhs ++ "= [" ++ String.intercalate ", " (ids.toList.map fun i => "\"" ++ i ++ "\"") ++ "]"
+    lhs ++ "= [" ++ String.intercalate ", "
+      (ids.toList.map fun i => "\"" ++ tomlEscape i ++ "\"") ++ "]"
   match front.findIdx? (frontKey? · == some key) with
   | none =>
     if ids.isEmpty then return front else return front.push (render (key ++ " "))
   | some i =>
+    let line := front[i]!
+    let lhs := (line.splitOn "=").head!
+    let value := trim (String.intercalate "=" ((line.splitOn "=").drop 1))
+    -- only an array can run over several lines; a string value is one line
     let mut stop := i
-    while stop < front.size && !(front[stop]!.contains ']') do
-      stop := stop + 1
-    let lhs := (front[i]!.splitOn "=").head!
+    if value.startsWith "[" then
+      while stop < front.size && !(front[stop]!.contains ']') do
+        stop := stop + 1
+    -- a comment after a one-line value stays with the line
+    let comment :=
+      if stop != i then "" else
+        let after := if value.startsWith "[" then (value.splitOn "]").getLast! else ""
+        if (trim after).startsWith "#" then " " ++ trim after else ""
     let rest := front.extract (stop + 1) front.size
     let head := front.extract 0 i
-    return if ids.isEmpty then head ++ rest else (head.push (render lhs)) ++ rest
+    return if ids.isEmpty then head ++ rest else (head.push (render lhs ++ comment)) ++ rest
 
 /-- Set the `uses` key of a front matter block. -/
 def setUses : Array String → Array String → Array String := setArrayKey "uses"
@@ -199,7 +228,9 @@ def sketchLead? (body : String) : Option (String × String) := Id.run do
   let lead := "*" ++ word ++ " (sketch).*"
   if word.isEmpty || !(first.startsWith lead) then return none
   let rest := trim (first.drop lead.length).copy
-  return some (word.toLower, joinBlocks #[#[rest], lines.extract 1 lines.size])
+  -- text on the lead-in's line opens the paragraph that follows it
+  return some (word.toLower,
+    joinBlocks #[(if rest.isEmpty then #[] else #[rest]) ++ lines.extract 1 lines.size])
 
 /-! ## The migration -/
 
@@ -286,7 +317,6 @@ def planMigration (root : System.FilePath) (facts : Option Facts) :
           sugar.filter fun t => valueD.contains t && !typeD.contains t
         else #[]
       | none => #[]
-    for t in toMove do rep := { rep with moved := rep.moved.push (o.id, t) }
     if !toMove.isEmpty then
       front := setUses front (sugar.filter (!toMove.contains ·))
     -- the proofs' files: new ones after any split off before, the first of
@@ -307,6 +337,7 @@ def planMigration (root : System.FilePath) (facts : Option Facts) :
     if taken then
       rep := { rep with clash := rep.clash.push o.source.file }
       continue
+    for t in toMove do rep := { rep with moved := rep.moved.push (o.id, t) }
     for k in [0 : cut.size] do
       let c := cut[k]!
       let pos := before + k + 1

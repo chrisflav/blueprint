@@ -111,13 +111,19 @@ def View.rep (v : View) (i : Nat) : Array Nat :=
 
 /-- What object `i` stands for in the quotient: an object attached to a single
 object (a proof) and with no `K`-parent of its own stands for that object, and
-so on down the chain; any other object stands for itself.  `DESIGN.md` §3. -/
+so on down the chain; any other object stands for itself, and so does one
+whose chain runs in a circle (a custom schema could allow that; `web/model.js`
+decides the same).  `DESIGN.md` §3. -/
 def anchor (b : Blueprint) (c : Collapse) (i : Nat) : Nat := Id.run do
   let mut j := i
+  let mut seen : Array Nat := #[i]
   for _ in [0 : b.objects.size] do
     if !c.parents[j]!.isEmpty then break
     match b.objects[j]!.attachedTo? >>= b.findIdx? with
-    | some k => if k == j then break else j := k
+    | some k =>
+      if seen.contains k then return i
+      seen := seen.push k
+      j := k
     | none => break
   return j
 
