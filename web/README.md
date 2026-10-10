@@ -125,6 +125,18 @@ lowercase index built once per snapshot. Three places use it:
 * the progress listing's search box, combined with its kind, status and
   "under" filters (`model.filterListing`).
 
+### Comments
+
+Every object page ends with a comment section, after the Stacks project's: a
+name, a comment in Markdown with LaTeX maths and `[label]` references, a
+preview, and the comments so far. They are kept by `comments-server.py`, which
+`blueprint serve` runs instead of a plain static server when `python3` is at
+hand: it serves the site and answers `GET`/`POST api/comments/<id>`, keeping
+one JSON file per object under `--comments` (default `<root>/comments`). Comment
+HTML is parsed in an inert document and cut down to the tags markdown produces
+before it is shown. Served without that server, the section says comments are
+unavailable. `blueprint site` leaves the script out of the published site.
+
 ### The document's pages
 
 The document is the reading order of DESIGN.md §6, numbered as a paper is
@@ -161,7 +173,17 @@ exactly one number.
 A proof (`DESIGN.md` §2.5) is set right after the statement it proves, as
 "*Proof.* … ∎", with the steps filed under it, and has no number of its own:
 a reference to it, its `?focus=` and its page are its statement's. The
-statement's object page shows its proofs the same way. In the graph a proof
+statement's object page shows its proofs the same way.
+
+Every proof is a `<details class="proof">` (`proofDisclosure` in `app.js`)
+whose summary is its "Proof." line, so one click folds or unfolds one proof,
+and *Fold proofs* / *Unfold proofs* (the document's controls line, and object
+pages with a proof) does all of them; the choice is kept in `localStorage`
+(`blueprint.proofs`). A blueprint not yet migrated to proof objects gets the
+same: `renderBody` turns a body's `## Proof` heading and what follows it, up
+to the next heading of the same level, into that disclosure.
+
+In the graph a proof
 is never drawn: it stands for its statement (`view.anchor` in `model.js`), so
 the `uses` written on it are arcs of the statement — declared while the
 statement is visible, derived for whatever it is collapsed into otherwise —
@@ -204,6 +226,7 @@ default order on the object page. The slug stays the link's tooltip.
 | `document.js` | the linear document, one page per entry of the collapse order |
 | `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |
 | `checks.js` | the lint report |
+| `comments-server.py` | the local server `blueprint serve` runs: the site plus the comments API (not copied into the site) |
 | `sample/blueprint.json` | a hand-written snapshot exercising every feature |
 | `sample/data/` | four fake historical snapshots and their index |
 | `test/dom-shim.mjs` | a minimal DOM, so the page modules can run under node |

@@ -120,6 +120,8 @@ export function buildModel(snapshot) {
     _searchHits: new Map(), // memoised results per query string
     _countable: null, // countable objects by title, for the progress listing
     _outlines: new Map(), // memoised document outlines, per collapse kind
+    _mixes: new Map(), // memoised status counts under each object, per collapse kind
+    _types: new Map(), // memoised `nodeType`, per object
   };
   return model;
 }
@@ -162,6 +164,80 @@ export function progressOf(model, kind, id) {
   const p = table[id];
   if (!p || typeof p.total !== 'number') return null;
   return { proved: p.proved || 0, total: p.total };
+}
+
+/** The statement words a node's type can be, with their short marks. */
+const TYPE_MARK = {
+  definition: 'def', theorem: 'thm', proposition: 'prop', lemma: 'lem',
+  corollary: 'cor', remark: 'rem',
+};
+
+/** The shape family of each statement word. */
+const TYPE_SHAPE = {
+  definition: 'definition', theorem: 'statement', proposition: 'statement',
+  lemma: 'statement', corollary: 'statement', remark: 'remark',
+};
+
+/**
+ * What a node is, for drawing: {word, mark, shape}.  A declaration's word is
+ * its kind.  A section that opens with a statement word ("*Proposition
+ * (sketch).*") is a sketch-level declaration and takes that word; any other
+ * section is a section.  `shape` is `definition`, `statement`, `remark`,
+ * `section`, or `other`.  Memoised on the model.
+ */
+export function nodeType(model, o) {
+  let t = model._types.get(o.id);
+  if (t) return t;
+  let word = o.kind;
+  if (o.kind === 'section') {
+    const m = /^\s*\*\s*(Definition|Theorem|Proposition|Lemma|Corollary|Remark)\b/.exec(o.body || '');
+    if (m) word = m[1].toLowerCase();
+  }
+  const shape = TYPE_SHAPE[word] || (word === 'section' ? 'section' : 'other');
+  t = { word, mark: TYPE_MARK[word] || word.slice(0, 3), shape };
+  model._types.set(o.id, t);
+  return t;
+}
+
+/** The order the segments of a status bar run in: done first. */
+export const STATUS_BAR_ORDER = ['proved', 'proved_with_axioms', 'stated', 'missing', 'absent'];
+
+/**
+ * `progressOf` plus `mix`, the count of each derived status, so a bar can say
+ * what the unproved part is.  Below an object, the counted nodes are the
+ * countable leaves (countable objects at or below it with no children in the
+ * order), as for `progressOf`.  A top-level object counts its direct children
+ * instead, each by its own status: its progress is that of the layer right
+ * under it, not of everything further down.  Memoised per kind.
+ */
+export function progressMixOf(model, kind, id) {
+  const p = progressOf(model, kind, id);
+  if (!p) return null;
+  let memo = model._mixes.get(kind);
+  if (!memo) model._mixes.set(kind, (memo = new Map()));
+  let out = memo.get(id);
+  if (!out) {
+    const order = collapseOrder(model, kind);
+    const mix = Object.create(null);
+    const tally = (x) => {
+      const s = statusOf(model, x) || 'absent';
+      mix[s] = (mix[s] || 0) + 1;
+    };
+    const children = childrenOf(order, id);
+    if (children.length && !ancestorsOf(order, id).length) {
+      children.forEach(tally);
+      out = { proved: mix.proved || 0, total: children.length, mix };
+    } else {
+      for (const x of [id, ...descendantsOf(order, id)]) {
+        const o = model.byId.get(x);
+        const k = o && model.kinds[o.kind];
+        if (k && k.countable && !childrenOf(order, x).length) tally(x);
+      }
+      out = { ...p, mix };
+    }
+    memo.set(id, out);
+  }
+  return out;
 }
 
 /** Everything whose boundary mentions `id`, as [{object, role}]. */

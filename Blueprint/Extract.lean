@@ -117,6 +117,11 @@ Everything below walks the graph iteratively and memoises, so a project with
 thousands of constants costs one pass over the reachable part.
 -/
 
+/-- The module a constant was declared in. -/
+def moduleOf? (env : Environment) (n : Name) : Option Name := do
+  let idx ← env.getModuleIdxFor? n
+  env.header.moduleNames[idx.toNat]?
+
 /-- Sort names and drop duplicates. -/
 def sortDedupNames (xs : Array Name) : Array Name :=
   let sorted := xs.qsort Name.lt
@@ -196,20 +201,38 @@ def axiomsOf (env : Environment) (g : DepGraph) : Std.HashMap Name (Array Name) 
   return m
 
 /-- For every reachable constant, the mapped constants below it, stopping at
-mapped constants: `below n = {n}` when `n` is mapped, and the union of the
-`below` of its direct dependencies otherwise. -/
-def mappedBelow (g : DepGraph) (mapped : Std.HashSet Name) :
+mapped constants and at the edge of the project: `below n = {n}` when `n` is
+mapped, the union of the `below` of its direct dependencies when `descend n`
+(`n` is the project's own), and `∅` otherwise.  A mapped constant of a
+dependency is still recorded when project code reaches it, but the walk never
+passes through a dependency's internals: a project declaration that uses
+`Finset.sum` does not depend on every mapped Mathlib lemma `Finset.sum` is
+built from. -/
+def mappedBelow (g : DepGraph) (mapped : Std.HashSet Name) (descend : Name → Bool) :
     Std.HashMap Name (Array Name) := Id.run do
   let mut m : Std.HashMap Name (Array Name) := {}
   for n in g.order do
     if mapped.contains n then
       m := m.insert n #[n]
-    else
+    else if descend n then
       let mut acc : Array Name := #[]
       for d in g.direct.getD n #[] do
         acc := acc ++ m.getD d #[]
       m := m.insert n (sortDedupNames acc)
+    else
+      m := m.insert n #[]
   return m
+
+/-- The module prefixes the dependency walk descends through: `descend` when
+it is given, else the first component of every imported module. -/
+def descendRoots (modules descend : Array Name) : Array Name :=
+  if descend.isEmpty then sortDedupNames (modules.map (·.getRoot)) else sortDedupNames descend
+
+/-- Whether a constant is declared in a module below one of `roots`. -/
+def inModules (env : Environment) (roots : Array Name) (n : Name) : Bool :=
+  match moduleOf? env n with
+  | some mod => roots.any (·.isPrefixOf mod)
+  | none => false
 
 /-! ## Reading one declaration -/
 
@@ -245,11 +268,6 @@ def kindKeyword : String → String
   | "definition" => "def"
   | _ => "def"
 
-/-- The module a constant was declared in. -/
-def moduleOf? (env : Environment) (n : Name) : Option Name := do
-  let idx ← env.getModuleIdxFor? n
-  env.header.moduleNames[idx.toNat]?
-
 /-- `A.B` becomes `A/B.lean`. -/
 def moduleRelPath (mod : Name) : String :=
   String.intercalate "/" (mod.components.map fun c => c.toString (escape := false)) ++ ".lean"
@@ -280,12 +298,13 @@ def runCore (env : Environment) (x : CoreM α) : IO α := do
   return a
 
 /-- Read the facts of every requested constant.  `names` is the full mapped
-set; the dependency walk stops at any of them. -/
-def declFactsOf (env : Environment) (names : Array Name) (srcPath : SearchPath)
+set; the dependency walk stops at any of them, and only passes through
+constants declared below one of the module prefixes `roots`. -/
+def declFactsOf (env : Environment) (names roots : Array Name) (srcPath : SearchPath)
     (cwd : System.FilePath) : IO (Array DeclFacts) := do
   let g := buildDepGraph env names
   let axs := axiomsOf env g
-  let below := mappedBelow g (Std.HashSet.ofArray names)
+  let below := mappedBelow g (Std.HashSet.ofArray names) (inModules env roots)
   -- resolve each module's source file once rather than once per constant
   let mut files : Std.HashMap Name String := {}
   for m in sortDedupNames (names.filterMap (moduleOf? env ·)) do
@@ -336,13 +355,15 @@ def declFactsOf (env : Environment) (names : Array Name) (srcPath : SearchPath)
     return out
 
 /-- Import `modules` and produce the facts for `names` together with every
-`@[blueprint]` tagged constant of the imported environment.
+`@[blueprint]` tagged constant of the imported environment.  `descend` are
+the module prefixes the dependency walk passes through (`descendRoots`).
 
 `loadExts := true` is what makes docstrings, declaration ranges and the
 `@[blueprint]` extension visible, and it needs the initialisers of the
 imported modules to run, hence `enableInitializersExecution` and
 `supportInterpreter = true` on the executable. -/
-unsafe def extractUnsafe (modules : Array Name) (names : Array String) : IO LeanFacts := do
+unsafe def extractUnsafe (modules : Array Name) (names : Array String)
+    (descend : Array Name := #[]) : IO LeanFacts := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
   let env ← importModules (modules.map fun m => { module := m }) ppOptions
@@ -354,12 +375,13 @@ unsafe def extractUnsafe (modules : Array Name) (names : Array String) : IO Lean
   let srcPath : SearchPath :=
     ((← IO.getEnv "LEAN_SRC_PATH").map System.SearchPath.parse |>.getD []) ++ [← IO.currentDir]
   let cwd ← IO.FS.realPath (← IO.currentDir)
-  let decls ← declFactsOf env allNames srcPath cwd
+  let decls ← declFactsOf env allNames (descendRoots modules descend) srcPath cwd
   return { modules := (sortDedup (modules.map fun m => m.toString (escape := false))),
            attrMap, decls }
 
 /-- `extractUnsafe`, wrapped so that the rest of the tool stays safe. -/
 @[implemented_by extractUnsafe]
-opaque extract (modules : Array Name) (names : Array String) : IO LeanFacts
+opaque extract (modules : Array Name) (names : Array String)
+    (descend : Array Name := #[]) : IO LeanFacts
 
 end Blueprint

@@ -155,7 +155,7 @@ const SLUG_TEST = new RegExp(SLUG_PATTERN);
  * left out, it is `pageReferences`, the numbering of the active collapse
  * order with links to object pages.
  */
-export function renderBody(target, text, known, refs) {
+export function renderBody(target, text, known, refs, { untrusted = false } = {}) {
   clear(target);
   const src = typeof text === 'string' ? text : '';
   if (!src.trim()) {
@@ -165,7 +165,9 @@ export function renderBody(target, text, known, refs) {
   if (window.marked && typeof window.marked.parse === 'function') {
     try {
       const { text, restore } = shieldMath(src);
-      target.innerHTML = restore(window.marked.parse(text, { gfm: true, breaks: false }));
+      const html = restore(window.marked.parse(text, { gfm: true, breaks: false }));
+      if (untrusted) setSanitizedHtml(target, html);
+      else target.innerHTML = html;
     } catch (e) {
       target.innerHTML = '<pre>' + escapeHtml(src) + '</pre>';
     }
@@ -174,7 +176,134 @@ export function renderBody(target, text, known, refs) {
   }
   renderMath(target);
   linkifySlugs(target, known, refs === undefined ? pageReferences : refs);
+  if (!untrusted) foldProofs(target);
   return target;
+}
+
+// ---------------------------------------------------------------------------
+// untrusted markdown (comments)
+// ---------------------------------------------------------------------------
+
+// What a comment may contain once marked has turned it into HTML: the tags
+// markdown itself produces, and of the attributes only a link's address.
+// Everything else (scripts, styles, event handlers, images, iframes) goes.
+const SAFE_TAGS = new Set(['P', 'BR', 'HR', 'EM', 'STRONG', 'DEL', 'CODE', 'PRE', 'BLOCKQUOTE',
+  'UL', 'OL', 'LI', 'A', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+  'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SPAN']);
+
+/**
+ * Put `html` into `target` keeping only `SAFE_TAGS`.  The HTML is parsed in an
+ * inert document, where nothing loads and no handler runs, and only what
+ * survives is moved over.  Without a DOMParser the source is shown as text.
+ */
+function setSanitizedHtml(target, html) {
+  if (typeof DOMParser !== 'function') {
+    target.textContent = html.replace(/<[^>]*>/g, '');
+    return;
+  }
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const clean = (node) => {
+    for (const c of [...node.childNodes]) {
+      if (c.nodeType === 3) continue;
+      if (c.nodeType !== 1 || !SAFE_TAGS.has(c.tagName)) {
+        // An unknown element keeps its text, never its markup.
+        if (c.nodeType === 1 && !['SCRIPT', 'STYLE'].includes(c.tagName)) {
+          node.replaceChild(doc.createTextNode(c.textContent), c);
+        } else {
+          node.removeChild(c);
+        }
+        continue;
+      }
+      for (const a of [...c.attributes]) {
+        const keep = c.tagName === 'A' && a.name === 'href' && /^(https?:|#|\/|\.)/i.test(a.value.trim());
+        if (!keep) c.removeAttribute(a.name);
+      }
+      if (c.tagName === 'A') c.setAttribute('rel', 'nofollow noopener');
+      clean(c);
+    }
+  };
+  clean(doc.body);
+  clear(target);
+  for (const c of [...doc.body.childNodes]) target.appendChild(document.importNode(c, true));
+}
+
+// ---------------------------------------------------------------------------
+// folding proofs
+// ---------------------------------------------------------------------------
+
+// A body's `## Proof` heading and everything after it, up to the next heading
+// of the same level or above, becomes a disclosure: the heading is its
+// summary, so a click on "Proof." folds or unfolds that one proof.  Whether
+// proofs start folded is the reader's choice, kept in localStorage and offered
+// by `proofToggle` on the pages that show proofs.
+const PROOFS_KEY = 'blueprint.proofs';
+let proofsFolded = readProofsFolded();
+
+function readProofsFolded() {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(PROOFS_KEY) === 'folded';
+  } catch (e) {
+    return false;
+  }
+}
+
+function isProofHeading(node) {
+  if (!node || node.nodeType !== 1 || !/^H[1-6]$/.test(node.tagName)) return false;
+  return /^proof\b/i.test(String(node.textContent || '').trim());
+}
+
+/**
+ * A proof as a disclosure: `head` is its summary, `body` what folds away, an
+ * end mark closes it.  Open or folded as the reader last chose.  The one shape
+ * for a proof object (`DESIGN.md` §2.5) and for a `## Proof` section still in
+ * a body.
+ */
+export function proofDisclosure(head, body) {
+  body.appendChild(el('div.proof-end', { 'aria-hidden': 'true' }, '\u220e'));
+  return el('details.proof', { open: !proofsFolded }, el('summary.proof-head', head), body);
+}
+
+/** Wrap every proof among the top-level blocks of a rendered body. */
+export function foldProofs(target) {
+  const blocks = [...target.childNodes];
+  for (let i = 0; i < blocks.length; i += 1) {
+    const h = blocks[i];
+    if (!isProofHeading(h)) continue;
+    const level = Number(h.tagName[1]);
+    const body = el('div.proof-body');
+    let j = i + 1;
+    for (; j < blocks.length; j += 1) {
+      const n = blocks[j];
+      if (n.nodeType === 1 && /^H[1-6]$/.test(n.tagName) && Number(n.tagName[1]) <= level) break;
+      body.appendChild(n);
+    }
+    target.insertBefore(proofDisclosure(h, body), blocks[j] || null);
+    i = j - 1;
+  }
+  return target;
+}
+
+/** Fold or unfold every proof, now and on every page from here on. */
+export function setProofsFolded(folded) {
+  proofsFolded = !!folded;
+  try { localStorage.setItem(PROOFS_KEY, proofsFolded ? 'folded' : 'shown'); } catch (e) { /* private mode */ }
+  for (const d of document.querySelectorAll('details.proof')) d.open = !proofsFolded;
+  for (const b of document.querySelectorAll('button.proof-toggle')) setToggleLabel(b);
+}
+
+function setToggleLabel(button) {
+  button.textContent = proofsFolded ? 'Unfold proofs' : 'Fold proofs';
+  button.setAttribute('aria-pressed', proofsFolded ? 'true' : 'false');
+  button.title = proofsFolded
+    ? 'Show every proof on the site; a single proof opens with a click on its heading'
+    : 'Hide every proof on the site, leaving the statements';
+}
+
+/** The button that folds and unfolds every proof. */
+export function proofToggle() {
+  const b = el('button.proof-toggle', { type: 'button', onclick: () => setProofsFolded(!proofsFolded) });
+  setToggleLabel(b);
+  return b;
 }
 
 /**
@@ -236,10 +365,11 @@ function namesReference(before) {
  * `\varpi_E^n` into emphasis and a display formula into two paragraphs
  * before KaTeX ever sees them.  So every maths span is lifted out first and
  * put back, HTML-escaped, after marked has run.  Recognised, in this order:
- * `$$…$$`, `\[…\]`, `\(…\)`, `$…$` (no newline inside, not followed by a
- * digit, so prices survive); fenced and inline code are left to marked.
+ * `$$…$$`, `\[…\]`, `\(…\)`, `$…$`; fenced and inline code are left
+ * to marked. Inline formulas may wrap across source lines and start with
+ * digits (e.g. `$0=[0]$`), just as they may in KaTeX auto-render.
  */
-const MATH_RE = /(```[\s\S]*?```|`[^`\n]*`)|(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s|\d)(?:[^$\n\\]|\\.)+?\$)/g;
+const MATH_RE = /(```[\s\S]*?```|`[^`\n]*`)|(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s)(?:[^$\\]|\\[\s\S])+?\$)/g;
 
 export function shieldMath(src) {
   const spans = [];
@@ -417,6 +547,17 @@ export function levelBadge(level) {
 export function progressBar(p, opts = {}) {
   if (!p || !p.total) return el('span.muted.small', '—');
   const pct = Math.round((100 * p.proved) / p.total);
+  if (p.mix) {
+    // One segment per status, as the progress page's status mix.
+    const parts = model.STATUS_BAR_ORDER.filter((s) => p.mix[s]);
+    const title = `${p.proved} of ${p.total} proved\n` +
+      parts.map((s) => `${model.STATUS_LABEL[s]}: ${p.mix[s]}`).join('\n');
+    return el('span.bar-row', { style: opts.style || {} },
+      el('span.bar.mix', { title }, ...parts.map((s) => el('span', {
+        style: { width: (100 * p.mix[s]) / p.total + '%', background: `var(--st-${s})` },
+      }))),
+      el('span.num', `${p.proved}/${p.total}`));
+  }
   return el('span.bar-row', { style: opts.style || {} },
     el('span.bar', { title: `${p.proved} of ${p.total} proved` }, el('span', { style: { width: pct + '%' } })),
     el('span.num', `${p.proved}/${p.total}`));
@@ -481,6 +622,8 @@ const app = {
   clear,
   renderBody,
   renderMath,
+  proofToggle,
+  proofDisclosure,
   katexOptions,
   linkifySlugs,
   objLink,

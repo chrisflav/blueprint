@@ -392,6 +392,8 @@ body { display: flex; flex-direction: column; }
   background: var(--st-proved);
   transition: width .25s ease;
 }
+.bar.mix { display: flex; }
+.bar.mix > span { flex: none; }
 .bar-row { display: flex; align-items: center; gap: .6rem; }
 .bar-row .bar { flex: 1; }
 .bar-row .num { font-family: var(--mono); font-size: .8rem; color: var(--muted); white-space: nowrap; }
@@ -690,12 +692,12 @@ ul.objlist .role {
 .doc-entry.dup { opacity: .75; }
 
 /* A proof follows its statement as in a paper: "Proof." run in, its prose,
-   and an end mark at the right. */
+   and an end mark at the right (`proofDisclosure` in app.js, which also
+   makes it fold; see "Proofs fold" below). */
 .proof { margin: .6rem 0 1rem; }
-.proof-head { margin: 0 0 .2rem; }
 a.proof-word { font-style: italic; font-weight: 400; color: inherit; }
 .proof-prose > p:first-child { margin-top: 0; }
-.proof-prose > p:last-child { margin-bottom: .3em; }
+.proof-body > :last-child { margin-bottom: .3em; }
 .proof-end { text-align: right; line-height: 1; color: var(--muted); }
 
 .step {
@@ -908,6 +910,24 @@ a.proof-word { font-style: italic; font-weight: 400; color: inherit; }
 }
 .gnode.compound .label { fill: var(--muted); font-size: 12.5px; }
 
+/* Node type by shape (graph.js, `nodeShape`): a remark's folded corner and a
+   section's inner frame take the outline colour of the status. */
+.gnode { --node-stroke: var(--border-strong); }
+.gnode.status-absent { --node-stroke: var(--st-absent); }
+.gnode.status-missing { --node-stroke: var(--st-missing); }
+.gnode.status-stated { --node-stroke: var(--st-stated); }
+.gnode.status-proved { --node-stroke: var(--st-proved); }
+.gnode.status-proved_with_axioms { --node-stroke: var(--st-proved_with_axioms); }
+.gnode.compound { --node-stroke: var(--border-strong); }
+.gnode .fold, .gnode .frame2 { fill: none; stroke: var(--node-stroke); stroke-width: 1; pointer-events: none; }
+.gnode.type-section > .shape { stroke-width: 2; }
+.gnode.compound.type-section > .shape { stroke-dasharray: none; }
+.legend .shp { width: 1.6em; height: .9em; flex: none; border: 1.5px solid currentColor; color: var(--muted); }
+.legend .shp.definition { border-radius: 1px; }
+.legend .shp.statement { border-radius: 999px; }
+.legend .shp.remark { border-radius: 0; clip-path: polygon(0 0, 70% 0, 100% 35%, 100% 100%, 0 100%); }
+.legend .shp.section { border-radius: 3px; border-width: 1px; box-shadow: inset 0 0 0 1.5px var(--panel), inset 0 0 0 2.5px currentColor; }
+
 /* A title with maths: KaTeX's HTML in a <foreignObject> (see graph.js,
    `measureMathTitles`).  The same font as the SVG labels, the colour from
    `color` since HTML has no `fill`, and every line on one line: the lines were
@@ -1008,3 +1028,74 @@ label.chk.st-chip.status-proved_with_axioms { border-color: var(--st-proved_with
 /* A grid track sized 1fr still has min-width:auto, so one wide formula or an
    unbreakable token pushes the prose column past the viewport. */
 .doc-layout > * { min-width: 0; }
+
+/* ===================================================== search, proofs, comments */
+
+.row > .spacer { flex: 1; }
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: .45em .6em;
+  width: 100%;
+  resize: vertical;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+button.primary:hover { background: var(--accent); filter: brightness(1.08); }
+
+/* The entry a focus link led to, or a proof's, marked briefly. */
+@keyframes doc-flash {
+  from { background: var(--accent-soft); }
+  to { background: transparent; }
+}
+.doc-entry.flash, .step.flash, .proof.flash { animation: doc-flash 1.6s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .doc-entry.flash, .step.flash, .proof.flash { animation: none; outline: 2px solid var(--accent-soft); }
+}
+
+/* Proofs fold under their "Proof." heading. */
+.doc-controls .proof-toggle { font-size: .82rem; padding: .15em .55em; margin-left: .4rem; }
+details.proof > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: .35em;
+}
+details.proof > summary::-webkit-details-marker { display: none; }
+details.proof > summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: .8em;
+  transition: transform .15s;
+}
+details.proof[open] > summary::before { transform: rotate(90deg); }
+details.proof > summary > :is(h1, h2, h3, h4, h5, h6) { margin: .9em 0 .25em; }
+details.proof:not([open]) > summary::after {
+  content: "(folded: click to show)";
+  color: var(--faint);
+  font-size: .82rem;
+}
+details.proof > summary:hover > :is(h1, h2, h3, h4, h5, h6) { color: var(--accent); }
+
+/* Comments, at the foot of an object's page. */
+.comments h3 { margin-top: 0; }
+.comment-list { display: flex; flex-direction: column; gap: .8rem; margin-bottom: 1.2rem; }
+.comment { border-left: 2px solid var(--border); padding-left: .8rem; }
+.comment-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem; margin-bottom: .2rem; }
+.comment-anchor { margin-left: auto; font-family: var(--mono); }
+.comment-form { border-top: 1px solid var(--border); padding-top: .9rem; }
+.comment-form h4 { margin: 0 0 .6rem; }
+.comment-field { display: flex; flex-direction: column; gap: .2rem; margin-bottom: .6rem; font-size: .88rem; }
+.comment-field > span { color: var(--muted); }
+.comment-field input[type="text"] { max-width: 22rem; }
+.comment-preview {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: .6em .8em;
+  margin-bottom: .6rem;
+  min-height: 7.5em;
+}
+.comment-preview[hidden], .comment-field textarea[hidden] { display: none; }

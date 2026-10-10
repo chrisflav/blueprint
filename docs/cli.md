@@ -198,7 +198,7 @@ Parses a snapshot and writes it out again.  Not part of `DESIGN.md` §8; it
 exists so that the reader (which `blueprint diff` uses for a side that is a
 file) is exercised, and `test.sh` uses it as a round trip test.
 
-### `blueprint extract [modules...] [--root d] [--snapshot f] [--names a,b] [--out f]`
+### `blueprint extract [modules...] [--root d] [--snapshot f] [--names a,b] [--descend a,b] [--out f]`
 
 Imports the named Lean modules and writes `lean-facts.json`
 (`docs/snapshot-format.md`).  Run it through Lake, so that the project's
@@ -245,9 +245,21 @@ it is why the example's declared edge `main-theorem -> compactness` comes
 out as `declared-not-actual`: Lean reaches `Topology.compactness` only
 through `Induction.keyProp`.
 
-`typeDeps` and `valueDeps` are the same walk started from the type alone and
-from the value (and, for an inductive type, its constructors) alone, so
-`deps` is their union.  They are what `check --lean` holds a statement's and
+The walk also **stops at the edge of the project**: it descends only through
+unmapped constants declared in the project's own modules.  A mapped constant
+of a dependency (say a blueprint object mapped to a Mathlib lemma) is still
+recorded when project code names it, or reaches it through project code, but
+the walk never passes through a dependency's internals.  Otherwise every
+project declaration whose proof touches Mathlib somewhere would pick up an
+edge to every mapped Mathlib lemma that Mathlib itself happens to use, and
+`check --lean` would report those as `actual-not-declared`.  The project's
+modules are those below `--descend a,b`, else `[lean] descend` of
+`blueprint.toml`, else the first component of every imported module
+(`WeilConjectures` for `WeilConjectures.Foo.Bar`).
+
+`typeDeps` and `valueDeps` are the same walk, stopping at the same places,
+started from the type alone and from the value (and, for an inductive type,
+its constructors) alone, so `deps` is their union.  They are what `check --lean` holds a statement's and
 its proof's `uses` against: `Induction.mainTheorem` needs `Induction.keyProp`
 only in its proof, `Induction.keyProp` needs `Topology.compactness` already
 to state it.
@@ -463,6 +475,7 @@ defaultCollapse = "refines"
 
 [lean]
 modules = ["MyProject"]             # what `blueprint extract` imports
+descend = ["MyProject", "MyLib"]    # optional: where the dependency walk goes
 
 [katex.macros]                      # handed to the website as project.katexMacros
 "\\Fq"   = "\\mathbf F_q"
@@ -498,6 +511,11 @@ a bare integer.
 `[lean] modules` is the module list `blueprint extract` falls back to when
 the command line names none.  It is optional; a string is accepted as well
 as an array.
+
+`[lean] descend` lists the module prefixes the dependency walk of `blueprint
+extract` passes through (see "Dependencies" above), for a project that counts
+a companion library as its own.  It defaults to the roots of the imported
+modules; `--descend` overrides it.
 
 `[katex.macros]` maps a macro name, with its backslash, to the definition
 KaTeX is to use for it.  Both are ordinary TOML strings, so every backslash

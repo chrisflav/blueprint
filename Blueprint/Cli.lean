@@ -20,8 +20,8 @@ open Lean (Json)
 /-- Options that take a value. -/
 def valueOptions : Array String :=
   #["--root", "-o", "--output", "--facts", "--view", "--collapse", "--expand", "--dir",
-    "--snapshot", "--names", "--out", "--limit", "--since", "--history", "--port",
-    "--site", "--sha", "--date", "--toml", "--report", "--macros"]
+    "--snapshot", "--names", "--descend", "--out", "--limit", "--since", "--history", "--port",
+    "--site", "--sha", "--date", "--toml", "--report", "--macros", "--comments"]
 
 /-- Positional arguments and options, parsed without any dependencies. -/
 structure Args where
@@ -142,17 +142,20 @@ def splitList (s : String) : Array String :=
   ((s.splitOn ",").toArray.map trim).filter (fun (x : String) => !x.isEmpty)
 
 /-- `blueprint extract [modules...] [--root d] [--snapshot f] [--names a,b]
-[--out f]`.
+[--descend a,b] [--out f]`.
 
 The constants to report on are the union of the `@[blueprint]` tags of the
 imported environment (the extractor finds those itself), `--names`, the
 `lean` attributes of a snapshot given with `--snapshot`, and the `lean`
-attributes of the blueprint sources under `--root`. -/
+attributes of the blueprint sources under `--root`.  `--descend`, else
+`[lean] descend` of the root's `blueprint.toml`, overrides the module prefixes
+the dependency walk passes through. -/
 def cmdExtract (args : Args) : IO UInt32 := do
   let rootArg := args.get? "--root"
   let mut modules : Array Lean.Name :=
     (args.positional.toList.drop 1).toArray.map String.toName
   let mut names : Array String := #[]
+  let mut descend : Array Lean.Name := #[]
   if let some s := args.get? "--names" then
     names := names ++ splitList s
   if let some p := args.get? "--snapshot" then
@@ -169,13 +172,16 @@ def cmdExtract (args : Args) : IO UInt32 := do
     let (project, schema) ← loadConfig root
     if modules.isEmpty then
       modules := project.leanModules.map String.toName
+    descend := project.leanDescend.map String.toName
     let parsed ← parseProject root project schema
     for o in parsed.objects do
       names := names ++ o.leanNames
   if modules.isEmpty then
     throw <| IO.userError
       "no modules to import: name them on the command line, or set '[lean] modules' in blueprint.toml"
-  let facts ← extract modules (sortDedup names)
+  if let some s := args.get? "--descend" then
+    descend := (splitList s).map String.toName
+  let facts ← extract modules (sortDedup names) descend
   let out : System.FilePath := match args.get? "--out" with
     | some p => p
     | none => match rootArg with
@@ -664,8 +670,11 @@ def serverCandidates (dir : System.FilePath) (port : Nat) :
     ("nix-shell", #["-p", "python3", "--run",
       s!"python3 -m http.server {port} --directory {dir}"])]
 
-/-- `blueprint serve [--port p] [--site dir]`: refresh the site, then serve
-it with whatever static file server is at hand. -/
+/-- `blueprint serve [--port p] [--site dir] [--comments dir]`: refresh the
+site, then serve it.  With `python3` at hand that is the comment server of
+`web/`, which also keeps the comments posted on object pages, one JSON file
+per object under `--comments` (default `<root>/comments`); otherwise it is
+whatever static file server is at hand, and the pages say comments are off. -/
 def cmdServe (root : System.FilePath) (args : Args) : IO UInt32 := do
   let dir : System.FilePath := (args.get? "--site").getD (root / "_site").toString
   let port := match (args.get? "--port").bind String.toNat? with
@@ -674,6 +683,12 @@ def cmdServe (root : System.FilePath) (args : Args) : IO UInt32 := do
   let rc ← assembleSite root dir args
   if rc != 0 then
     IO.eprintln "blueprint: the blueprint has errors; serving it anyway"
+  let script := (← findWebDir root) / commentServerScript
+  if (← script.pathExists) && (← haveExe "python3") then
+    let comments : System.FilePath := (args.get? "--comments").getD (root / "comments").toString
+    let child ← IO.Process.spawn { cmd := "python3", args := #[script.toString,
+      "--port", toString port, "--directory", dir.toString, "--comments", comments.toString] }
+    return ← child.wait
   let candidates := serverCandidates dir port
   for (cmd, cmdArgs) in candidates do
     if ← haveExe cmd then
@@ -771,7 +786,7 @@ commands:
   read   <blueprint.json> [-o out]         parse a snapshot and write it back
   extract [modules...] [--root d]          import the modules and write
           [--snapshot f] [--names a,b]     lean-facts.json
-          [--out f]
+          [--descend a,b] [--out f]
   import-latex <entry.tex> --out d         convert a leanblueprint LaTeX
           [--toml f] [--report f]          blueprint into Markdown sources
           [--macros f] [--clean]
@@ -783,7 +798,8 @@ commands:
                                            change since a revision
   site   [-o dir] [--facts f]              assemble the static website
          [--history dir]
-  serve  [--port p] [--site dir]           refresh the site and serve it
+  serve  [--port p] [--site dir]           refresh the site and serve it,
+         [--comments dir]                  keeping comments in dir
          [--history dir]
   history add <blueprint.json> --dir d     file a snapshot in the history
           [--sha s] [--date d]             directory and update its index
@@ -817,13 +833,13 @@ def run (argv : List String) : IO UInt32 := do
       | "view" => #["--collapse", "--expand", "--json"]
       | "new" => #["--dir"]
       | "read" => #["-o"]
-      | "extract" => #["--snapshot", "--names", "--out"]
+      | "extract" => #["--snapshot", "--names", "--descend", "--out"]
       | "import-latex" => #["--out", "--toml", "--report", "--macros", "--clean"]
       | "diff" => #["--json", "--no-fail"]
       | "log" => #["--limit"]
       | "progress" => #["--since", "--facts"]
       | "site" => #["-o", "--output", "--facts", "--history"]
-      | "serve" => #["--port", "--site", "--facts", "--history"]
+      | "serve" => #["--port", "--site", "--facts", "--history", "--comments"]
       | "history" => #["--dir", "--sha", "--date"]
       | "migrate" => #["--facts", "--dry-run"]
       | _ => #[])
