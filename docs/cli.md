@@ -470,8 +470,8 @@ migrated blueprint changes nothing.
 
 Left alone and listed: a section opening with a word the schema has no kind
 for, a statement with a proof in its body and an anonymous proof object
-already, and an object of another kind (a section, a remark) with a proof in
-its body.  The facts are `--facts`, else
+already, and an object of a kind a proof cannot attach to (a section, say)
+with a proof in its body.  The facts are `--facts`, else
 `<root>/lean-facts.json` when it is there; without them the command only
 splits.  `--dry-run` prints what it would do and writes nothing.
 

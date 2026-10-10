@@ -524,6 +524,20 @@ wants "$TMP/broken.facts.json" '"decls": {"Broken.nope": {"exists": false}}'
 
 # ------------------------------------------------------------ import-latex
 head_ "blueprint import-latex"
+# A proof after an environment read as a remark (here `example`) is a proof
+# file too.
+mkdir -p "$TMP/lirem"
+printf '\\chapter{One}\n\\section{Two}\n\\begin{example}\\label{ex:a}\nA claim.\n\\end{example}\n\\begin{proof}\nClear.\n\\end{proof}\n' \
+  > "$TMP/lirem/in.tex"
+"$BP" import-latex "$TMP/lirem/in.tex" --out "$TMP/lirem/out/blueprint" > /dev/null 2>&1
+if grep -q '^of = "ex-a"$' "$TMP/lirem/out/blueprint/one/two/ex-a.proof.md" \
+   && grep -q '^kind = "remark"$' "$TMP/lirem/out/blueprint/one/two/ex-a.md" \
+   && ! grep -q 'Proof' "$TMP/lirem/out/blueprint/one/two/ex-a.md"; then
+  ok "a proof after an example is a proof file of its own"
+else
+  bad "a proof after an example is a proof file of its own"; cat "$TMP/lirem/in.tex"; find "$TMP/lirem/out"
+fi
+
 rm -rf "$TMP/li"
 if "$BP" import-latex examples/latex-import/src/content.tex --out "$TMP/li/blueprint" \
      --toml "$TMP/li/blueprint.toml" --report "$TMP/li/report.txt" \
