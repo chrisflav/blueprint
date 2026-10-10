@@ -270,6 +270,17 @@ wants "$TMP/facts.names.json" \
   '"Nowhere.atAll": {"exists": false}' \
   '"Induction.keyProp": {"status": "proved",'
 
+# The dependency walk stays inside the project.  `Induction.Decomposable` is
+# `X.points ≤ 1`: it names `LE.le` itself, and reaches `Nat.le` only through
+# core's `instLENat`, so with both mapped its deps are `LE.le` alone.  Letting
+# the walk descend into `Init` as well brings `Nat.le` back.
+"$BP" extract BlueprintExamples --names "Induction.Decomposable,LE.le,Nat.le" \
+  --out "$TMP/facts.walk.json" > /dev/null 2>&1
+wants "$TMP/facts.walk.json" '"deps": ["LE.le"], "axioms": []'
+"$BP" extract BlueprintExamples --names "Induction.Decomposable,LE.le,Nat.le" \
+  --descend "BlueprintExamples,Init" --out "$TMP/facts.descend.json" > /dev/null 2>&1
+wants "$TMP/facts.descend.json" '"deps": ["LE.le", "Nat.le"], "axioms": []'
+
 # The attribute survives `import`: BlueprintExamples.Induction imports
 # BlueprintExamples.Topology, and the tags of the latter must still be there.
 "$BP" extract BlueprintExamples.Induction --out "$TMP/facts.import.json" > /dev/null 2>&1

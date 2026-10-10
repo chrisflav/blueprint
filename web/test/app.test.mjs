@@ -63,6 +63,27 @@ const app = (await import(path.join(webDir, 'app.js'))).default;
 await tick(20);
 
 const root = dom.document.getElementById('app');
+const { shieldMath } = await import(path.join(webDir, 'app.js'));
+
+await check('math shielding preserves wrapped formulas and numeric starts', () => {
+  for (const formula of [
+    '$\\gamma_{p,K}=c^{-1}\\circ\\gamma_{p,Rq^{!}K}\\circ\nLp^{*}(\\gamma_{q,K})(c)[2c]$',
+    '$0=[0]$',
+    '$2x_1*x_2 < 3$',
+    '$H^0(Z,Rz^{!}K)[2c]=\nH^{2c}_{z(Z)}(E,K)$',
+    '\\[A[n]\\]',
+  ]) {
+    const src = `Before ${formula}, see [def-compact].`;
+    const { text, restore } = shieldMath(src);
+    ok(!text.includes(formula), 'formula was not shielded');
+    ok(!text.includes('[2c]'), 'a shift escaped the math span');
+    eq(restore(text), `Before ${formula.replace(/</g, '&lt;')}, see [def-compact].`, 'round trip');
+    eq((text.match(/MATH\d+/g) || []).length, 1, 'one complete math span');
+  }
+  const code = '`$A[n]$`\n\n```tex\n$B[2]$\n```';
+  eq(shieldMath(code).text, code, 'code remains with Markdown');
+});
+
 const go = async (hash) => {
   global.location.hash = hash;
   global.window.dispatch('hashchange', {});

@@ -184,8 +184,14 @@ function legend(app) {
   });
   const swatch = (s, text) =>
     el('div.row', el('span', { class: 'sw status-' + s }), el('span', text));
+  const shape = (t, text) => el('div.row', el('span', { class: 'shp ' + t }), el('span', text));
   return el('div.legend',
-    el('b', 'lines'),
+    el('b', 'shapes'),
+    shape('definition', 'definition'),
+    shape('statement', 'theorem, proposition, lemma'),
+    shape('remark', 'remark'),
+    shape('section', 'section'),
+    el('b', { style: { marginTop: '.3em' } }, 'lines'),
     el('div.row', sample(line(), head(false)), 'declared + derived'),
     el('div.row', sample(line('hollow'), head(true)), 'declared, unwitnessed'),
     el('div.row', sample(line('dashed'), head(false)), 'derived, undeclared'),
@@ -636,7 +642,7 @@ export function buildElk(app, st, view, quot) {
     const o = m.byId.get(id);
     const compound = view.isExpanded(id);
     const title = M.titleOf(o);
-    const prog = M.progressOf(m, st.collapse, id);
+    const prog = M.progressMixOf(m, st.collapse, id);
     const node = {
       id,
       bp: {
@@ -1257,25 +1263,56 @@ function cssEscape(s) {
 
 // --- node shapes -----------------------------------------------------------
 
-const KIND_RX = { section: 4, theorem: 16, definition: 3, lemma: 10 };
+// Colour says the status, so the type is told by shape: a definition is a
+// sharp box, a theorem, proposition, lemma or corollary a stadium, a remark a
+// note with a folded corner, and a section a double frame.  A sketch-level
+// block (a section that opens with a statement word) is drawn as that
+// statement; see `M.nodeType`.
+const FOLD = 9;          // the folded corner of a remark
+const FRAME_GAP = 3;     // the gap between a section's two frames
+const STADIUM_R = 18;    // a statement's end radius: a full half-circle on a one-line
+                         // leaf, no deeper than LEAF_PAD into a taller one's title
+
+function nodeShape(svgEl, shape, w, h, compound) {
+  if (shape === 'remark') {
+    const f = Math.min(FOLD, w / 2, h / 2);
+    return [
+      svgEl('path', { class: 'shape', d: `M0,0 H${w - f} L${w},${f} V${h} H0 Z` }),
+      svgEl('path', { class: 'fold', d: `M${w - f},0 V${f} H${w}` }),
+    ];
+  }
+  if (shape === 'section') {
+    return [
+      svgEl('rect', { class: 'shape', x: 0, y: 0, width: w, height: h, rx: 5, ry: 5 }),
+      svgEl('rect', {
+        class: 'frame2', x: FRAME_GAP, y: FRAME_GAP,
+        width: Math.max(0, w - 2 * FRAME_GAP), height: Math.max(0, h - 2 * FRAME_GAP), rx: 3, ry: 3,
+      }),
+    ];
+  }
+  // A stadium's ends would swallow a container's title, so an open
+  // (compound) statement only rounds its corners well.
+  const rx = shape === 'definition' ? 1.5
+    : shape === 'statement' ? (compound ? 16 : Math.min(h / 2, STADIUM_R))
+      : 8;
+  return [svgEl('rect', { class: 'shape', x: 0, y: 0, width: w, height: h, rx, ry: rx })];
+}
 
 function drawNode(app, box, meta, st, view) {
   const { svgEl } = app;
   const m = app.model;
   const o = meta.object;
   const status = M.statusOf(m, o.id);
-  const rx = KIND_RX[o.kind] !== undefined ? KIND_RX[o.kind] : 8;
+  const type = M.nodeType(m, o);
   const g = svgEl('g', {
     class: 'gnode' + (meta.compound ? ' compound' : '') + ' kind-' + o.kind +
-      ' status-' + (status || 'none'),
+      ' type-' + type.shape + ' status-' + (status || 'none'),
     transform: `translate(${box.x},${box.y})`,
     'data-nid': box.node.id,
     'data-id': o.id,
     tabindex: 0,
   });
-  g.appendChild(svgEl('rect', {
-    class: 'shape', x: 0, y: 0, width: box.w, height: box.h, rx, ry: rx,
-  }));
+  for (const s of nodeShape(svgEl, type.shape, box.w, box.h, meta.compound)) g.appendChild(s);
 
   // The whole title, on the lines `buildElk` sized the node for: a section's
   // at the top left after the expander, a leaf's centred above its progress bar.
@@ -1308,15 +1345,29 @@ function drawNode(app, box, meta, st, view) {
   }
 
   g.appendChild(svgEl('text', {
-    class: 'kindmark', x: box.w - 6, y: 12, 'text-anchor': 'end',
-  }, o.kind.slice(0, 3)));
+    // Clear of a remark's folded corner and a statement's round end.
+    class: 'kindmark', y: 12, 'text-anchor': 'end',
+    x: box.w - (type.shape === 'remark' ? 6 + FOLD : type.shape === 'statement' && !meta.compound ? 11 : 6),
+  }, type.mark));
 
   const prog = meta.prog;
   if (prog && prog.total > 1 && !meta.compound) {
     const w = box.w - 24;
-    const frac = prog.total ? prog.proved / prog.total : 0;
     g.appendChild(svgEl('rect', { class: 'ptrack', x: 12, y: box.h - 14, width: w, height: 5, rx: 2.5 }));
-    g.appendChild(svgEl('rect', { class: 'pfill', x: 12, y: box.h - 14, width: Math.max(0, w * frac), height: 5, rx: 2.5 }));
+    if (prog.mix) {
+      // One segment per status, as the progress page's status mix.
+      let x = 12;
+      for (const s of M.STATUS_BAR_ORDER) {
+        const n = prog.mix[s];
+        if (!n) continue;
+        const sw = (w * n) / prog.total;
+        g.appendChild(svgEl('rect', { x, y: box.h - 14, width: sw, height: 5, style: `fill: var(--st-${s})` }));
+        x += sw;
+      }
+    } else {
+      const frac = prog.total ? prog.proved / prog.total : 0;
+      g.appendChild(svgEl('rect', { class: 'pfill', x: 12, y: box.h - 14, width: Math.max(0, w * frac), height: 5, rx: 2.5 }));
+    }
   }
   if (expandable) {
     g.appendChild(svgEl('text', { class: 'expander', x: 8, y: meta.compound ? 21 : (box.h - bar) / 2 + 4 },
@@ -1327,7 +1378,9 @@ function drawNode(app, box, meta, st, view) {
   // the source of such a title first.
   const title2 = (wrap.math ? M.titleOf(o) + '\n' : '') +
     `${o.id}\n${o.kind}` + (status ? `\nstatus: ${M.STATUS_LABEL[status]}` : '') +
-    (prog ? `\nprogress: ${prog.proved}/${prog.total}` : '');
+    (prog ? `\nprogress: ${prog.proved}/${prog.total}` : '') +
+    (prog && prog.mix ? M.STATUS_BAR_ORDER.filter((s) => prog.mix[s] && s !== 'proved')
+      .map((s) => `\n  ${M.STATUS_LABEL[s]}: ${prog.mix[s]}`).join('') : '');
   g.appendChild(svgEl('title', title2));
   wireNode(app, g, o.id, view);
   return g;
@@ -1696,7 +1749,7 @@ function renderSide(app, st, view, quot) {
   side.appendChild(el('div.meta', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status)));
   side.appendChild(el('div.obj-id', id));
 
-  const prog = M.progressOf(m, st.collapse, id);
+  const prog = M.progressMixOf(m, st.collapse, id);
   if (prog) {
     side.appendChild(el('section', el('h3', 'Progress (' + st.collapse + ')'), app.progressBar(prog)));
   }

@@ -38,6 +38,9 @@ def todayISO : IO String := do
 
 /-! ## Finding `web/` -/
 
+/-- The local server `blueprint serve` runs to keep comments, in `web/`. -/
+def commentServerScript : String := "comments-server.py"
+
 /-- Does this directory look like the website? -/
 def isWebDir (d : System.FilePath) : IO Bool := (d / "index.html").pathExists
 
@@ -96,8 +99,9 @@ def copyDir (src dst : System.FilePath) (exclude : Array String := #[]) : IO Nat
   copyTree 32 src dst exclude
 
 /-- What `blueprint site` leaves behind: the website is the deployed artefact,
-but its own fixtures and tests are not part of it. -/
-def siteExcludes : Array String := #["sample", "test", "README.md"]
+but its own fixtures and tests are not part of it, and neither is the comment
+server, which `blueprint serve` runs from `web/` itself. -/
+def siteExcludes : Array String := #["sample", "test", "README.md", commentServerScript]
 
 /-! ## The history index -/
 

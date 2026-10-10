@@ -258,6 +258,10 @@ structure Project where
   /-- Modules `blueprint extract` imports when the command line names none;
   `[lean] modules` in `blueprint.toml`. -/
   leanModules : Array String := #[]
+  /-- Module prefixes the dependency walk of `blueprint extract` descends
+  through; `[lean] descend` in `blueprint.toml`.  Empty means the roots of the
+  imported modules. -/
+  leanDescend : Array String := #[]
   /-- KaTeX macro definitions, `[katex.macros]` in `blueprint.toml`: the macro
   name with its backslash, and the definition KaTeX is to use for it.  Sorted
   by name; handed to the website as `project.katexMacros`. -/

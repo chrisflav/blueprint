@@ -48,6 +48,13 @@ const TOC_STRUCTURE_ONLY = 400;
 const DEFAULT_LEVELS = 1;
 // The choices offered by the depth control, besides "all".
 const LEVEL_CHOICES = [1, 2, 3];
+// The document's search box: how many results it lists, and how long it waits
+// for a pause in the typing.
+const SEARCH_RESULTS = 30;
+const SEARCH_DEBOUNCE_MS = 120;
+// What is in the search box, kept across pages: a result on another page
+// rebuilds the document there, and the reader's search should still be there.
+let searchQuery = '';
 
 // Guards the chunked append and the observer against a route change landing
 // mid-build.
@@ -160,7 +167,8 @@ export function render(root, app) {
     ...[...new Set([...LEVEL_CHOICES, levels])].filter(Number.isFinite).sort((a, b) => a - b)
       .map((n) => el('option', { value: String(n), selected: n === levels }, String(n))),
     el('option', { value: 'all', selected: levels === Infinity }, 'all')),
-    levels === 1 ? ' level.' : ' levels.'));
+    levels === 1 ? ' level.' : ' levels.',
+    ' ', app.proofToggle()));
   const pagerTop = pager(app, outline, pageEntry, href);
   if (pagerTop) body.appendChild(pagerTop);
   body.appendChild(flow);
@@ -190,7 +198,7 @@ export function render(root, app) {
     const anchor = entry.duplicate ? null : 'doc-' + cssId(o.id);
     const hLevel = isHead ? 1 : Math.min(5, 2 + rel);
     const status = M.statusOf(m, o.id);
-    const prog = M.progressOf(m, kind, o.id);
+    const prog = M.progressMixOf(m, kind, o.id);
 
     // Sections are headings; everything else is a numbered statement in the
     // way a paper sets one: "Definition 1.2.14 (Title)." with the kind as the
@@ -270,12 +278,19 @@ export function render(root, app) {
     }
   };
 
-  const eager = Math.min(entries.length, FIRST_CHUNK);
-  for (let i = 0; i < eager; i += 1) build(entries[i]);
-  if (tocList.firstChild) {
+  // The search box heads the left column, above the contents.
+  toc.appendChild(documentSearch(app, outline, pageId, levels, href));
+  let tocShown = false;
+  const showToc = () => {
+    if (tocShown || !tocList.firstChild) return;
+    tocShown = true;
     toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
     toc.appendChild(tocList);
-  }
+  };
+
+  const eager = Math.min(entries.length, FIRST_CHUNK);
+  for (let i = 0; i < eager; i += 1) build(entries[i]);
+  showToc();
 
   // Scrolling to a focused section has to wait until that section has been
   // built.  Sections are appended in order, so rather than building the whole
@@ -288,6 +303,7 @@ export function render(root, app) {
     if (!target) return;
     wanted = null;
     pin(target);
+    flash(target);
     requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
   };
   tryScroll();
@@ -302,10 +318,7 @@ export function render(root, app) {
       if (token !== buildToken) return; // the reader went somewhere else
       const to = Math.min(entries.length, from + (wanted ? CHUNK * 4 : CHUNK));
       for (let i = from; i < to; i += 1) build(entries[i]);
-      if (!toc.firstChild && tocList.firstChild) {
-        toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
-        toc.appendChild(tocList);
-      }
+      showToc();
       tryScroll();
       if (to < entries.length) schedule(() => step(to));
       else finish();
@@ -314,6 +327,139 @@ export function render(root, app) {
   } else {
     finish();
   }
+}
+
+/**
+ * The document's search box: finds the statements, sections and steps of the
+ * document by id, title, Lean declaration name or prose (`model.search`), and
+ * lists them by their numbers in this order, "Lemma 2.3.4 (Title)".  A result
+ * leads to where the entry is written out: on this page it scrolls there,
+ * otherwise it opens the entry's page scrolled to it.  Arrows move through the
+ * results, Enter opens the highlighted one, Escape clears the box.
+ */
+function documentSearch(app, outline, pageId, levels, href) {
+  const { el, clear } = app;
+  const m = app.model;
+  const input = el('input', {
+    type: 'search', placeholder: 'Search the document', autocomplete: 'off', spellcheck: 'false',
+    'aria-label': 'Search the document by title, label, Lean declaration or text',
+  });
+  input.value = searchQuery;
+  const list = el('div.doc-search-results', { role: 'listbox' });
+  const foot = el('div.doc-search-foot.muted.small');
+  const box = el('div.doc-search', { role: 'search' }, input, foot, list);
+  let timer = null;
+  let items = [];
+  let active = -1;
+
+  const inDocument = (o) => outline.byId.has(o.id) || outline.stepOf.has(o.id);
+
+  const setActive = (i) => {
+    active = i;
+    items.forEach((a, k) => a.classList.toggle('active', k === i));
+    if (i >= 0 && items[i] && typeof items[i].scrollIntoView === 'function') {
+      items[i].scrollIntoView({ block: 'nearest' });
+    }
+  };
+
+  const open = (id, ev) => {
+    // A result written out on this page is scrolled to, not rebuilt around.
+    if (M.documentPageShows(outline, pageId, levels, id)) {
+      const target = document.getElementById('doc-' + cssId(id));
+      if (target) {
+        if (ev) ev.preventDefault();
+        history.replaceState(null, '', href(pageId, id));
+        target.scrollIntoView({ block: 'start' });
+        pin(target);
+        flash(target);
+        return;
+      }
+    }
+    if (!ev) location.hash = href(M.documentPageOf(outline, id), id);
+  };
+
+  const run = () => {
+    clearTimeout(timer);
+    timer = null;
+    searchQuery = input.value;
+    clear(list);
+    items = [];
+    active = -1;
+    const q = input.value.trim().toLowerCase();
+    if (!q) {
+      foot.textContent = '';
+      return;
+    }
+    const hits = M.search(m, q, Infinity, { accept: inDocument });
+    for (const { object: o } of hits.slice(0, SEARCH_RESULTS)) {
+      const entry = outline.byId.get(o.id);
+      const host = entry ? null : outline.byId.get(outline.stepOf.get(o.id));
+      const status = M.statusOf(m, o.id);
+      const lean = M.leanNamesOf(o).find((n) => n.toLowerCase().includes(q));
+      const a = el('a.doc-search-item', {
+        role: 'option',
+        href: href(M.documentPageOf(outline, o.id), o.id),
+        onclick: (ev) => {
+          if (ev.button || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+          open(o.id, ev);
+        },
+      },
+      el('span.doc-search-title',
+        entry
+          ? [o.kind === 'section' ? null : el('b', M.kindWord(o.kind), ' '), el('span.num', entry.number), ' ']
+          : [el('b', o.kind, ' '), el('span.muted', 'in ', host ? host.number : '?', ' ')],
+        M.titleOf(o)),
+      el('span.doc-search-meta',
+        status === null ? null : app.statusBadge(status),
+        lean ? el('code', lean) : el('span.doc-search-id', o.id)));
+      items.push(a);
+      list.appendChild(a);
+    }
+    foot.textContent = !hits.length ? 'Nothing in the document matches.'
+      : hits.length > items.length ? `${items.length} of ${hits.length} matches; keep typing to narrow them down.`
+        : `${hits.length} ${hits.length === 1 ? 'match' : 'matches'}.`;
+    app.renderMath(list); // titles carry maths
+  };
+
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(run, SEARCH_DEBOUNCE_MS);
+  });
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (timer) run();
+      if (!items.length) return;
+      const step = ev.key === 'ArrowDown' ? 1 : -1;
+      setActive((active + step + items.length) % items.length);
+    } else if (ev.key === 'Enter') {
+      ev.preventDefault();
+      if (timer) run();
+      const a = items[active >= 0 ? active : 0];
+      if (a) open(hitId(a), null);
+    } else if (ev.key === 'Escape') {
+      ev.preventDefault();
+      input.value = '';
+      run();
+    }
+  });
+  if (searchQuery.trim()) run();
+  return box;
+}
+
+/** The object id a search result links to, read back from its `focus=`. */
+function hitId(a) {
+  const h = a.getAttribute('href') || '';
+  const q = new URLSearchParams(h.slice(h.indexOf('?') + 1));
+  return q.get('focus');
+}
+
+/** Mark the entry a search result led to, briefly. */
+function flash(target) {
+  target.classList.remove('flash');
+  // Restart the animation when the same entry is picked twice in a row.
+  void target.offsetWidth;
+  target.classList.add('flash');
 }
 
 /** `?collapse=…&depth=…&focus=…` for a document route. */

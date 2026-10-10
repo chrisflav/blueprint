@@ -125,6 +125,34 @@ lowercase index built once per snapshot. Three places use it:
 * the progress listing's search box, combined with its kind, status and
   "under" filters (`model.filterListing`).
 
+The document page has a search box of its own at the head of its left column,
+over the statements, sections and steps of the document only: results read by
+their numbers in the active order ("Lemma 1.18.2 Closed image…") with the
+matching Lean name, and lead to where the entry is written out (scrolling there
+on the same page, opening its page otherwise). The query is kept from page to
+page.
+
+### Proofs
+
+`renderBody` turns a body's `## Proof` heading and what follows it, up to the
+next heading of the same level, into a `<details class="proof">` whose summary
+is the heading, so one click folds or unfolds one proof. *Fold proofs* /
+*Unfold proofs* (the document's controls line, and object pages with a proof)
+does all of them, and the choice is kept in `localStorage`
+(`blueprint.proofs`).
+
+### Comments
+
+Every object page ends with a comment section, after the Stacks project's: a
+name, a comment in Markdown with LaTeX maths and `[label]` references, a
+preview, and the comments so far. They are kept by `comments-server.py`, which
+`blueprint serve` runs instead of a plain static server when `python3` is at
+hand: it serves the site and answers `GET`/`POST api/comments/<id>`, keeping
+one JSON file per object under `--comments` (default `<root>/comments`). Comment
+HTML is parsed in an inert document and cut down to the tags markdown produces
+before it is shown. Served without that server, the section says comments are
+unavailable. `blueprint site` leaves the script out of the published site.
+
 ### The document's pages
 
 The document is the reading order of DESIGN.md §6, numbered as a paper is
@@ -193,6 +221,7 @@ default order on the object page. The slug stays the link's tooltip.
 | `document.js` | the linear document, one page per entry of the collapse order |
 | `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |
 | `checks.js` | the lint report |
+| `comments-server.py` | the local server `blueprint serve` runs: the site plus the comments API (not copied into the site) |
 | `sample/blueprint.json` | a hand-written snapshot exercising every feature |
 | `sample/data/` | four fake historical snapshots and their index |
 | `test/dom-shim.mjs` | a minimal DOM, so the page modules can run under node |
