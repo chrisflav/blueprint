@@ -40,6 +40,10 @@ def mkBinaryKind (name : String) (constraints : Array String := #[])
 def defaultEdgeKindNames : Array String :=
   #["uses", "implies", "refines", "instance_of", "generalises", "equivalent"]
 
+/-- Kinds a proof may be the proof of. -/
+def defaultProvableKindNames : Array String :=
+  #["corollary", "definition", "lemma", "proposition", "theorem"]
+
 /-- The schema that ships with the tool. -/
 def defaultSchema : Schema where
   defaultCollapse := some "refines"
@@ -49,6 +53,8 @@ def defaultSchema : Schema where
       mkNodeKind "definition" true "#4a7",
       mkNodeKind "theorem" true "#47a",
       mkNodeKind "lemma" true "#57b",
+      mkNodeKind "proposition" true "#46a",
+      mkNodeKind "corollary" true "#68b",
       mkNodeKind "concept" false "#aa7",
       mkNodeKind "remark" false "#999",
       -- `src` uses `tgt`, drawn from the dependency to its user
@@ -60,6 +66,11 @@ def defaultSchema : Schema where
       mkBinaryKind "generalises" (color := some "#77a"),
       mkBinaryKind "equivalent" (color := some "#7a7"),
       mkBinaryKind "implies" (color := some "#a77"),
+      -- attached to the statement it proves; its own `uses` are what the
+      -- proof needs, the statement's what stating it needs
+      { name := "proof"
+        roles := #[{ name := "of", card := cardOne, kinds := defaultProvableKindNames }]
+        attrs := defaultEdgeAttrs, sugar := false, color := some "#57b" },
       { name := "commutes"
         roles := #[{ name := "edges", card := { min := 2, max := none },
                      kinds := defaultEdgeKindNames }]
@@ -188,6 +199,11 @@ def decodeConfig (t : TValue) (defaultName : String) :
     | some v => match v.asStrings? with
       | some ss => pure ss
       | none => throw "'[lean] modules' must be a string or an array of strings"
+  let leanDescend ← match t.get? "lean" |>.bind (·.get? "descend") with
+    | none => pure #[]
+    | some v => match v.asStrings? with
+      | some ss => pure ss
+      | none => throw "'[lean] descend' must be a string or an array of strings"
   let katexMacros ← match (t.get? "katex").bind (·.get? "macros") with
     | none => pure #[]
     | some (.table xs) =>
@@ -197,7 +213,7 @@ def decodeConfig (t : TValue) (defaultName : String) :
         | none => throw s!"'[katex.macros] {k}' must be a string, got a {v.typeName}"
       pure (ms.qsort (fun a b => a.1 < b.1))
     | some v => throw s!"'[katex.macros]' must be a table, got a {v.typeName}"
-  let project : Project := { name, title, dir, leanModules, katexMacros }
+  let project : Project := { name, title, dir, leanModules, leanDescend, katexMacros }
   let mut schema := defaultSchema
   if let some v := lookup "defaultCollapse" then
     match v.asString? with

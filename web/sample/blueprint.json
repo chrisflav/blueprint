@@ -99,6 +99,15 @@
         "collapse": false,
         "countable": false,
         "sugar": false
+      },
+      "proof": {
+        "boundary": { "of": { "min": 1, "max": 1 } },
+        "kinds": { "of": ["definition", "lemma", "theorem"] },
+        "attrs": ["title"],
+        "constraints": [],
+        "collapse": false,
+        "countable": false,
+        "sugar": false
       }
     }
   },
@@ -766,6 +775,27 @@
       "attrs": { "title": "the two routes to compactness agree" },
       "body": "A hyperedge over three `uses` edges: Heine–Borel's direct use of [def-compact] is the composite of its use of [thm-tychonoff] with Tychonoff's own use of [def-compact]. Hyperedges are drawn as junction dots with one spoke per end.",
       "source": { "file": "blueprint/applications/commutes-heine-borel.md", "anonymous": false },
+      "depth": 2
+    },
+    {
+      "id": "proof/thm-heine-borel",
+      "kind": "proof",
+      "boundary": [{ "role": "of", "id": "thm-heine-borel" }],
+      "attrs": {},
+      "body": "A closed and bounded set sits inside a product of closed intervals, which is compact by [thm-tychonoff]; a closed subset of a compact space is compact by [lem-finite-subcover].",
+      "source": { "file": "blueprint/applications/thm-heine-borel.proof.md", "anonymous": false },
+      "depth": 1
+    },
+    {
+      "id": "uses/proof~thm-heine-borel/lem-finite-subcover",
+      "kind": "uses",
+      "boundary": [
+        { "role": "src", "id": "proof/thm-heine-borel" },
+        { "role": "tgt", "id": "lem-finite-subcover" }
+      ],
+      "attrs": {},
+      "body": "",
+      "source": { "file": "blueprint/applications/thm-heine-borel.proof.md", "anonymous": true },
       "depth": 2
     }
   ],

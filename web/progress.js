@@ -80,51 +80,17 @@ function sectionTable(app, kind) {
   if (!roots.length) return el('p.muted', 'No object has children in this order.');
 
   const rows = roots.map((o) => {
-    const p = M.progressOf(m, kind, o.id);
-    const leaves = [o.id, ...M.descendantsOf(order, o.id)];
-    const counts = tally(m, leaves);
+    const p = M.progressMixOf(m, kind, o.id);
     return el('tr',
       el('td', app.objLink(m, o.id), ' ', app.kindBadge(o.kind)),
-      el('td', { style: { minWidth: '11rem' } }, p ? app.progressBar(p) : el('span.muted', '—')),
-      el('td.nowrap', String(leaves.length - 1)),
-      el('td', miniStack(app, counts)));
+      el('td', { style: { minWidth: '14rem' } }, p ? app.progressBar(p) : el('span.muted', '—')),
+      el('td.nowrap', String(M.descendantsOf(order, o.id).length)));
   });
 
   return el('div.table-wrap', el('table.grid',
     el('thead', el('tr',
-      el('th', 'Object'), el('th', 'Progress'), el('th', 'Below'), el('th', 'Status mix'))),
+      el('th', 'Object'), el('th', 'Progress'), el('th', 'Below'))),
     el('tbody', ...rows)));
-}
-
-function tally(m, ids) {
-  const counts = Object.create(null);
-  let total = 0;
-  for (const id of ids) {
-    const o = m.byId.get(id);
-    const k = o && m.kinds[o.kind];
-    if (!k || !k.countable) continue;
-    const s = M.statusOf(m, id) || 'absent';
-    counts[s] = (counts[s] || 0) + 1;
-    total += 1;
-  }
-  counts.__total = total;
-  return counts;
-}
-
-function miniStack(app, counts) {
-  const { el } = app;
-  const total = counts.__total || 0;
-  if (!total) return el('span.muted', '—');
-  const bar = el('div.stackbar', { style: { width: '9rem', height: '10px' } });
-  for (const s of ['proved', 'proved_with_axioms', 'stated', 'missing', 'absent']) {
-    const n = counts[s] || 0;
-    if (!n) continue;
-    bar.appendChild(el('span', {
-      style: { width: (100 * n) / total + '%', background: `var(--st-${s})` },
-      title: `${M.STATUS_LABEL[s]}: ${n}`,
-    }));
-  }
-  return bar;
 }
 
 // A few thousand rows of badges and progress bars is a slow page and an
@@ -232,7 +198,7 @@ function objectTable(app, kind) {
   // --- the table ------------------------------------------------------------
   const row = (o) => {
     const s = M.statusOf(m, o.id);
-    const p = M.progressOf(m, kind, o.id);
+    const p = M.progressMixOf(m, kind, o.id);
     const chains = M.ancestorChains(order, o.id);
     const where = chains.length && chains[0].length ? chains[0][chains[0].length - 1] : null;
     return el('tr',

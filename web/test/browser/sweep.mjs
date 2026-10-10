@@ -1279,6 +1279,31 @@ async function openObject(d, id) {
 async function objectChecks(d, f) {
   const known = f.m.byId;
 
+  await check(d, 'object/math-square-brackets', async () => {
+    // A wrapped inline formula from sk-prop-an used to reach Markdown
+    // unprotected; its [2c] shift then became a broken blueprint reference.
+    const formulas = [
+      '\\gamma_{p,K}=c^{-1}\\circ\\gamma_{p,Rq^{!}K}\\circ\nLp^{*}(\\gamma_{q,K})(c)[2c]',
+      '0=[0]',
+      '2x_1*x_2 < 3',
+    ];
+    const src = formulas.map((s) => '$' + s + '$').join(', followed by ') + ', see [math-ref].';
+    const r = await d.js(`return import('./app.js').then(function (app) {
+      var target = document.createElement('div');
+      app.renderBody(target, ${j(src)}, new Set(['math-ref']), null);
+      return {
+        formulas: Array.from(target.querySelectorAll('annotation[encoding="application/x-tex"]'), n => n.textContent),
+        errors: target.querySelectorAll('.katex-error').length,
+        links: Array.from(target.querySelectorAll('a.objlink'), n => n.textContent),
+        broken: target.querySelectorAll('a.broken').length
+      };
+    });`);
+    return {
+      ok: j(r.formulas) === j(formulas) && r.errors === 0 && r.broken === 0 && j(r.links) === j(['math-ref']),
+      evidence: j(r),
+    };
+  });
+
   const one = async (label, id, extra) => {
     await check(d, `object/${label}`, async () => {
       if (!id) return { skip: true, evidence: 'no such fixture in this snapshot' };

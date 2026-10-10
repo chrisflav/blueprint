@@ -2,7 +2,9 @@
  "modules": ["BlueprintExamples"],
  "decls":
  {"Topology.dim":
-  {"status": "proved",
+  {"valueDeps": [],
+   "typeDeps": [],
+   "status": "proved",
    "signature": "def Topology.dim (X : Topology.Space) : Nat",
    "range":
    {"startLine": 25, "file": "BlueprintExamples/Topology.lean", "endLine": 27},
@@ -13,7 +15,9 @@
    "deps": [],
    "axioms": []},
   "Topology.compactnessLemma":
-  {"status": "proved_with_axioms",
+  {"valueDeps": ["Topology.compactness", "Topology.dim"],
+   "typeDeps": ["Topology.compactness", "Topology.dim"],
+   "status": "proved_with_axioms",
    "signature":
    "theorem Topology.compactnessLemma (X : Topology.Space) (h : Topology.compactness X) : Topology.dim X ≤ 1",
    "range":
@@ -25,7 +29,9 @@
    "deps": ["Topology.compactness", "Topology.dim"],
    "axioms": ["Topology.coverChoice"]},
   "Topology.compactness":
-  {"status": "proved",
+  {"valueDeps": [],
+   "typeDeps": [],
+   "status": "proved",
    "signature": "def Topology.compactness (X : Topology.Space) : Prop",
    "range":
    {"startLine": 30, "file": "BlueprintExamples/Topology.lean", "endLine": 31},
@@ -36,7 +42,9 @@
    "deps": [],
    "axioms": []},
   "Induction.mainTheorem":
-  {"status": "stated",
+  {"valueDeps": ["Induction.keyProp"],
+   "typeDeps": [],
+   "status": "stated",
    "signature":
    "theorem Induction.mainTheorem (X : Topology.Space) : Induction.Decomposable X",
    "range":
@@ -48,7 +56,9 @@
    "deps": ["Induction.keyProp"],
    "axioms": ["sorryAx"]},
   "Induction.keyProp":
-  {"status": "proved",
+  {"valueDeps": ["Topology.compactness"],
+   "typeDeps": ["Topology.compactness"],
+   "status": "proved",
    "signature":
    "theorem Induction.keyProp (X : Topology.Space) (h : Topology.compactness X) : Induction.Decomposable X",
    "range":

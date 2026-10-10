@@ -21,8 +21,16 @@ exit status is `1` when any *error* level check fires, `0` otherwise.
 Parses the sources and runs every check of `docs/snapshot-format.md`.
 
 * `--lean` also reads `<root>/lean-facts.json` and reports `missing-lean`,
-  `declared-not-actual` and `actual-not-declared`.  It is an error if the
-  file is not there.
+  `declared-not-actual`, `actual-not-declared`, `use-belongs-to-proof` and
+  `use-belongs-to-statement`.  It is an error if the file is not there.
+  For a statement with a proof, its `uses` are held against the
+  dependencies of the declaration's type and the proof's against those of
+  its value; a use declared on the wrong one of the two is reported as
+  `use-belongs-to-proof` (on the statement, needed only by the proof) or
+  `use-belongs-to-statement` (on the proof, needed to state it), both info.
+  Without a proof, or with facts from before `typeDeps` and `valueDeps`,
+  everything declared on the object and its proofs is held against
+  `deps`.
 * `--view K` computes the view consistency lints (`undeclared-edge`,
   `unwitnessed-edge`) for the collapse kind `K` instead of the schema's
   `defaultCollapse`.
@@ -106,7 +114,9 @@ in the corpus declares.  They map to kinds:
 
 | environment | kind |
 |---|---|
-| `theorem`, `proposition`, `corollary`, `conditionaltheorem`, … | `theorem` |
+| `theorem`, `conditionaltheorem`, `conjecture`, `claim`, … | `theorem` |
+| `proposition` | `proposition` |
+| `corollary` | `corollary` |
 | `lemma` | `lemma` |
 | `definition`, `construction`, `notation`, `convention` | `definition` |
 | `remark`, `example`, `warning`, `openproblem`, … | `remark` |
@@ -118,17 +128,21 @@ an environment without a label gets `<section-id>--<env>-<n>`, `n` counting
 that environment within that section, and is counted in the report.
 
 **Annotations.**  `\lean{a, b}` becomes the `lean` attribute, split on commas
-and trimmed, and may be wrapped over several lines.  `\uses{a,b}` in the
-statement and in a `proof` environment that directly follows are merged,
+and trimmed, and may be wrapped over several lines.  `\uses{a,b}` is
 deduplicated, resolved through the label map and written as the `uses` sugar
-key; the proof itself becomes a `## Proof` section of the same object's body,
-not an object of its own.  `\leanok`, `\notready` and `\mathlibok` are
+key.  A `proof` environment that directly follows a definition, lemma or
+theorem becomes a proof object of its own, `<id>.proof.md` next to the
+statement (`DESIGN.md` §2.5), with the `\uses` written in the proof as its
+`uses`, less those the statement already declares.  A proof of any other
+kind of environment stays a `## Proof` section of the statement's body, its
+`\uses` merged with the statement's.  `\leanok`, `\notready` and `\mathlibok` are
 dropped: derived status comes from Lean in this tool, never from the text.
 `\discussion{n}` becomes the tag `discussion:n`.
 
 **Unresolved dependencies.**  A `\uses` target that names no label would be a
 `dangling-ref` error, so it never becomes an edge.  It is listed at the end
-of the object's body after `Unresolved dependencies:` and counted in the
+of the body it was written in, statement or proof, after `Unresolved
+dependencies:` and counted in the
 report, with the object that referred to it.
 
 **Bodies.**  Maths is copied out untouched: `$…$`, `$$…$$`, `\(…\)` and
@@ -186,7 +200,7 @@ Parses a snapshot and writes it out again.  Not part of `DESIGN.md` §8; it
 exists so that the reader (which `blueprint diff` uses for a side that is a
 file) is exercised, and `test.sh` uses it as a round trip test.
 
-### `blueprint extract [modules...] [--root d] [--snapshot f] [--names a,b] [--out f]`
+### `blueprint extract [modules...] [--root d] [--snapshot f] [--names a,b] [--descend a,b] [--out f]`
 
 Imports the named Lean modules and writes `lean-facts.json`
 (`docs/snapshot-format.md`).  Run it through Lake, so that the project's
@@ -232,6 +246,25 @@ So if `a` uses `b` uses `c` and all three are mapped, `deps a = [b]`, not
 it is why the example's declared edge `main-theorem -> compactness` comes
 out as `declared-not-actual`: Lean reaches `Topology.compactness` only
 through `Induction.keyProp`.
+
+The walk also **stops at the edge of the project**: it descends only through
+unmapped constants declared in the project's own modules.  A mapped constant
+of a dependency (say a blueprint object mapped to a Mathlib lemma) is still
+recorded when project code names it, or reaches it through project code, but
+the walk never passes through a dependency's internals.  Otherwise every
+project declaration whose proof touches Mathlib somewhere would pick up an
+edge to every mapped Mathlib lemma that Mathlib itself happens to use, and
+`check --lean` would report those as `actual-not-declared`.  The project's
+modules are those below `--descend a,b`, else `[lean] descend` of
+`blueprint.toml`, else the first component of every imported module
+(`WeilConjectures` for `WeilConjectures.Foo.Bar`).
+
+`typeDeps` and `valueDeps` are the same walk, stopping at the same places,
+started from the type alone and from the value (and, for an inductive type,
+its constructors) alone, so `deps` is their union.  They are what `check --lean` holds a statement's and
+its proof's `uses` against: `Induction.mainTheorem` needs `Induction.keyProp`
+only in its proof, `Induction.keyProp` needs `Topology.compactness` already
+to state it.
 
 Axioms are collected over the *whole* graph, mapped constants included, so
 a theorem whose proof rests on a sorried lemma is `stated`, exactly as
@@ -399,6 +432,50 @@ resolves it against the directory holding the main `blueprint.json` and the
 history directory is deployed as `<site>/data` — which is exactly what
 `blueprint site --history` does.
 
+### `blueprint migrate [--facts f] [--dry-run]`
+
+Moves a blueprint written before proofs were objects onto them (`DESIGN.md`
+§2.5).  Three steps in one pass, safe to run again; a second run over a
+migrated blueprint changes nothing.
+
+* **Sketches.**  A section whose body opens with `*Proposition (sketch).*`
+  — any kind of the schema in place of `Proposition` — is that statement at
+  the level of a sketch.  It becomes an object of that kind, tagged
+  `sketch`, without the lead-in, and keeps its id, its file and everything
+  that refines it, so a `_section.md` stays its directory's object.  A word
+  the schema has no kind for is reported and left alone.
+* **Split.**  Every proof in the body of a statement the `proof` kind may
+  attach to moves into a file of its own next to it.  A proof is the
+  section of a `Proof` heading (`## Proof` or `## Proof.`, at any level), up
+  to the next heading of the same or a higher level, markers inside it
+  included; or a paragraph opened by an inline marker (`*Proof.*`,
+  `**Proof.**`, `*Proof of (i).*`, `*Proof sketch.*`), up to the next such
+  marker or the next heading that closes the one it sits under.  Fenced
+  code is never cut.  The first proof goes to `<stem>.proof.md` with the
+  derived id `proof/<id>`; the `k`-th to `<stem>.proof-<k>.md` with the id
+  `proof/<id>/<k>`, and with several each gets an `order`.  The stem is the
+  file's name, or the id for a directory's `_section.md`.  Proofs found
+  after an earlier run are numbered after the ones split off then.  A proof
+  that follows a restatement or claim under a heading of its own (a
+  `Detailed form`) is titled after it, `of the detailed form`, and the site
+  reads it as *Proof of the detailed form.*  A marker gives its own title:
+  `*Proof of (i).*` gives `of (i)` (*Proof of (i).*), `*Proof sketch.*` and
+  `*Proof (sketch).*` give `sketch` (*Proof (sketch).*).  The restatement
+  stays with the statement.
+* **Move uses.**  With Lean facts that split each declaration's
+  dependencies (`typeDeps` and `valueDeps`, from this version of
+  `blueprint extract`), a use in the statement's `uses` key that Lean needs
+  only in the value moves to the proof's `uses`, whether the proof was just
+  split off or was already there.  A use the facts do not decide stays on
+  the statement, and so does an edge written out in a file of its own.
+
+Left alone and listed: a section opening with a word the schema has no kind
+for, a statement with a proof in its body and an anonymous proof object
+already, and an object of another kind (a section, a remark) with a proof in
+its body.  The facts are `--facts`, else
+`<root>/lean-facts.json` when it is there; without them the command only
+splits.  `--dry-run` prints what it would do and writes nothing.
+
 ## `blueprint.toml`
 
 At the project root.  Everything is optional.
@@ -411,6 +488,7 @@ defaultCollapse = "refines"
 
 [lean]
 modules = ["MyProject"]             # what `blueprint extract` imports
+descend = ["MyProject", "MyLib"]    # optional: where the dependency walk goes
 
 [katex.macros]                      # handed to the website as project.katexMacros
 "\\Fq"   = "\\mathbf F_q"
@@ -447,6 +525,11 @@ a bare integer.
 the command line names none.  It is optional; a string is accepted as well
 as an array.
 
+`[lean] descend` lists the module prefixes the dependency walk of `blueprint
+extract` passes through (see "Dependencies" above), for a project that counts
+a companion library as its own.  It defaults to the roots of the imported
+modules; `--descend` overrides it.
+
 `[katex.macros]` maps a macro name, with its backslash, to the definition
 KaTeX is to use for it.  Both are ordinary TOML strings, so every backslash
 is doubled; `#1`, `#2`, … are the macro's parameters and KaTeX infers the
@@ -464,6 +547,8 @@ them.
 | `definition` | — | countable |
 | `theorem` | — | countable |
 | `lemma` | — | countable |
+| `proposition` | — | countable |
+| `corollary` | — | countable |
 | `concept` | — | |
 | `remark` | — | |
 | `uses` | `src` 1, `tgt` 1 | sugar |
@@ -473,9 +558,10 @@ them.
 | `equivalent` | `src` 1, `tgt` 1 | sugar |
 | `implies` | `src` 1, `tgt` 1 | sugar |
 | `commutes` | `edges` 2.. | only edge kinds in `edges` |
+| `proof` | `of` 1 | only `definition`, `theorem`, `proposition`, `lemma`, `corollary` in `of` |
 
 Node kinds permit `title`, `lean`, `review`, `tags`, `order`, `aliases`,
-`owner`; edge kinds permit the same minus `lean`.  `defaultCollapse` is
+`owner`; edge kinds and `proof` permit the same minus `lean`.  `defaultCollapse` is
 `refines`.
 
 ## The authoring format
@@ -518,6 +604,26 @@ with `src` the current object and `tgt` the named one.  A key that the
 object's kind permits as an attribute is always read as an attribute, so a
 kind cannot shadow its own attributes.
 
+**Role keys.**  A front matter key naming one of the kind's roles, and not
+one of its attributes, fills that role: `of = "lem-x"` is short for
+`boundary = { of = "lem-x" }`.
+
+**Proofs.**  A proof is its own file, `DESIGN.md` §2.5, by convention
+`<statement>.proof.md` next to the statement.  Its id is derived,
+`proof/<statement>`, and its `uses` are what the proof needs:
+
+```markdown
++++
+kind = "proof"
+of   = "add-comm"
+uses = ["add-assoc"]
++++
+By induction on $n$, unfolding [add] and regrouping with [add-assoc].
+```
+
+In the graph a proof is drawn inside its statement and its edges are the
+statement's.  It does not refine its directory's section.
+
 **Explicit boundaries.**  Write them out to give an edge its own prose, or to
 build hyperedges and edges between edges:
 
@@ -531,8 +637,9 @@ boundary = { edges = ["uses/a/b", "uses/b/c", "uses/a/c"] }
 **`_section.md`.**  A file of that name declares an object for its directory
 (id defaulting to the directory name).  Every other Markdown file directly in
 that directory gets a `refines` edge to it, unless it declares its own
-`refines`.  A subdirectory's `_section.md` likewise refines the section of
-its parent directory when there is one, so sections nest.
+`refines` or is a proof (an object attached to a single object).  A
+subdirectory's `_section.md` likewise refines the section of its parent
+directory when there is one, so sections nest.
 
 **Links.**  `[slug]` in a body is resolved against the object set and
 reported as `bad-link` when it does not resolve.  It creates no edge.
@@ -557,8 +664,8 @@ lake exe blueprint import-latex examples/latex-import/src/content.tex \
 diff -r /tmp/li examples/latex-import/expected
 ```
 
-* `examples/minimal` — one section, four nodes, `uses` and the `_section.md`
-  convention.  Nothing to complain about.
+* `examples/minimal` — one section, four nodes, `uses`, the `_section.md`
+  convention and a proof with `uses` of its own.  Nothing to complain about.
 * `examples/induction` — the example of `DESIGN.md` §3: `main-theorem` uses
   `key-prop`, that edge has its own prose, and `base-case`,
   `inductive-step`, `compactness-lemma` and a finer `uses` edge refine it.

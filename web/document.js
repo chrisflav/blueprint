@@ -160,7 +160,8 @@ export function render(root, app) {
     ...[...new Set([...LEVEL_CHOICES, levels])].filter(Number.isFinite).sort((a, b) => a - b)
       .map((n) => el('option', { value: String(n), selected: n === levels }, String(n))),
     el('option', { value: 'all', selected: levels === Infinity }, 'all')),
-    levels === 1 ? ' level.' : ' levels.'));
+    levels === 1 ? ' level.' : ' levels.',
+    ' ', app.proofToggle()));
   const pagerTop = pager(app, outline, pageEntry, href);
   if (pagerTop) body.appendChild(pagerTop);
   body.appendChild(flow);
@@ -190,7 +191,7 @@ export function render(root, app) {
     const anchor = entry.duplicate ? null : 'doc-' + cssId(o.id);
     const hLevel = isHead ? 1 : Math.min(5, 2 + rel);
     const status = M.statusOf(m, o.id);
-    const prog = M.progressOf(m, kind, o.id);
+    const prog = M.progressMixOf(m, kind, o.id);
 
     // Sections are headings; everything else is a numbered statement in the
     // way a paper sets one: "Definition 1.2.14 (Title)." with the kind as the
@@ -211,7 +212,8 @@ export function render(root, app) {
     app.renderMath(head);
     const section = el('section', {
       class: 'doc-entry ' + (isHead ? 'page-head' : 'depth-' + Math.min(rel, 3)) +
-        (entry.duplicate ? ' dup' : '') + (isSection ? ' is-section' : ' is-statement'),
+        (entry.duplicate ? ' dup' : '') + (isSection ? ' is-section' : ' is-statement') +
+        ' kind-' + o.kind,
       id: anchor,
     }, head);
 
@@ -243,6 +245,9 @@ export function render(root, app) {
         section.appendChild(prose);
         defer(prose, () => app.renderBody(prose, o.body, known, refs));
       }
+      for (const proof of outline.proofs.get(o.id) || []) {
+        section.appendChild(proofBlock(app, proof, outline, known, refs));
+      }
       for (const step of outline.steps.get(o.id) || []) {
         section.appendChild(stepBlock(app, step, known, refs));
       }
@@ -270,12 +275,17 @@ export function render(root, app) {
     }
   };
 
-  const eager = Math.min(entries.length, FIRST_CHUNK);
-  for (let i = 0; i < eager; i += 1) build(entries[i]);
-  if (tocList.firstChild) {
+  let tocShown = false;
+  const showToc = () => {
+    if (tocShown || !tocList.firstChild) return;
+    tocShown = true;
     toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
     toc.appendChild(tocList);
-  }
+  };
+
+  const eager = Math.min(entries.length, FIRST_CHUNK);
+  for (let i = 0; i < eager; i += 1) build(entries[i]);
+  showToc();
 
   // Scrolling to a focused section has to wait until that section has been
   // built.  Sections are appended in order, so rather than building the whole
@@ -288,6 +298,7 @@ export function render(root, app) {
     if (!target) return;
     wanted = null;
     pin(target);
+    flash(target);
     requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
   };
   tryScroll();
@@ -302,10 +313,7 @@ export function render(root, app) {
       if (token !== buildToken) return; // the reader went somewhere else
       const to = Math.min(entries.length, from + (wanted ? CHUNK * 4 : CHUNK));
       for (let i = from; i < to; i += 1) build(entries[i]);
-      if (!toc.firstChild && tocList.firstChild) {
-        toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
-        toc.appendChild(tocList);
-      }
+      showToc();
       tryScroll();
       if (to < entries.length) schedule(() => step(to));
       else finish();
@@ -314,6 +322,14 @@ export function render(root, app) {
   } else {
     finish();
   }
+}
+
+/** Mark the entry a link led to, briefly. */
+function flash(target) {
+  target.classList.remove('flash');
+  // Restart the animation when the same entry is picked twice in a row.
+  void target.offsetWidth;
+  target.classList.add('flash');
 }
 
 /** `?collapse=…&depth=…&focus=…` for a document route. */
@@ -460,6 +476,32 @@ function stepBlock(app, o, known, refs) {
     block.appendChild(prose);
     defer(prose, () => app.renderBody(prose, o.body, known, refs));
   }
+  return block;
+}
+
+/** A proof, set after its statement as a paper sets it: "Proof." run in,
+ *  the prose, the steps filed under it, and an end mark; it folds away with
+ *  the reader's "Fold proofs". */
+function proofBlock(app, o, outline, known, refs) {
+  const { el } = app;
+  const rest = M.proofLeadRest(o);
+  // The lead words link to the proof's object page, as a statement's title
+  // links to the statement's.
+  const head = el('span.proof-word-wrap',
+    el('a.objlink.proof-word', { href: app.objectHref(o.id) }, 'Proof' + rest));
+  if (rest !== '.') app.renderMath(head);
+  const body = el('div.proof-body');
+  if (o.body && o.body.trim()) {
+    const prose = el('div.body-prose.proof-prose');
+    body.appendChild(prose);
+    defer(prose, () => app.renderBody(prose, o.body, known, refs));
+  }
+  for (const step of outline.steps.get(o.id) || []) {
+    body.appendChild(stepBlock(app, step, known, refs));
+  }
+  const block = app.proofDisclosure(head, body);
+  // An id, so `?focus=` on a proof lands on it.
+  block.setAttribute('id', 'doc-' + cssId(o.id));
   return block;
 }
 

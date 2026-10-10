@@ -4,12 +4,14 @@ import Blueprint.Schema
 # The authoring format
 
 `DESIGN.md` §6.  One directory of Markdown files with TOML front matter
-between `+++` lines, plus three conveniences:
+between `+++` lines, plus four conveniences:
 
 * **sugar keys** — any kind declared `sugar = true` may be used as a front
   matter key, expanding to anonymous edge objects,
 * **`_section.md`** — declares a section object that the other files in its
   directory refine,
+* **role keys** — a front matter key naming one of the kind's roles fills
+  that role, so a proof says `of = "lem-x"`,
 * **derived ids** — an object with an explicit boundary and no `id` gets the
   deterministic id described in `DESIGN.md` §2.4.
 -/
@@ -152,7 +154,21 @@ def readPreObj (schema : Schema) (raw : RawFile) : PreObj := Id.run do
       | .ok b => b
       | .error _ => #[]
     | none => #[]
-  let boundary := inRoleOrder spec boundary
+  -- a key naming one of the kind's roles fills that role: `of = "lem-x"` is
+  -- `boundary = { of = "lem-x" }`
+  let isRoleKey (k : String) : Bool :=
+    !reservedKeys.contains k && spec.any fun s =>
+      s.roles.any (·.name == k) && !s.attrs.contains k
+  let mut roleKeyed := boundary
+  for (k, v) in raw.entries do
+    if isRoleKey k then
+      match v.asStrings? with
+      | some ids =>
+        roleKeyed := ids.foldl (init := roleKeyed) fun b i => b.push { role := k, id := i }
+      | none =>
+        checks := checks.push <| Check.error "bad-boundary"
+          s!"{raw.rel}: role '{k}' must hold a string or an array of strings"
+  let boundary := inRoleOrder spec roleKeyed
   if let some v := (raw.entries.find? (·.1 == "boundary")).map (·.2) then
     if let .error e := decodeBoundary v then
       checks := checks.push <| Check.error "bad-boundary" s!"{raw.rel}: {e}"
@@ -169,7 +185,7 @@ def readPreObj (schema : Schema) (raw : RawFile) : PreObj := Id.run do
   let mut attrs : Array (String × AttrValue) := #[]
   let mut sugars : Array (String × Array String) := #[]
   for (k, v) in raw.entries do
-    if reservedKeys.contains k then continue
+    if reservedKeys.contains k || isRoleKey k then continue
     let sugarSpec : Option KindSpec := schema.kind? k
     -- a key that the kind permits as an attribute is an attribute; otherwise a
     -- key naming a sugar kind expands to edges; anything else is an error
@@ -272,9 +288,10 @@ def parseProject (root : System.FilePath) (project : Project) (schema : Schema) 
       for tgt in tgts do
         let (s, a) := addEdge seen anon kind id tgt p.raw.rel
         seen := s; anon := a
-    -- the `_section.md` convention
+    -- the `_section.md` convention; an object attached to another (a proof)
+    -- sits wherever that one does, so it does not refine the section
     if let some sk := secKind then
-      if !p.sugars.any (·.1 == sk) then
+      if !p.sugars.any (·.1 == sk) && p.boundary.size != 1 then
         let parent :=
           if p.raw.stem == sectionFileStem then
             if p.raw.dirRel.isEmpty then none

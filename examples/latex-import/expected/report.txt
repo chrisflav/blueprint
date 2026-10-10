@@ -1,12 +1,13 @@
 latex import report for examples/latex-import/src/content.tex
 
-  objects        10
+  objects        11
     definition: 1
     lemma: 2
+    proof: 1
     remark: 1
     section: 5
     theorem: 1
-  files written  10
+  files written  11
   uses edges     3
   lean names     3
   katex macros   5

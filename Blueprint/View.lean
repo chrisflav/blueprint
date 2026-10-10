@@ -109,6 +109,24 @@ def View.rep (v : View) (i : Nat) : Array Nat :=
   let above := closure v.collapse.parents #[i]
   (trueIndices above).filter fun j => v.visible[j]!
 
+/-- What object `i` stands for in the quotient: an object attached to a single
+object (a proof) and with no `K`-parent of its own stands for that object, and
+so on down the chain; any other object stands for itself, and so does one
+whose chain runs in a circle (a custom schema could allow that; `web/model.js`
+decides the same).  `DESIGN.md` §3. -/
+def anchor (b : Blueprint) (c : Collapse) (i : Nat) : Nat := Id.run do
+  let mut j := i
+  let mut seen : Array Nat := #[i]
+  for _ in [0 : b.objects.size] do
+    if !c.parents[j]!.isEmpty then break
+    match b.objects[j]!.attachedTo? >>= b.findIdx? with
+    | some k =>
+      if seen.contains k then return i
+      seen := seen.push k
+      j := k
+    | none => break
+  return j
+
 /-- The `K`-roots, that is the objects with no `K`-parent. -/
 def Collapse.roots (c : Collapse) : Array Nat :=
   (Array.range c.parents.size).filter fun i => c.parents[i]!.isEmpty
@@ -183,7 +201,8 @@ def consistencyKinds (b : Blueprint) (collapseKind : String) : Array String :=
 /-- Apply the display rule of `DESIGN.md` §3 and compute the quotient graph. -/
 def quotient (b : Blueprint) (v : View) : QuotientGraph := Id.run do
   let n := b.objects.size
-  let reps : Array (Array Nat) := (Array.range n).map v.rep
+  let anchors : Array Nat := (Array.range n).map (anchor b v.collapse)
+  let reps : Array (Array Nat) := (Array.range n).map fun i => v.rep anchors[i]!
   let idOf (i : Nat) : String := b.objects[i]!.id
   let mut drawn : Array DrawnObject := #[]
   let mut internal : Array Bool := Array.replicate n false
@@ -220,13 +239,16 @@ def quotient (b : Blueprint) (v : View) : QuotientGraph := Id.run do
       | some s, some t =>
         match b.findIdx? s, b.findIdx? t with
         | some si, some ti =>
+          -- an end attached to another object (a proof) stands for it
+          let si := anchors[si]!
+          let ti := anchors[ti]!
           -- An edge whose two ends are themselves visible *declares* that
           -- arc; otherwise it is a detail and *derives* arcs between the
           -- representatives of its ends.  (Both ends visible is equivalent to
           -- the edge having exactly that boundary among visible objects.)
           if v.visible[si]! && v.visible[ti]! then
             if si != ti then
-              obs := record obs s t true false
+              obs := record obs (idOf si) (idOf ti) true false
           else
             for a in reps[si]! do
               for c in reps[ti]! do

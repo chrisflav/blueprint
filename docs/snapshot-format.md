@@ -126,7 +126,9 @@ Notes
       "doc": "docstring or null",
       "status": "proved",                    // stated|proved|proved_with_axioms
       "axioms": ["propext", "Classical.choice", "Quot.sound"],
-      "deps": ["MyProject.compactness"]      // mapped constants reachable, stopping at mapped ones
+      "deps": ["MyProject.compactness"],     // mapped constants reachable, stopping at mapped ones and outside the project
+      "typeDeps": ["MyProject.compactness"], // the part of deps reached from the type
+      "valueDeps": []                        // the part reached from the value (may overlap)
     },
     "MyProject.missing": { "exists": false }
   }

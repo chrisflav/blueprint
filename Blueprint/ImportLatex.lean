@@ -356,9 +356,10 @@ def builtinTheoremEnvs : Array String :=
 
 /-- Which blueprint kind a LaTeX environment becomes. -/
 def kindOfEnv (e : String) : String :=
-  if e == "theorem" || e == "proposition" || e == "corollary"
-     || e == "conditionaltheorem" || e == "conjecture" || e == "claim"
+  if e == "theorem" || e == "conditionaltheorem" || e == "conjecture" || e == "claim"
      || e == "fact" || e == "problem" then "theorem"
+  else if e == "proposition" then "proposition"
+  else if e == "corollary" then "corollary"
   else if e == "lemma" then "lemma"
   else if e == "definition" || e == "construction" || e == "notation"
           || e == "convention" then "definition"
@@ -1231,18 +1232,32 @@ def emitFiles (ctx : Ctx) (objs : Array RawObj) : Array OutFile × Conv × Impor
       let leanNames := if o.isSection then #[] else
         sortDedup ((collectArgs rawCs "lean").flatMap splitCommas |>.map cleanLeanName
           |>.filter fun (x : String) => !x.isEmpty)
+      -- A proof of a statement the `proof` kind may attach to is a file of its
+      -- own (`DESIGN.md` §2.5), with the `\uses` written in the proof; any
+      -- other proof stays in the body, its `\uses` with the statement's.
+      let ownProof := !o.proof.isEmpty && defaultProvableKindNames.contains o.kind
       -- dependencies
-      let targets := sortDedup
-        (((collectArgs rawCs "uses" ++ collectArgs proofCs "uses").flatMap splitCommas))
-      let mut uses : Array String := #[]
-      let mut unres : Array String := #[]
-      for t in targets do
-        match ctx.labels.get? t with
-        | some id => if id != o.id then uses := uses.push id
-        | none =>
-          unres := unres.push t
-          rep := { rep with unresolved := rep.unresolved.push (o.id, t) }
-      uses := sortDedup uses
+      let resolve (cs : Array Char) (rep : ImportReport) :
+          Array String × Array String × ImportReport := Id.run do
+        let mut rep := rep
+        let mut uses : Array String := #[]
+        let mut unres : Array String := #[]
+        for t in sortDedup ((collectArgs cs "uses").flatMap splitCommas) do
+          match ctx.labels.get? t with
+          | some id => if id != o.id then uses := uses.push id
+          | none =>
+            unres := unres.push t
+            rep := { rep with unresolved := rep.unresolved.push (o.id, t) }
+        return (sortDedup uses, unres, rep)
+      let (stmtUses, stmtUnres, rep') := resolve rawCs rep
+      let (prfUses, prfUnres, rep') := resolve proofCs rep'
+      rep := rep'
+      -- a use the statement already declares is not repeated on its proof
+      let (uses, prfUses, unres, prfUnres) :=
+        if ownProof then
+          (stmtUses, prfUses.filter (!stmtUses.contains ·), stmtUnres, prfUnres)
+        else
+          (sortDedup (stmtUses ++ prfUses), #[], sortDedup (stmtUnres ++ prfUnres), #[])
       -- tags
       let mut tags : Array String := #[]
       if !o.isSection && o.env != o.kind then tags := tags.push ("latex:" ++ o.env)
@@ -1254,7 +1269,7 @@ def emitFiles (ctx : Ctx) (objs : Array RawObj) : Array OutFile × Conv × Impor
       let (prf, st') := convertBody ctx o.proof st
       st := st'
       let mut body := stmt
-      if !prf.isEmpty then
+      if !prf.isEmpty && !ownProof then
         body := (if body.isEmpty then "" else body ++ "\n\n") ++ "## Proof\n\n" ++ prf
       if !unres.isEmpty then
         body := (if body.isEmpty then "" else body ++ "\n\n")
@@ -1273,10 +1288,23 @@ def emitFiles (ctx : Ctx) (objs : Array RawObj) : Array OutFile × Conv × Impor
       let rel := if o.isSection then dir ++ "/_section.md" else dir ++ "/" ++ o.id ++ ".md"
       files := files.push { rel, text := fm ++ body ++ (if body.isEmpty then "" else "\n") }
       kinds := kinds.alter o.kind fun v => some (v.getD 0 + 1)
+      if ownProof then
+        let mut pbody := prf
+        if !prfUnres.isEmpty then
+          pbody := (if pbody.isEmpty then "" else pbody ++ "\n\n")
+            ++ "Unresolved dependencies: " ++ String.intercalate ", " prfUnres.toList
+        let mut pfm := "+++\n" ++ fmStr "kind" "proof" ++ fmStr "of" o.id
+        if !prfUses.isEmpty then pfm := pfm ++ fmArr "uses" prfUses
+        pfm := pfm ++ "+++\n"
+        files := files.push { rel := dir ++ "/" ++ o.id ++ ".proof.md",
+                              text := pfm ++ pbody ++ (if pbody.isEmpty then "" else "\n") }
+        kinds := kinds.alter "proof" fun v => some (v.getD 0 + 1)
+        rep := { rep with edges := rep.edges + prfUses.size }
       rep := { rep with edges := rep.edges + uses.size,
                         leanRefs := rep.leanRefs + leanNames.size }
     let kindCounts := kinds.toArray.qsort (fun a b => a.1 < b.1)
-    rep := { rep with objects := objs.size, files := files.size, kinds := kindCounts }
+    rep := { rep with objects := objs.size + kinds.getD "proof" 0, files := files.size,
+                      kinds := kindCounts }
     return (files, st, rep)
 
 /-! ## `blueprint.toml` and the report -/

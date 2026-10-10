@@ -243,13 +243,48 @@ def consistencyChecks (b : Blueprint) (collapseKind : String) : Array Check := I
 
 /-! ## Checks against the Lean facts -/
 
-/-- `missing-lean`, `declared-not-actual` and `actual-not-declared`.
+/-- The proofs attached to an object (`DESIGN.md` §2.5). -/
+def proofsOf (b : Blueprint) (id : String) : Array Object :=
+  b.objects.filter fun p => p.kind == "proof" && p.attachedTo? == some id
+
+/-- Do the facts split every Lean name of `o` into what its type and what its
+value depend on? -/
+def Facts.splitsDeps (f : Facts) (o : Object) : Bool :=
+  (f.namesOf o).all fun n =>
+    (f.find? n).any fun d => d.typeDeps.isSome && d.valueDeps.isSome
+
+/-- For every Lean name some object claims, the objects claiming it. -/
+def leanOwners (b : Blueprint) (f : Facts) : Std.HashMap String (Array String) :=
+  b.objects.foldl (init := {}) fun m o =>
+    (f.namesOf o).foldl (init := m) fun m n => m.insert n ((m.getD n #[]).push o.id)
+
+/-- The objects that some Lean name of `o` depends on, through `part` of its
+facts (`deps`, `typeDeps` or `valueDeps`): the objects owning those
+constants, `o` itself left out.  `owners` is `leanOwners b f`. -/
+def dependedOn (owners : Std.HashMap String (Array String)) (f : Facts) (o : Object)
+    (part : DeclFact → Array String) : Array String :=
+  sortDedup <| (f.namesOf o).foldl (init := #[]) fun acc n =>
+    match f.find? n with
+    | some d => (part d).foldl (init := acc) fun a dep =>
+        a ++ (owners.getD dep #[]).filter (· != o.id)
+    | none => acc
+
+/-- `missing-lean`, `declared-not-actual`, `actual-not-declared`,
+`use-belongs-to-proof` and `use-belongs-to-statement`.
 
 An object's Lean names are those of its `lean` attribute *and* those of the
 `attrMap`, the constants tagged `@[blueprint "<its id>"]` (`DESIGN.md` §5).
 The `uses` edge `s -> t` is *actual* when some Lean name of `s` depends on
 some Lean name of `t`, where `deps` in the facts is already the dependency
-graph cut off at mapped constants. -/
+graph cut off at mapped constants.
+
+When an object has a proof (`DESIGN.md` §2.5) and the facts split each
+declaration's dependencies, the statement's `uses` are compared against
+those of the type and the proof's against those of the value; a use
+declared on the wrong one of the two is reported as such rather than as
+missing on one side and not actual on the other.  Without a proof, or with
+facts from before the split, everything declared on the object and its
+proofs is compared against all of `deps`. -/
 def factChecks (b : Blueprint) (f : Facts) : Array Check := Id.run do
   let mut cs : Array Check := #[]
   -- a `@[blueprint]` tag naming an object that does not exist
@@ -271,34 +306,75 @@ def factChecks (b : Blueprint) (f : Facts) : Array Check := Id.run do
             #[o.id]
   -- declared versus actual `uses`
   if (b.schema.kind? "uses").isSome then
-    let owner : Array (String × String) := b.objects.foldl (init := #[]) fun acc o =>
-      (f.namesOf o).foldl (init := acc) fun a n => a.push (n, o.id)
-    let ownersOf (n : String) : Array String := (owner.filter (·.1 == n)).map (·.2)
-    let mut actual : Array (String × String) := #[]
-    for o in b.objects do
-      for n in f.namesOf o do
-        if let some d := f.find? n then
-          for dep in d.deps do
-            for b2 in ownersOf dep do
-              if b2 != o.id && !actual.contains (o.id, b2) then
-                actual := actual.push (o.id, b2)
+    let actualVia := dependedOn (leanOwners b f) f
     let declared : Array (String × String) :=
       (b.ofKind "uses").filterMap fun o =>
         match o.src?, o.tgt? with
         | some s, some t => some (s, t)
         | _, _ => none
-    for (s, t) in actual do
-      if !declared.contains (s, t) then
-        cs := cs.push <| Check.warning "actual-not-declared"
-          s!"Lean shows '{s}' depends on '{t}', but no 'uses' edge declares it" #[s, t]
-    for (s, t) in declared do
-      -- only meaningful when both ends are mapped to Lean
-      let mapped := (b.find? s).any (fun o => !(f.namesOf o).isEmpty)
-        && (b.find? t).any (fun o => !(f.namesOf o).isEmpty)
-      if mapped && !actual.contains (s, t) then
-        cs := cs.push <| Check.info "declared-not-actual"
-          s!"'uses' edge {s} -> {t} is declared, but the Lean dependency graph does not show it"
-          #[s, t]
+    let usesOf (id : String) : Array String :=
+      sortDedup ((declared.filter (·.1 == id)).map (·.2))
+    let isMapped (id : String) : Bool := (b.find? id).any (fun o => !(f.namesOf o).isEmpty)
+    let split := f.splitsDeps
+    for o in b.objects do
+      if (f.namesOf o).isEmpty then continue
+      let proofs := (b.proofsOf o.id).map (·.id)
+      let stmtU := usesOf o.id
+      let proofU := sortDedup (proofs.foldl (init := #[]) fun acc p => acc ++ usesOf p)
+      -- where a proof's edge is reported: the proof that declares it, else the
+      -- first proof
+      let proofId := proofs[0]?.getD o.id
+      let declarer (t : String) : String :=
+        (proofs.find? fun p => (usesOf p).contains t).getD proofId
+      if proofs.isEmpty || !split o then
+        -- one dependency set, against everything declared on the object and
+        -- its proofs together
+        let actual := actualVia o (·.deps)
+        let declaredHere := sortDedup (stmtU ++ proofU)
+        for t in actual do
+          if !declaredHere.contains t then
+            cs := cs.push <| Check.warning "actual-not-declared"
+              s!"Lean shows '{o.id}' depends on '{t}', but no 'uses' edge declares it" #[o.id, t]
+        for t in declaredHere do
+          if isMapped t && !actual.contains t then
+            let src := if stmtU.contains t then o.id else declarer t
+            cs := cs.push <| Check.info "declared-not-actual"
+              s!"'uses' edge {src} -> {t} is declared, but the Lean dependency graph does not show it"
+              #[src, t]
+      else
+        -- the statement against the type, the proof against the value
+        let typeD := actualVia o (·.typeDeps.getD #[])
+        let valueD := actualVia o (·.valueDeps.getD #[])
+        for t in typeD do
+          if stmtU.contains t then continue
+          if proofU.contains t then
+            cs := cs.push <| Check.info "use-belongs-to-statement"
+              s!"'uses' edge {declarer t} -> {t} is declared on the proof, but Lean needs '{t}' to state '{o.id}'"
+              #[declarer t, t]
+          else
+            cs := cs.push <| Check.warning "actual-not-declared"
+              s!"Lean shows the statement of '{o.id}' depends on '{t}', but no 'uses' edge declares it"
+              #[o.id, t]
+        for t in valueD do
+          if typeD.contains t || proofU.contains t then continue
+          if stmtU.contains t then
+            cs := cs.push <| Check.info "use-belongs-to-proof"
+              s!"'uses' edge {o.id} -> {t} is declared on the statement, but Lean needs '{t}' only in the proof"
+              #[o.id, t]
+          else
+            cs := cs.push <| Check.warning "actual-not-declared"
+              s!"Lean shows the proof of '{o.id}' depends on '{t}', but no 'uses' edge declares it"
+              #[proofId, t]
+        for t in stmtU do
+          if isMapped t && !typeD.contains t && !valueD.contains t then
+            cs := cs.push <| Check.info "declared-not-actual"
+              s!"'uses' edge {o.id} -> {t} is declared, but the Lean dependency graph does not show it"
+              #[o.id, t]
+        for t in proofU do
+          if isMapped t && !typeD.contains t && !valueD.contains t then
+            cs := cs.push <| Check.info "declared-not-actual"
+              s!"'uses' edge {declarer t} -> {t} is declared, but the Lean dependency graph does not show it"
+              #[declarer t, t]
   return cs
 
 /-! ## Everything together -/

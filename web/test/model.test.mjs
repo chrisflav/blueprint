@@ -64,6 +64,7 @@ function hasNot(collection, x, what) {
 
 const model = M.buildModel(snapshot);
 const TYCH_ULTRA = 'uses/thm-tychonoff/lem-ultrafilter';
+const PROOF = 'proof/thm-heine-borel';
 const COMMUTES =
   'commutes/uses~thm-heine-borel~thm-tychonoff/uses~thm-tychonoff~def-compact/uses~thm-heine-borel~def-compact';
 const GENERALISES =
@@ -82,8 +83,8 @@ const stateOf = (q, s, t, kind) => {
 
 check('snapshot loads and indexes', () => {
   eq(snapshot.version, 1, 'version');
-  eq(model.objects.length, 53, 'object count');
-  eq(model.byId.size, 53, 'byId size');
+  eq(model.objects.length, 55, 'object count');
+  eq(model.byId.size, 55, 'byId size');
   eq(model.defaultCollapse, 'refines', 'defaultCollapse');
   sameSet(model.collapseKinds, ['refines', 'instance_of'], 'collapse kinds');
 });
@@ -205,7 +206,11 @@ check('expandAll / collapseAll', () => {
   hasNot(all.visible, 'sec-main', 'containers are not visible');
   has(all.visible, 'lem-base-case', 'leaves are visible');
   has(all.visible, 'thm-tychonoff', 'leaves are visible');
-  for (const id of all.visible) sameSet(all.rep(id), [id], `rep of visible ${id}`);
+  // A proof is a root too, but it stands for its statement (DESIGN 3).
+  for (const id of all.visible) {
+    if (M.attachedTo(model.byId.get(id))) continue;
+    sameSet(all.rep(id), [id], `rep of visible ${id}`);
+  }
   eq(all.collapseAll().expanded.size, 0, 'collapseAll');
 });
 
@@ -226,7 +231,10 @@ check('collapsed quotient: internal edges are hidden', () => {
     ['uses/lem-ultrafilter/def-filter', 'uses/lem-ultrafilter/def-compact', 'uses/def-net/def-filter'],
     'edges internal to sec-foundations',
   );
-  eq(qCollapsed.internal.size, 1, 'no other container has internal edges here');
+  // The only other container with something inside is sec-applications,
+  // where Heine-Borel's proof sits with its statement.
+  eq(qCollapsed.internal.size, 2, 'no other container has internal objects here');
+  sameSet(qCollapsed.internal.get('sec-applications') || [], [PROOF], 'the proof inside its statement\'s section');
   for (const id of ['uses/lem-ultrafilter/def-filter', 'uses/def-net/def-filter']) {
     eq(itemById(qCollapsed, id), undefined, `${id} must not be drawn`);
   }
@@ -417,7 +425,10 @@ const vAll = M.makeView(model, 'refines', [...order.expandable]);
 const qAll = M.quotient(vAll);
 
 check('fully expanded quotient draws every uses edge between leaves', () => {
-  eq(qAll.internal.size, 0, 'nothing is internal when nothing is collapsed');
+  // A proof is drawn inside its statement whatever is expanded; nothing else
+  // is internal when nothing is collapsed.
+  eq(qAll.internal.size, 1, 'only the proof is internal');
+  sameSet(qAll.internal.get('thm-heine-borel'), [PROOF], 'the proof sits in its statement');
   has(qAll.dropped, 'uses/sec-main/sec-foundations', 'coarse section edges have no ends left');
   eq(stateOf(qAll, 'lem-ultrafilter', 'def-filter', 'uses'), 'declared-only', 'leaf edges are declared');
   // The edge object itself is expanded here, hence not visible; what decides
@@ -1051,6 +1062,45 @@ check('the sample: hiding implied arcs on the drawn quotient', () => {
   }
   // The instance_of arc between the same nodes is another kind: untouched.
   hasNot(hidden, edgeFor(qCollapsed, TYCH_ULTRA, 'sec-main', 'instance_of').id, 'instance_of');
+});
+
+// --- proofs (DESIGN 2.5) ---------------------------------------------------
+
+check('a proof stands for its statement', () => {
+  eq(M.attachedTo(model.byId.get(PROOF)), 'thm-heine-borel', 'attached to its statement');
+  eq(M.isAttachedKind(model, 'proof'), true, 'proof is an attached kind');
+  hasNot(M.edgeKinds(model), 'proof', 'proofs are not an edge kind of the graph');
+  sameSet(vAll.rep(PROOF), ['thm-heine-borel'], 'expanded: the statement');
+  const vC = M.makeView(model, 'refines', []);
+  sameSet(vC.rep(PROOF), vC.rep('thm-heine-borel'), 'collapsed: wherever the statement is');
+});
+
+check("a proof's uses are the statement's, declared while it is visible", () => {
+  const PU = 'uses/proof~thm-heine-borel/lem-finite-subcover';
+  eq(stateOf(qAll, 'thm-heine-borel', 'lem-finite-subcover', 'uses'), 'declared-only',
+    'expanded: a declared arc of the statement');
+  const it = itemById(qAll, PU);
+  sameSet(it.ends.map((e) => e.id), ['thm-heine-borel', 'lem-finite-subcover'], 'drawn between the statement and its target');
+  // Collapsed, the statement is inside sec-applications and the lemma inside
+  // sec-main: the proof's edge is a detail deriving an arc between them.
+  const rec = qCollapsed.consistency.get(M.pairKey('sec-applications', 'sec-main', 'uses'));
+  ok(rec && rec.derived.includes(PU), 'collapsed: derives the sections\' arc');
+});
+
+check('a proof is introduced by what it proves', () => {
+  const p = (title) => ({ kind: 'proof', boundary: [], attrs: title ? { title } : {} });
+  eq(M.proofLeadRest(p()), '.', 'untitled');
+  eq(M.proofLeadRest(p('of the detailed form')), ' of the detailed form.', 'what it proves');
+  eq(M.proofLeadRest(p('by induction')), ' (by induction).', 'anything else');
+});
+
+check('the document files a proof under its statement', () => {
+  const outline = M.documentOutline(model, 'refines');
+  sameSet((outline.proofs.get('thm-heine-borel') || []).map((o) => o.id), [PROOF], 'filed');
+  eq(outline.stepOf.get(PROOF), 'thm-heine-borel', 'read with its statement');
+  eq(outline.byId.has(PROOF), false, 'no entry of its own');
+  eq(M.referenceOf(outline, PROOF), null, 'no number');
+  eq(M.documentPageOf(outline, PROOF), M.documentPageOf(outline, 'thm-heine-borel'), 'on its statement\'s page');
 });
 
 // ---------------------------------------------------------------------------

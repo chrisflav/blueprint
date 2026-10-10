@@ -131,6 +131,13 @@ def src? (o : Object) : Option String := o.role1? "src"
 /-- Target of a binary edge. -/
 def tgt? (o : Object) : Option String := o.role1? "tgt"
 
+/-- The object this one is *attached* to, when its boundary is exactly one
+object (a proof and its statement, `DESIGN.md` §2.5). -/
+def attachedTo? (o : Object) : Option String :=
+  match o.boundary with
+  | #[e] => some e.id
+  | _ => none
+
 end Object
 
 /-! ## Schema -/
@@ -258,6 +265,10 @@ structure Project where
   /-- Modules `blueprint extract` imports when the command line names none;
   `[lean] modules` in `blueprint.toml`. -/
   leanModules : Array String := #[]
+  /-- Module prefixes the dependency walk of `blueprint extract` descends
+  through; `[lean] descend` in `blueprint.toml`.  Empty means the roots of the
+  imported modules. -/
+  leanDescend : Array String := #[]
   /-- KaTeX macro definitions, `[katex.macros]` in `blueprint.toml`: the macro
   name with its backslash, and the definition KaTeX is to use for it.  Sorted
   by name; handed to the website as `project.katexMacros`. -/
