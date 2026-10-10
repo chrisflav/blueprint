@@ -147,6 +147,27 @@ else
   bad "collapsed with its statement, a proof's uses are internal"; cat "$TMP/minimal.proof.view"
 fi
 
+# A detail of a proof is a detail of its statement in the collapse order.
+head_ "examples/minimal: a detail of a proof"
+rm -rf "$TMP/pd"
+cp -r examples/minimal "$TMP/pd"
+printf '+++\nkind    = "lemma"\ntitle   = "A step"\nrefines = "proof/add-comm"\n+++\nA step of the proof.\n' \
+  > "$TMP/pd/blueprint/add-comm-step.md"
+"$BP" view --root "$TMP/pd" --expand basics > "$TMP/pd.view1" 2>&1
+"$BP" view --root "$TMP/pd" --expand basics,add-comm > "$TMP/pd.view2" 2>&1
+"$BP" build --root "$TMP/pd" -o "$TMP/pd.json" > /dev/null 2>&1
+if grep -q '^  add-comm : theorem' "$TMP/pd.view1" && ! grep -q '^  add-comm-step : lemma' "$TMP/pd.view1" \
+   && grep -q '^  add-comm-step : lemma' "$TMP/pd.view2" && ! grep -q '^  add-comm : theorem' "$TMP/pd.view2"; then
+  ok "expanding a statement shows the details of its proof"
+else
+  bad "expanding a statement shows the details of its proof"; cat "$TMP/pd.view1" "$TMP/pd.view2"
+fi
+if python3 -c 'import json,sys; p=json.load(open(sys.argv[1]))["derived"]["progress"]["refines"]; sys.exit(0 if p.get("add-comm",{}).get("total")==1 else 1)' "$TMP/pd.json"; then
+  ok "the statement's progress counts the details of its proof"
+else
+  bad "the statement's progress counts the details of its proof"
+fi
+
 head_ "kinds: the arrow display hint"
 if [ "$(grep -c '"arrow"' "$TMP/induction.json")" = 1 ] \
    && grep -q '"arrow": "reverse"' "$TMP/induction.json"; then

@@ -159,8 +159,13 @@ dependencies of its type and of its value (§5).
 Status and progress stay with the statement. Its Lean names, and so its
 derived status, are the statement's; `proved` already says the proof is
 complete. A proof is not countable and is not below its statement in any
-collapse order, so the statement remains the leaf that progress counts. A
-proof may have details of its own: lemmas or steps that refine it.
+collapse order, so the statement remains the leaf that progress counts.
+
+A proof may have details of its own: lemmas or steps that refine it, the
+zoomed-in argument. The proof itself is not in any collapse order, so in
+each of them a detail of a proof counts as a detail of its statement:
+expanding the statement shows them, the document sets them under it, and
+progress counts them, the statement no longer being a leaf.
 
 ## 3. Views and quotients
 

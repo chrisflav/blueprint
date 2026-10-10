@@ -187,7 +187,10 @@ In the graph a proof
 is never drawn: it stands for its statement (`view.anchor` in `model.js`), so
 the `uses` written on it are arcs of the statement — declared while the
 statement is visible, derived for whatever it is collapsed into otherwise —
-and it is listed under the statement's "Hidden inside".
+and it is listed under the statement's "Hidden inside". A lemma that refines
+a proof is a detail of the proof's statement (`collapseOrder` lifts it there):
+expanding the statement shows it, and the document sets it under the
+statement.
 
 ### Themes (experimental)
 

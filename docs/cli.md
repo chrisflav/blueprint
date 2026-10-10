@@ -623,6 +623,12 @@ By induction on $n$, unfolding [add] and regrouping with [add-assoc].
 In the graph a proof is drawn inside its statement and its edges are the
 statement's.  It does not refine its directory's section.
 
+A proof can have details of its own, the steps of its argument as lemmas of
+their own: `refines = "proof/<statement>"`.  In the collapse order they are
+details of the statement, since the proof is not in it: expanding the
+statement shows them, the document sets them under the statement, and
+progress counts them in its place.
+
 **Explicit boundaries.**  Write them out to give an edge its own prose, or to
 build hyperedges and edges between edges:
 
