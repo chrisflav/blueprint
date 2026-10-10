@@ -130,12 +130,11 @@ that environment within that section, and is counted in the report.
 **Annotations.**  `\lean{a, b}` becomes the `lean` attribute, split on commas
 and trimmed, and may be wrapped over several lines.  `\uses{a,b}` is
 deduplicated, resolved through the label map and written as the `uses` sugar
-key.  A `proof` environment that directly follows a definition, lemma or
-theorem becomes a proof object of its own, `<id>.proof.md` next to the
-statement (`DESIGN.md` §2.5), with the `\uses` written in the proof as its
-`uses`, less those the statement already declares.  A proof of any other
-kind of environment stays a `## Proof` section of the statement's body, its
-`\uses` merged with the statement's.  `\leanok`, `\notready` and `\mathlibok` are
+key.  A `proof` environment that directly follows a statement becomes a
+proof object of its own, `<id>.proof.md` next to the statement (`DESIGN.md`
+§2.5), with the `\uses` written in the proof as its `uses`, less those the
+statement already declares; every kind the importer produces can take a
+proof, `remark` included.  `\leanok`, `\notready` and `\mathlibok` are
 dropped: derived status comes from Lean in this tool, never from the text.
 `\discussion{n}` becomes the tag `discussion:n`.
 
@@ -558,7 +557,7 @@ them.
 | `equivalent` | `src` 1, `tgt` 1 | sugar |
 | `implies` | `src` 1, `tgt` 1 | sugar |
 | `commutes` | `edges` 2.. | only edge kinds in `edges` |
-| `proof` | `of` 1 | only `definition`, `theorem`, `proposition`, `lemma`, `corollary` in `of` |
+| `proof` | `of` 1 | only `definition`, `theorem`, `proposition`, `lemma`, `corollary`, `remark` in `of` |
 
 Node kinds permit `title`, `lean`, `review`, `tags`, `order`, `aliases`,
 `owner`; edge kinds and `proof` permit the same minus `lean`.  `defaultCollapse` is
