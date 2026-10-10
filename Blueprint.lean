@@ -12,4 +12,5 @@ import Blueprint.Site
 import Blueprint.Attr
 import Blueprint.ImportLatex
 import Blueprint.Extract
+import Blueprint.Migrate
 import Blueprint.Cli

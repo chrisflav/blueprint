@@ -131,6 +131,37 @@ ULIDs were considered and rejected for the first version: they make files
 unreadable and the alias mechanism covers renames. The parser is written so
 that switching id policy later is local.
 
+### 2.5 Proofs
+
+A proof is an object of its own, of kind `proof`, attached to the statement
+it proves: its boundary is the single entry `{of: statement}`. It lives in
+its own file, next to the statement by convention:
+
+```markdown
++++
+kind = "proof"
+of   = "lem-x"                  # a role key: short for boundary = { of = "lem-x" }
+uses = ["lem-y", "lem-z"]
++++
+By [lem-y] and [lem-z] ...
+```
+
+Its id is derived as for any object with a boundary, `proof/lem-x`; a second,
+alternative proof of the same statement needs an `id` of its own. A proof
+does not refine the section of its directory: it sits wherever its statement
+does.
+
+The split carries meaning. A statement's `uses` are what is needed to *state*
+it, its proof's `uses` what is needed to *prove* it, and the extractor
+compares each against the matching half of the Lean declaration: the
+dependencies of its type and of its value (§5).
+
+Status and progress stay with the statement. Its Lean names, and so its
+derived status, are the statement's; `proved` already says the proof is
+complete. A proof is not countable and is not below its statement in any
+collapse order, so the statement remains the leaf that progress counts. A
+proof may have details of its own: lemmas or steps that refine it.
+
 ## 3. Views and quotients
 
 Let K be a collapsible kind. Write `x ≤K y` if there is a chain of K-edges from
@@ -146,6 +177,12 @@ does and it behaves sensibly with multiple parents.
 The representative `rep(x)` of any object is the set of visible objects above
 or equal to x. It is a singleton unless x has several parents on different
 branches.
+
+An object attached to a single object and with no K-parent of its own (a
+proof) *stands for* that object: it has that object's representatives, and an
+edge at it is treated as an edge at that object. So a `uses` edge written on
+a proof is a declared arc of the statement while the statement is visible,
+and a derived arc of whatever the statement is collapsed into otherwise.
 
 Display rule. For every object o with a nonempty boundary, let R be the union
 of `rep(b)` over its boundary objects.
@@ -216,7 +253,10 @@ does and emits `lean-facts.json` with, per mapped constant:
 - derived status as in 4, via `collectAxioms`,
 - blueprint dependencies: the set of mapped constants reachable in the
   constant dependency graph, stopping at mapped constants. This is the
-  *actual* `uses` graph at declaration granularity.
+  *actual* `uses` graph at declaration granularity. It is recorded whole
+  and split into what the type reaches and what the value reaches, so a
+  statement's `uses` can be held against the first and its proof's against
+  the second (§2.5).
 
 `blueprint check --lean` merges the facts and reports, for each pair of
 objects, whether a `uses` edge is declared, actual, or both, in the same three
@@ -331,6 +371,7 @@ blueprint view    [--collapse K] [--expand ids] prints the quotient graph
 blueprint site    [-o dir] [--history dir] assemble the static website
 blueprint serve   [--port p] [--site dir]  assemble it and serve it locally
 blueprint history add <snapshot> --dir d   file a snapshot, update the index
+blueprint migrate proofs [--facts f]      move proofs out of statement bodies
 ```
 
 `serve` borrows a static file server (`python3 -m http.server` and three
@@ -375,6 +416,7 @@ Blueprint/Diff.lean      semantic diff across snapshots
 Blueprint/Site.lean      static site assembly, snapshot history index
 Blueprint/Extract.lean   environment walk, facts (separate executable)
 Blueprint/ImportLatex.lean  LaTeX (leanblueprint) to Markdown importer
+Blueprint/Migrate.lean   moving proofs out of statement bodies
 Main.lean                CLI
 web/                     frontend
 ```

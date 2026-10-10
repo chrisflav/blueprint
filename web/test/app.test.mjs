@@ -75,7 +75,7 @@ const go = async (hash) => {
 
 await check('the app loaded the snapshot', () => {
   ok(app.model, 'no model');
-  eq(app.model.objects.length, 53, 'object count');
+  eq(app.model.objects.length, 55, 'object count');
 });
 
 await check('every route renders without falling over', async () => {
@@ -125,6 +125,17 @@ await check('the same options reach the document view', async () => {
   for (const { options } of katex.calls) {
     eq(options.macros['\\Opens'], '\\mathrm{Open}', 'macros on every call');
   }
+});
+
+await check('a proof is set after its statement, with no number of its own', async () => {
+  await go('#/document/sec-applications');
+  const proofs = root.querySelectorAll('.proof');
+  eq(proofs.length, 1, 'one proof on the page');
+  eq(proofs[0].getAttribute('id'), 'doc-proof_thm-heine-borel', 'its anchor');
+  eq(proofs[0].querySelector('.proof-word').textContent, 'Proof.', 'the lead word');
+  eq(proofs[0].querySelector('.proof-end').textContent, '\u220e', 'the end mark');
+  await go('#/object/' + encodeURIComponent('proof/thm-heine-borel'));
+  eq(root.querySelectorAll('.error-box').length, 0, 'the proof has an object page');
 });
 
 await check('the same options reach the graph side panel', async () => {

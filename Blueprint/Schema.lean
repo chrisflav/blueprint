@@ -40,6 +40,9 @@ def mkBinaryKind (name : String) (constraints : Array String := #[])
 def defaultEdgeKindNames : Array String :=
   #["uses", "implies", "refines", "instance_of", "generalises", "equivalent"]
 
+/-- Kinds a proof may be the proof of. -/
+def defaultProvableKindNames : Array String := #["definition", "lemma", "theorem"]
+
 /-- The schema that ships with the tool. -/
 def defaultSchema : Schema where
   defaultCollapse := some "refines"
@@ -60,6 +63,11 @@ def defaultSchema : Schema where
       mkBinaryKind "generalises" (color := some "#77a"),
       mkBinaryKind "equivalent" (color := some "#7a7"),
       mkBinaryKind "implies" (color := some "#a77"),
+      -- attached to the statement it proves; its own `uses` are what the
+      -- proof needs, the statement's what stating it needs
+      { name := "proof"
+        roles := #[{ name := "of", card := cardOne, kinds := defaultProvableKindNames }]
+        attrs := defaultEdgeAttrs, sugar := false, color := some "#57b" },
       { name := "commutes"
         roles := #[{ name := "edges", card := { min := 2, max := none },
                      kinds := defaultEdgeKindNames }]

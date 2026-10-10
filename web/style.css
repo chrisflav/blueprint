@@ -689,6 +689,15 @@ ul.objlist .role {
 .doc-entry .prose { margin-top: .5rem; }
 .doc-entry.dup { opacity: .75; }
 
+/* A proof follows its statement as in a paper: "Proof." run in, its prose,
+   and an end mark at the right. */
+.proof { margin: .6rem 0 1rem; }
+.proof-head { margin: 0 0 .2rem; }
+a.proof-word { font-style: italic; font-weight: 400; color: inherit; }
+.proof-prose > p:first-child { margin-top: 0; }
+.proof-prose > p:last-child { margin-bottom: .3em; }
+.proof-end { text-align: right; line-height: 1; color: var(--muted); }
+
 .step {
   margin: .8rem 0 .8rem 1.2rem;
   padding: .55rem .9rem;

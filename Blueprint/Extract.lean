@@ -59,6 +59,11 @@ structure DeclFacts where
   axioms : Array String := #[]
   /-- The mapped constants it depends on, sorted. -/
   deps : Array String := #[]
+  /-- The part of `deps` reached through its type: what *stating* it needs. -/
+  typeDeps : Array String := #[]
+  /-- The part of `deps` reached through its value (and constructors): what
+  *proving* or defining it needs.  It may overlap `typeDeps`. -/
+  valueDeps : Array String := #[]
   deriving Inhabited
 
 /-- One constant as JSON, exactly as `docs/snapshot-format.md` describes. -/
@@ -78,7 +83,9 @@ def DeclFacts.toJson (d : DeclFacts) : Json :=
     ("doc", match d.doc with | none => Json.null | some s => Json.str s),
     ("status", Json.str d.status),
     ("axioms", Json.arr (d.axioms.map Json.str)),
-    ("deps", Json.arr (d.deps.map Json.str))]
+    ("deps", Json.arr (d.deps.map Json.str)),
+    ("typeDeps", Json.arr (d.typeDeps.map Json.str)),
+    ("valueDeps", Json.arr (d.valueDeps.map Json.str))]
 
 /-- The whole `lean-facts.json` document. -/
 structure LeanFacts where
@@ -116,11 +123,11 @@ def sortDedupNames (xs : Array Name) : Array Name :=
   sorted.foldl (init := #[]) fun acc x =>
     if acc.back?.any (· == x) then acc else acc.push x
 
-/-- The constants named by a declaration's type, value and — for an
-inductive type — its constructors.  The same set `Lean.collectAxioms` walks. -/
-def directDeps (env : Environment) (n : Name) : Array Name :=
+/-- The constants named by a declaration's type, and those named by its value
+and — for an inductive type — its constructors. -/
+def directDepsSplit (env : Environment) (n : Name) : Array Name × Array Name :=
   match env.find? n with
-  | none => #[]
+  | none => (#[], #[])
   | some info =>
     let fromValue : Array Name := match info.value? (allowOpaque := true) with
       | some v => v.getUsedConstants
@@ -128,7 +135,13 @@ def directDeps (env : Environment) (n : Name) : Array Name :=
     let fromCtors : Array Name := match info with
       | .inductInfo v => v.ctors.toArray
       | _ => #[]
-    sortDedupNames (info.type.getUsedConstants ++ fromValue ++ fromCtors)
+    (sortDedupNames info.type.getUsedConstants, sortDedupNames (fromValue ++ fromCtors))
+
+/-- The constants named by a declaration's type, value and — for an
+inductive type — its constructors.  The same set `Lean.collectAxioms` walks. -/
+def directDeps (env : Environment) (n : Name) : Array Name :=
+  let (t, v) := directDepsSplit env n
+  sortDedupNames (t ++ v)
 
 /-- The part of the constant dependency graph reachable from some roots, in
 an order that puts every constant after the ones it depends on. -/
@@ -287,10 +300,16 @@ def declFactsOf (env : Environment) (names : Array Name) (srcPath : SearchPath)
       let axioms := axs.getD n #[]
       -- the mapped constants below the direct dependencies; a constant is
       -- never a dependency of itself
-      let mut depsAcc : Array Name := #[]
-      for d in g.direct.getD n #[] do
-        depsAcc := depsAcc ++ below.getD d #[]
-      let deps := (sortDedupNames depsAcc).filter (· != n)
+      let mappedOf (ds : Array Name) : Array Name := Id.run do
+        let mut acc : Array Name := #[]
+        for d in ds do
+          acc := acc ++ below.getD d #[]
+        return (sortDedupNames acc).filter (· != n)
+      let deps := mappedOf (g.direct.getD n #[])
+      -- the same walk, started from the type alone and from the value alone
+      let (fromType, fromValue) := directDepsSplit env n
+      let typeDeps := mappedOf fromType
+      let valueDeps := mappedOf fromValue
       let kind := declKind env n (← Meta.isInstance n)
       let signature ←
         try
@@ -311,7 +330,9 @@ def declFactsOf (env : Environment) (names : Array Name) (srcPath : SearchPath)
         range, doc,
         status := statusOfAxioms axioms,
         axioms := sortDedup (axioms.map (·.toString (escape := false))),
-        deps := sortDedup (deps.map (·.toString (escape := false))) }
+        deps := sortDedup (deps.map (·.toString (escape := false)))
+        typeDeps := sortDedup (typeDeps.map (·.toString (escape := false)))
+        valueDeps := sortDedup (valueDeps.map (·.toString (escape := false))) }
     return out
 
 /-- Import `modules` and produce the facts for `names` together with every

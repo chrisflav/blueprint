@@ -211,7 +211,8 @@ export function render(root, app) {
     app.renderMath(head);
     const section = el('section', {
       class: 'doc-entry ' + (isHead ? 'page-head' : 'depth-' + Math.min(rel, 3)) +
-        (entry.duplicate ? ' dup' : '') + (isSection ? ' is-section' : ' is-statement'),
+        (entry.duplicate ? ' dup' : '') + (isSection ? ' is-section' : ' is-statement') +
+        ' kind-' + o.kind,
       id: anchor,
     }, head);
 
@@ -242,6 +243,9 @@ export function render(root, app) {
         const prose = el('div.prose.body-prose');
         section.appendChild(prose);
         defer(prose, () => app.renderBody(prose, o.body, known, refs));
+      }
+      for (const proof of outline.proofs.get(o.id) || []) {
+        section.appendChild(proofBlock(app, proof, outline, known, refs));
       }
       for (const step of outline.steps.get(o.id) || []) {
         section.appendChild(stepBlock(app, step, known, refs));
@@ -460,6 +464,29 @@ function stepBlock(app, o, known, refs) {
     block.appendChild(prose);
     defer(prose, () => app.renderBody(prose, o.body, known, refs));
   }
+  return block;
+}
+
+/** A proof, set after its statement as a paper sets it: "Proof." run in,
+ *  the prose, the steps filed under it, and an end mark. */
+function proofBlock(app, o, outline, known, refs) {
+  const { el } = app;
+  const rest = M.proofLeadRest(o);
+  // An id, so `?focus=` on a proof lands on it.  The lead words link to the
+  // proof's object page, as a statement's title links to the statement's.
+  const block = el('div.proof', { id: 'doc-' + cssId(o.id) },
+    el('p.proof-head',
+      el('a.objlink.proof-word', { href: app.objectHref(o.id) }, 'Proof' + rest)));
+  if (rest !== '.') app.renderMath(block);
+  if (o.body && o.body.trim()) {
+    const prose = el('div.body-prose.proof-prose');
+    block.appendChild(prose);
+    defer(prose, () => app.renderBody(prose, o.body, known, refs));
+  }
+  for (const step of outline.steps.get(o.id) || []) {
+    block.appendChild(stepBlock(app, step, known, refs));
+  }
+  block.appendChild(el('div.proof-end', { 'aria-hidden': 'true' }, '\u220e'));
   return block;
 }
 

@@ -131,6 +131,13 @@ def src? (o : Object) : Option String := o.role1? "src"
 /-- Target of a binary edge. -/
 def tgt? (o : Object) : Option String := o.role1? "tgt"
 
+/-- The object this one is *attached* to, when its boundary is exactly one
+object (a proof and its statement, `DESIGN.md` §2.5). -/
+def attachedTo? (o : Object) : Option String :=
+  match o.boundary with
+  | #[e] => some e.id
+  | _ => none
+
 end Object
 
 /-! ## Schema -/

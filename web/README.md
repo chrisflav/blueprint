@@ -156,6 +156,17 @@ and repeated under the others as a pointer back to it; the repetition carries
 the first occurrence's number and takes none of its own, so every object has
 exactly one number.
 
+### Proofs
+
+A proof (`DESIGN.md` §2.5) is set right after the statement it proves, as
+"*Proof.* … ∎", with the steps filed under it, and has no number of its own:
+a reference to it, its `?focus=` and its page are its statement's. The
+statement's object page shows its proofs the same way. In the graph a proof
+is never drawn: it stands for its statement (`view.anchor` in `model.js`), so
+the `uses` written on it are arcs of the statement — declared while the
+statement is visible, derived for whatever it is collapsed into otherwise —
+and it is listed under the statement's "Hidden inside".
+
 ### Cross references
 
 A `[slug]` in prose reads the way a paper's cross reference does: the lead

@@ -1,4 +1,5 @@
 import Blueprint.ImportLatex
+import Blueprint.Migrate
 import Blueprint.Extract
 import Blueprint.Site
 
@@ -728,6 +729,29 @@ def cmdHistory (root : System.FilePath) (args : Args) : IO UInt32 := do
     IO.eprintln "usage: blueprint history add <blueprint.json> --dir <dir> [--sha s] [--date d]"
     return 1
 
+/-! ## `blueprint migrate` -/
+
+/-- `blueprint migrate proofs [--facts f] [--dry-run]` -/
+def cmdMigrate (root : System.FilePath) (args : Args) : IO UInt32 := do
+  match args.positional[1]? with
+  | some "proofs" =>
+    let factsPath : System.FilePath := (args.get? "--facts").getD (root / "lean-facts.json").toString
+    let facts ← loadFactsIfPresent factsPath
+    if args.has "--facts" && facts.isNone then
+      throw <| IO.userError s!"{factsPath}: no such file"
+    let (writes, rep) ← planMigration root facts
+    let dryRun := args.has "--dry-run"
+    unless dryRun do
+      for (p, text) in writes do
+        IO.FS.writeFile p text
+    IO.print (rep.render dryRun)
+    if facts.isNone then
+      IO.println "no Lean facts: every use stays on its statement"
+    return 0
+  | _ =>
+    IO.eprintln "usage: blueprint migrate proofs [--facts f] [--dry-run]"
+    return 1
+
 /-! ## Entry point -/
 
 /-- The `--help` text. -/
@@ -763,6 +787,9 @@ commands:
          [--history dir]
   history add <blueprint.json> --dir d     file a snapshot in the history
           [--sha s] [--date d]             directory and update its index
+  migrate proofs [--facts f] [--dry-run]   move '## Proof' sections into proof
+                                           objects, and uses only the proof
+                                           needs onto them
 
 global options:
   --root <dir>   project root (default: the working directory)
@@ -798,6 +825,7 @@ def run (argv : List String) : IO UInt32 := do
       | "site" => #["-o", "--output", "--facts", "--history"]
       | "serve" => #["--port", "--site", "--facts", "--history"]
       | "history" => #["--dir", "--sha", "--date"]
+      | "migrate" => #["--facts", "--dry-run"]
       | _ => #[])
     for o in args.unknown known do
       IO.eprintln s!"blueprint: warning: ignoring unknown option {o}"
@@ -816,6 +844,7 @@ def run (argv : List String) : IO UInt32 := do
     | "site" => cmdSite root args
     | "serve" => cmdServe root args
     | "history" => cmdHistory root args
+    | "migrate" => cmdMigrate root args
     | c => do
       IO.eprintln s!"blueprint: unknown command '{c}'"
       IO.eprintln usage

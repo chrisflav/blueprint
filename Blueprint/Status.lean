@@ -63,6 +63,10 @@ structure DeclFact where
   status : String := ""
   /-- Mapped constants it depends on. -/
   deps : Array String := #[]
+  /-- Those of `deps` its type needs, when the facts split them. -/
+  typeDeps : Option (Array String) := none
+  /-- Those of `deps` its value needs, when the facts split them. -/
+  valueDeps : Option (Array String) := none
   deriving Inhabited
 
 /-- The decoded contents of `lean-facts.json`. -/
@@ -84,10 +88,12 @@ def ofDeclsJson (j : Json) : Facts :=
     | .ok o => o.foldl (init := (#[] : Array DeclFact)) fun (acc : Array DeclFact) (name : String) (v : Json) =>
         let present := (v.getObjValAs? Bool "exists").toOption.getD false
         let status := (v.getObjValAs? String "status").toOption.getD ""
-        let deps := match v.getObjVal? "deps" with
-          | .ok (.arr xs) => xs.filterMap fun (d : Json) => d.getStr?.toOption
-          | _ => #[]
-        acc.push { name, present, status, deps }
+        let strs? (k : String) : Option (Array String) := match v.getObjVal? k with
+          | .ok (.arr xs) => some (xs.filterMap fun (d : Json) => d.getStr?.toOption)
+          | _ => none
+        let deps := (strs? "deps").getD #[]
+        acc.push { name, present, status, deps,
+                   typeDeps := strs? "typeDeps", valueDeps := strs? "valueDeps" }
     | .error _ => #[]
   { json := j, decls := decls.qsort (fun a b => a.name < b.name) }
 

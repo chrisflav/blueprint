@@ -122,6 +122,31 @@ for want in multi-parent undeclared-edge unwitnessed-edge; do
   fi
 done
 
+head_ "examples/minimal: proofs"
+wants "$TMP/minimal.json" \
+  '"id": "proof/add-comm"' \
+  '"boundary": [{"role": "of", "id": "add-comm"}]' \
+  '"id": "uses/proof~add-comm/add-assoc"'
+if grep -q 'refines/proof~add-comm' "$TMP/minimal.json"; then
+  bad "a proof does not refine the section of its directory"
+else
+  ok "a proof does not refine the section of its directory"
+fi
+"$BP" view --root examples/minimal --expand basics > "$TMP/minimal.proof.view" 2>&1
+if grep -q 'proof/add-comm : proof  \[internal\]' "$TMP/minimal.proof.view" \
+   && grep -q 'uses/proof~add-comm/add-assoc : uses \[visible\]  src={add-comm}' "$TMP/minimal.proof.view" \
+   && grep -q 'uses: add-comm -> add-assoc  declared only' "$TMP/minimal.proof.view"; then
+  ok "a proof's uses stand for its statement's, and are declared"
+else
+  bad "a proof's uses stand for its statement's, and are declared"; cat "$TMP/minimal.proof.view"
+fi
+"$BP" view --root examples/minimal > "$TMP/minimal.proof.view" 2>&1
+if grep -q '^consistency (0)' "$TMP/minimal.proof.view"; then
+  ok "collapsed with its statement, a proof's uses are internal"
+else
+  bad "collapsed with its statement, a proof's uses are internal"; cat "$TMP/minimal.proof.view"
+fi
+
 head_ "kinds: the arrow display hint"
 if [ "$(grep -c '"arrow"' "$TMP/induction.json")" = 1 ] \
    && grep -q '"arrow": "reverse"' "$TMP/induction.json"; then
@@ -217,11 +242,18 @@ fi
 # One status of each kind, including the two that only the extractor can
 # tell apart: a custom axiom and a `sorry`.
 wants "$TMP/facts.json" \
-  '"Topology.dim": {"status": "proved",' \
-  '"Topology.compactness": {"status": "proved",' \
-  '"Topology.compactnessLemma": {"status": "proved_with_axioms",' \
-  '"Induction.keyProp": {"status": "proved",' \
-  '"Induction.mainTheorem": {"status": "stated",'
+  '"Topology.dim": {"valueDeps": [], "typeDeps": [], "status": "proved",' \
+  '"Topology.compactness": {"valueDeps": [], "typeDeps": [], "status": "proved",' \
+  '"status": "proved_with_axioms", "signature": "theorem Topology.compactnessLemma' \
+  '"status": "proved", "signature": "theorem Induction.keyProp' \
+  '"status": "stated", "signature": "theorem Induction.mainTheorem'
+
+# Deps split into what the type needs and what the value needs: `keyProp`
+# mentions `compactness` in its statement, `mainTheorem` needs `keyProp`
+# only in its proof.
+wants "$TMP/facts.json" \
+  '"Induction.mainTheorem": {"valueDeps": ["Induction.keyProp"], "typeDeps": [],' \
+  '"Induction.keyProp": {"valueDeps": ["Topology.compactness"], "typeDeps": ["Topology.compactness"],'
 
 # Deps stop at mapped constants: `mainTheorem` reaches `Topology.compactness`
 # only through `keyProp`, so it is not among its deps; `compactnessLemma`
@@ -246,6 +278,102 @@ wants "$TMP/ind.facts.json" \
   '"compactness-lemma": "proved_with_axioms"' \
   '"key-prop": "proved"'
 
+# With proofs, the statement's uses are held against the type and the
+# proof's against the value.  `main-theorem` declares `key-prop`, which Lean
+# needs only in the proof; `key-prop`'s proof declares `compactness`, which
+# Lean already needs to state it.
+head_ "check --lean: statements against types, proofs against values"
+rm -rf "$TMP/split"
+cp -r examples/induction "$TMP/split"
+cp "$TMP/facts.json" "$TMP/split/lean-facts.json"
+printf '+++\nkind = "proof"\nof   = "main-theorem"\n+++\nBy [key-prop].\n' \
+  > "$TMP/split/blueprint/induction/main-theorem.proof.md"
+printf '+++\nkind = "proof"\nof   = "key-prop"\nuses = ["compactness"]\n+++\nImmediate.\n' \
+  > "$TMP/split/blueprint/induction/key-prop.proof.md"
+sed -i '/^uses   = \["compactness"\]$/d' "$TMP/split/blueprint/induction/key-prop.md"
+"$BP" check --root "$TMP/split" --lean > "$TMP/split.check" 2>&1
+if grep -q "\[use-belongs-to-proof\].*main-theorem -> key-prop" "$TMP/split.check"; then
+  ok "a use Lean needs only in the proof, declared on the statement"
+else
+  bad "a use Lean needs only in the proof, declared on the statement"; cat "$TMP/split.check"
+fi
+if grep -q "\[use-belongs-to-statement\].*proof/key-prop -> compactness" "$TMP/split.check"; then
+  ok "a use Lean needs to state the theorem, declared on the proof"
+else
+  bad "a use Lean needs to state the theorem, declared on the proof"; cat "$TMP/split.check"
+fi
+if grep -q "\[actual-not-declared\].*'key-prop' depends on 'compactness'" "$TMP/split.check"; then
+  bad "a use on the wrong half is not also reported missing"
+else
+  ok "a use on the wrong half is not also reported missing"
+fi
+
+# `migrate proofs`: a `## Proof` section becomes a proof file, and a use
+# Lean needs only in the proof follows it there.  The promoted edge file is
+# removed so that `key-prop` is a plain sugar use of `main-theorem`.
+head_ "blueprint migrate proofs"
+rm -rf "$TMP/mig"
+cp -r examples/induction "$TMP/mig"
+rm "$TMP/mig/lean-facts.json" "$TMP/mig/blueprint/induction/main-uses-key.md"
+printf '\n## Proof\n\nBy [key-prop].\n\n## Remark\n\nSharp.\n' \
+  >> "$TMP/mig/blueprint/induction/main-theorem.md"
+# A restatement with a proof of its own, and a proof opened by an inline
+# marker rather than a heading.
+printf '\n## Proof\n\nShort.\n\n## Detailed form\n\nMore precisely, it is.\n\n## Proof\n\nLong.\n' \
+  >> "$TMP/mig/blueprint/induction/key-prop.md"
+printf '\n*Proof.* By definition.\n' >> "$TMP/mig/blueprint/induction/base-case.md"
+"$BP" migrate proofs --root "$TMP/mig" > "$TMP/mig.1" 2>&1
+MP="$TMP/mig/blueprint/induction/main-theorem.proof.md"
+KP="$TMP/mig/blueprint/induction/key-prop"
+if [ "$(cat "$KP.proof.md")" = "$(printf '+++\nkind  = "proof"\nof    = "key-prop"\norder = 1\n+++\nShort.')" ] \
+   && grep -q '^id    = "proof/key-prop/2"$' "$KP.proof-2.md" \
+   && grep -q '^title = "of the detailed form"$' "$KP.proof-2.md" \
+   && grep -q '^order = 2$' "$KP.proof-2.md" && grep -q '^Long\.$' "$KP.proof-2.md" \
+   && grep -q '^## Detailed form$' "$KP.md" && ! grep -q 'Proof' "$KP.md"; then
+  ok "every proof of a body gets a file, the restatement's titled after it"
+else
+  bad "every proof of a body gets a file, the restatement's titled after it"; cat "$TMP/mig.1" "$KP".*
+fi
+if grep -q '^By definition\.$' "$TMP/mig/blueprint/induction/base-case.proof.md" \
+   && ! grep -q 'Proof' "$TMP/mig/blueprint/induction/base-case.md"; then
+  ok "an inline *Proof.* marker opens a proof too"
+else
+  bad "an inline *Proof.* marker opens a proof too"; cat "$TMP/mig.1"
+fi
+if grep -q '^split 4 proof' "$TMP/mig.1" && grep -q '^of    = "main-theorem"$' "$MP" \
+   && grep -q '^By \[key-prop\]\.$' "$MP" && ! grep -q '^uses' "$MP" \
+   && ! grep -q 'Proof' "$TMP/mig/blueprint/induction/main-theorem.md" \
+   && grep -q '^Sharp\.$' "$TMP/mig/blueprint/induction/main-theorem.md"; then
+  ok "without facts, the proof moves to a file of its own and every use stays"
+else
+  bad "without facts, the proof moves to a file of its own and every use stays"; cat "$TMP/mig.1" "$MP"
+fi
+cp "$TMP/facts.json" "$TMP/mig/lean-facts.json"
+"$BP" migrate proofs --root "$TMP/mig" > "$TMP/mig.2" 2>&1
+if grep -q 'moved 1 use' "$TMP/mig.2" && grep -q '^uses = \["key-prop"\]$' "$MP" \
+   && grep -q '^uses   = \["compactness"\]$' "$TMP/mig/blueprint/induction/main-theorem.md"; then
+  ok "with split facts, a use Lean needs only in the proof moves to it"
+else
+  bad "with split facts, a use Lean needs only in the proof moves to it"; cat "$TMP/mig.2" "$MP"
+fi
+# A body that gains a further proof after an earlier run: numbered after the
+# proof already there, which is given an order so that it stays first.
+printf '\n## Claim\n\nAlso this.\n\n*Proof.* Clear.\n' >> "$TMP/mig/blueprint/induction/main-theorem.md"
+"$BP" migrate proofs --root "$TMP/mig" > "$TMP/mig.25" 2>&1
+if grep -q '^id    = "proof/main-theorem/2"$' "$TMP/mig/blueprint/induction/main-theorem.proof-2.md" \
+   && grep -q '^title = "of the claim"$' "$TMP/mig/blueprint/induction/main-theorem.proof-2.md" \
+   && grep -q '^order = 1$' "$MP" && grep -q '^## Claim$' "$TMP/mig/blueprint/induction/main-theorem.md"; then
+  ok "a proof found later is numbered after the one split off before"
+else
+  bad "a proof found later is numbered after the one split off before"; cat "$TMP/mig.25" "$MP"
+fi
+"$BP" migrate proofs --root "$TMP/mig" > "$TMP/mig.3" 2>&1
+if grep -q '^split 0 proof.*moved 0 use' "$TMP/mig.3"; then
+  ok "migrating again changes nothing"
+else
+  bad "migrating again changes nothing"; cat "$TMP/mig.3"
+fi
+
 head_ "blueprint extract: the other ways in"
 
 # No modules on the command line: they come from `[lean] modules`.
@@ -260,15 +388,15 @@ fi
 "$BP" extract BlueprintExamples --snapshot "$TMP/induction.json" \
   --out "$TMP/facts.snap.json" > /dev/null 2>&1
 wants "$TMP/facts.snap.json" \
-  '"Induction.keyProp": {"status": "proved",' \
-  '"Topology.compactness": {"status": "proved",'
+  '"status": "proved", "signature": "theorem Induction.keyProp' \
+  '"status": "proved", "signature": "def Topology.compactness'
 
 # Names from --names, including one that does not exist.
 "$BP" extract BlueprintExamples --names "Induction.keyProp,Nowhere.atAll" \
   --out "$TMP/facts.names.json" > /dev/null 2>&1
 wants "$TMP/facts.names.json" \
   '"Nowhere.atAll": {"exists": false}' \
-  '"Induction.keyProp": {"status": "proved",'
+  '"status": "proved", "signature": "theorem Induction.keyProp'
 
 # The attribute survives `import`: BlueprintExamples.Induction imports
 # BlueprintExamples.Topology, and the tags of the latter must still be there.
@@ -359,7 +487,7 @@ else
   bad "the import is examples/latex-import/expected"; head -40 "$TMP/li.diff"
 fi
 
-if grep -q "wrote 10 file(s)" "$TMP/li.log" \
+if grep -q "wrote 11 file(s)" "$TMP/li.log" \
    && grep -q '3 uses edges' "$TMP/li.log" \
    && grep -q '1 unresolved uses' "$TMP/li.log"; then
   ok "import-latex summarises what it wrote"
@@ -392,9 +520,11 @@ else
 fi
 
 # unresolved `\uses` must not become an edge, and must be visible in the body
+# it was written in: here the proof, which is a file of its own
 if grep -q 'Unresolved dependencies: lem:nowhere' \
-     "$TMP/li/blueprint/the-main-theorem/sec-statement/thm-main.md" \
+     "$TMP/li/blueprint/the-main-theorem/sec-statement/thm-main.proof.md" \
    && ! grep -q '"id": "uses/thm-main/lem:nowhere"' "$TMP/li.json" \
+   && ! grep -q '"id": "uses/proof~thm-main/lem:nowhere"' "$TMP/li.json" \
    && ! grep -q '"id": "lem:nowhere"' "$TMP/li.json"; then
   ok "an unresolved \\uses is reported but never an edge"
 else
@@ -412,7 +542,7 @@ else
 fi
 if "$BP" rename add plus --root "$TMP/scratch" > /dev/null 2>&1 \
    && grep -q 'uses   = \["plus"\]' "$TMP/scratch/blueprint/add-comm.md" \
-   && grep -q 'using \[plus\]' "$TMP/scratch/blueprint/add-comm.md" \
+   && grep -q 'unfolding \[plus\]' "$TMP/scratch/blueprint/add-comm.proof.md" \
    && grep -q 'aliases' "$TMP/scratch/blueprint/add.md"; then
   ok "rename rewrites front matter, links and records an alias"
 else
@@ -437,7 +567,7 @@ cp -r examples/induction "$TMP/dB"
 "$BP" new theorem brand-new --dir induction --root "$TMP/dB" > /dev/null 2>&1
 rm "$TMP/dB/blueprint/induction/inductive-step.md"
 # `Induction.keyProp` loses its proof: the status-regression case.
-perl -0pi -e 's/("Induction\.keyProp":\s*\{"status": ")proved/${1}stated/' \
+perl -0pi -e 's/("Induction\.keyProp":\s*\{[^{}]*?"status": ")proved/${1}stated/' \
   "$TMP/dB/lean-facts.json"
 "$BP" build --root "$TMP/dA" -o "$TMP/dA.json" > /dev/null 2>&1
 "$BP" build --root "$TMP/dB" -o "$TMP/dB.json" > /dev/null 2>&1

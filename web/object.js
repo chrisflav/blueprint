@@ -23,8 +23,17 @@ export function render(root, app) {
   root.appendChild(page);
 
   const status = M.statusOf(m, o.id);
+  // A proof is named after what it proves: "Proof of <statement>", or, for
+  // one titled "of the detailed form", "Proof of the detailed form: <statement>".
+  const of = o.kind === 'proof' ? M.attachedTo(o) : null;
+  const ofTitle = of ? M.titleOf(m.byId.get(of)) : null;
+  const own = o.attrs && o.attrs.title;
+  const heading = !of ? M.titleOf(o)
+    : !own ? 'Proof of ' + ofTitle
+    : /^of\s/.test(own) ? 'Proof ' + own + ': ' + ofTitle
+    : 'Proof (' + own + ') of ' + ofTitle;
   page.appendChild(el('div.obj-head',
-    el('h1', M.titleOf(o)),
+    el('h1', heading),
     el('div.row', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status))));
   page.appendChild(el('div.obj-id', o.id));
 
@@ -36,6 +45,22 @@ export function render(root, app) {
   const prose = el('div.body-prose');
   page.appendChild(el('div.panel', prose));
   app.renderBody(prose, o.body, app.knownIds());
+
+  // ---------------------------------------------------- its proofs, if any
+  // A statement's proofs follow it, as in the document, each leading to its
+  // own object page.
+  const proofs = M.incidentTo(m, o.id)
+    .filter(({ object, role }) => object.kind === 'proof' && role === 'of')
+    .map(({ object }) => object);
+  for (const p of proofs) {
+    const body = el('div.body-prose.proof-prose');
+    page.appendChild(el('div.panel.proof',
+      el('p.proof-head', el('a.objlink.proof-word', { href: app.objectHref(p.id) },
+        'Proof' + M.proofLeadRest(p))),
+      body,
+      el('div.proof-end', { 'aria-hidden': 'true' }, '\u220e')));
+    app.renderBody(body, p.body, app.knownIds());
+  }
 
   // ------------------------------------------------------------ attributes
   page.appendChild(attrsPanel(app, o));
