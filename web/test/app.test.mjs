@@ -63,7 +63,7 @@ const app = (await import(path.join(webDir, 'app.js'))).default;
 await tick(20);
 
 const root = dom.document.getElementById('app');
-const { shieldMath } = await import(path.join(webDir, 'app.js'));
+const { shieldMath, THEMES, applyTheme } = await import(path.join(webDir, 'app.js'));
 
 await check('math shielding preserves wrapped formulas and numeric starts', () => {
   for (const formula of [
@@ -157,6 +157,24 @@ await check('a proof is set after its statement, with no number of its own', asy
   eq(proofs[0].querySelector('.proof-end').textContent, '\u220e', 'the end mark');
   await go('#/object/' + encodeURIComponent('proof/thm-heine-borel'));
   eq(root.querySelectorAll('.error-box').length, 0, 'the proof has an object page');
+});
+
+await check('every theme has its stylesheet, and picking one loads it', async () => {
+  for (const t of THEMES) {
+    if (t.id) ok(fs.existsSync(path.join(webDir, 'themes', t.id + '.css')), `themes/${t.id}.css is missing`);
+  }
+  applyTheme('outline');
+  eq(dom.document.getElementById('theme-css').getAttribute('href'), 'themes/outline.css', 'the theme is loaded');
+  eq(dom.document.documentElement.getAttribute('data-sidebar'), 'outline', 'and asks for its sidebar');
+  await go('#/document/sec-applications');
+  ok(root.querySelector('nav.toc.toc-outline'), 'the document draws the outline sidebar');
+  ok(root.querySelector('nav.toc-outline li.current'), 'with this page marked');
+  applyTheme('article');
+  eq(dom.document.documentElement.getAttribute('data-sidebar'), null, 'another theme drops the sidebar');
+  applyTheme('');
+  eq(dom.document.getElementById('theme-css'), null, 'the default loads no theme');
+  applyTheme('no-such-theme');
+  eq(dom.document.getElementById('theme-css'), null, 'an unknown theme is the default');
 });
 
 await check('the same options reach the graph side panel', async () => {

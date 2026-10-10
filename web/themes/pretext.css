@@ -1,0 +1,139 @@
+/* themes/pretext.css: an experimental style of the site, loaded after
+   style.css when the reader picks it in the top bar's style menu (or with
+   ?theme=pretext).  After Kiran Kedlaya's
+   notes on prismatic cohomology, a PreTeXt book: Open Sans and Roboto Serif,
+   one deep blue, the contents as blue blocks down the left. */
+
+@import url("https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Roboto+Serif:opsz,wght@8..144,600;8..144,700&display=swap");
+
+:root {
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f2f2f2;
+  --fg: #000000;
+  --muted: #555555;
+  --faint: #8a8a8a;
+  --border: #d9d9d9;
+  --border-strong: #b3b3b3;
+  --accent: #195684;
+  --accent-soft: #e4edf4;
+  --accent-fg: #ffffff;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 4px 14px rgba(0, 0, 0, .08);
+
+  --ptx-blue: #195684;
+  --ptx-red: #932c1c;
+  --ptx-rule: #6087a9;
+  --ptx-head-bg: #fafafa;
+  --ptx-nav-bg: #ededed;
+
+  --sans: "Open Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --serif: "Roboto Serif", "Noto Serif", Georgia, serif;
+  --radius: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1f21;
+    --panel: #1e1f21;
+    --panel-2: #2a2c2f;
+    --fg: #e8e8e8;
+    --muted: #b0b0b0;
+    --faint: #85888c;
+    --border: #3a3c40;
+    --border-strong: #55585d;
+    --accent: #8ab8e0;
+    --accent-soft: #23384b;
+    --accent-fg: #1e1f21;
+
+    --ptx-blue: #23527a;
+    --ptx-red: #8a3324;
+    --ptx-rule: #5a7c9b;
+    --ptx-head-bg: #26282b;
+    --ptx-nav-bg: #2e3034;
+  }
+}
+
+body { font-size: 16.5px; line-height: 1.55; }
+h1, h2, h3, h4 { font-family: var(--serif); font-weight: 700; color: var(--fg); }
+a.objlink { font-weight: 600; }
+
+/* ------------------------------------------------------- the head */
+
+/* The book's title in blue serif over a light band, the controls in a grey
+   one below it — here in one band, the title set as the book's. */
+.topbar { background: var(--ptx-head-bg); border-bottom: 1px solid var(--border-strong); }
+.brand { font-family: var(--serif); font-size: 1.35rem; font-weight: 700; color: var(--ptx-blue); }
+.brand-mark { display: none; }
+.tabs a { border-radius: 0; color: var(--fg); }
+.tabs a:hover { background: var(--ptx-nav-bg); }
+.tabs a.active { background: var(--ptx-nav-bg); color: var(--fg); box-shadow: inset 0 -2px 0 var(--ptx-blue); }
+button, select, input[type="text"], input[type="search"] { border-radius: 0; }
+.badge { border-radius: 2px; }
+
+/* ------------------------------------------------------- contents */
+
+/* The contents as PreTeXt draws them: one blue block per entry, white text,
+   a white rule between; deeper entries on white under a steel rule. */
+.doc-layout { grid-template-columns: 15rem minmax(0, 40rem); gap: 3rem; justify-content: center; }
+.toc-head { display: none; }
+.toc ul { border-top: 1px solid var(--ptx-blue); }
+.toc li { margin: 0; }
+.toc li.lvl-0, .toc li.lvl-1 { padding-left: 0; }
+.toc li.lvl-0 > a {
+  display: block;
+  padding: .35em .7em;
+  background: var(--ptx-blue);
+  color: #fff;
+  border-bottom: 1px solid #fff;
+  font-size: .92rem;
+  line-height: 1.3;
+}
+.toc li.lvl-0 > a .muted { color: #fff; opacity: .85; }
+.toc li.lvl-0 > a:hover { background: var(--ptx-red); text-decoration: none; }
+.toc li.lvl-1, .toc li.lvl-2 { padding-left: 0; }
+.toc li.lvl-1 > a, .toc li.lvl-2 > a {
+  display: block;
+  padding: .3em .7em .3em 1.6em;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: .85rem;
+  border-bottom: 1px solid var(--ptx-rule);
+}
+.toc li.lvl-1 > a:hover, .toc li.lvl-2 > a:hover { background: var(--accent-soft); text-decoration: none; }
+
+/* ------------------------------------------------------- the text */
+
+/* Headings: black serif, a steel rule under them, the number in the same
+   face as the title. */
+.doc-entry .head .num { font-family: var(--serif); color: var(--fg); font-weight: 700; }
+.doc-entry .head:has(> h1) > .num { font-size: 1.85rem; }
+.doc-entry .head:has(> h2) > .num { font-size: 1.35rem; }
+.doc-entry .head a:not(.num) { color: var(--fg); }
+.doc-entry.is-section > .head, .doc-entry.page-head > .head {
+  border-bottom: 2px solid var(--ptx-rule);
+  padding-bottom: .25rem;
+}
+.doc-entry.depth-0 { border-top: 0; }
+
+/* Statements: a thin rule down the left, the head in bold serif
+   ("Definition 4.1.1."), the title after it, the text upright. */
+.doc-entry.is-statement { border-left: 1px solid var(--fg); padding-left: .8rem; }
+.doc-entry.is-statement .head .kindword,
+.doc-entry.is-statement .head .num { font-family: var(--serif); font-size: 1.15rem; font-weight: 700; color: var(--fg); }
+.doc-entry.is-statement .head .num::after { content: "."; }
+.doc-entry.is-statement .head :is(h2, h3, h4, h5) { font-family: var(--sans); font-size: 1rem; font-weight: 600; }
+.doc-entry.is-statement .head .badge.kind { display: none; }
+.doc-entry.is-statement:has(> .head .status-proved) { border-left-color: var(--fg); }
+
+/* Proofs: "Proof." in italics, as PreTeXt sets it. */
+a.proof-word { font-family: var(--sans); font-style: italic; font-weight: 400; }
+
+.step { border-left-color: var(--ptx-rule); background: var(--bg); }
+.doc-pager { border-color: var(--ptx-rule); }
+
+/* ------------------------------------------------------- elsewhere */
+
+.toolbar { background: var(--ptx-nav-bg); }
+.side { background: var(--bg); }
+.panel { border-radius: 0; }
+.stat .n { font-family: var(--serif); }

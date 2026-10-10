@@ -1,0 +1,442 @@
+/* themes/drafting.css: an experimental style of the site, loaded after
+   style.css when the reader picks it in the top bar's style menu (or with
+   ?theme=drafting).  The site as
+   technical drawings: a whiteprint in light mode, a cyanotype in dark mode,
+   Computer Modern for prose and a DIN-like face for the interface.  Written
+   as the rules it changes in style.css, `unset` where it drops one. */
+
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap");
+
+:root {
+  --bg: #f3f5f8;
+  --panel: #fbfcfd;
+  --panel-2: #e9edf3;
+  --fg: #19213f;
+  --muted: #535d78;
+  --faint: #8790a6;
+  --border: #d3dae4;
+  --border-strong: #a8b3c4;
+  --accent: #2b3ca8;
+  --accent-soft: #e3e7f7;
+  --rule: #19213f;
+  --shadow: 0 1px 0 rgba(25, 33, 63, .06), 0 8px 24px -8px rgba(25, 33, 63, .22);
+  --st-absent: #8690a4;
+  --st-missing: #c23b2b;
+  --st-stated: #b16a00;
+  --st-proved: #23804f;
+  --st-proved_with_axioms: #12808a;
+  --st-none: #c1c8d3;
+  --lv-error: #c23b2b;
+  --lv-warning: #b16a00;
+  --lv-info: #2b3ca8;
+  --graph-node: #fbfcfd;
+  --graph-compound: #edf0f5;
+  --graph-edge: #6a7590;
+  --graph-junction: #3c4664;
+  --graph-hl: #e39b00;
+  --grid-minor: rgba(43, 60, 168, .032);
+  --grid-major: rgba(43, 60, 168, .07);
+  --text: KaTeX_Main, "Latin Modern Roman", "CMU Serif", Georgia, serif;
+  --ui: "Barlow Semi Condensed", "Barlow", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --sans: var(--ui);
+  --radius: 3px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e2a4b;
+    --panel: #123257;
+    --panel-2: #183c66;
+    --fg: #eef3fa;
+    --muted: #a8bcd6;
+    --faint: #7490b2;
+    --border: #28507e;
+    --border-strong: #3f6998;
+    --accent: #8fd3ff;
+    --accent-soft: #1d4673;
+    --accent-fg: #0e2a4b;
+    --rule: #eef3fa;
+    --shadow: 0 1px 0 rgba(0, 0, 0, .2), 0 10px 28px -8px rgba(2, 12, 28, .6);
+    --st-absent: #9fb2ca;
+    --st-missing: #ff8f7c;
+    --st-stated: #f6ba4f;
+    --st-proved: #6fdc9c;
+    --st-proved_with_axioms: #5bdad3;
+    --st-none: #3f6998;
+    --lv-error: #ff8f7c;
+    --lv-warning: #f6ba4f;
+    --lv-info: #8fd3ff;
+    --graph-node: #123257;
+    --graph-compound: #10304f;
+    --graph-edge: #b5c8e0;
+    --graph-junction: #e3ecf7;
+    --graph-hl: #ffd166;
+    --grid-minor: rgba(222, 236, 255, .035);
+    --grid-major: rgba(222, 236, 255, .075);
+  }
+}
+
+body {
+  font: 16px/1.5 var(--ui);
+  font-feature-settings: "tnum" 0;
+}
+
+a:hover {
+  text-decoration-thickness: 1px;
+  text-underline-offset: .18em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--text);
+  font-weight: 700;
+}
+
+h1 {
+  font-size: 1.85rem;
+}
+
+h2 {
+  font-size: 1.35rem;
+}
+
+h3 {
+  font-size: 1.1rem;
+}
+
+h4 {
+  font-size: 1rem;
+}
+
+label.chk {
+  border-radius: var(--radius);
+  font-size: .9rem;
+}
+
+.topbar {
+  background: var(--bg);
+  border-bottom: 2px solid var(--rule);
+}
+
+.brand {
+  font-family: var(--text);
+  font-size: 1.12rem;
+  font-weight: 700;
+}
+
+.brand-mark {
+  border: 2px solid var(--rule);
+  border-radius: 0;
+}
+
+.brand-mark::after {
+  background: var(--rule);
+  border-radius: 0;
+}
+
+.tabs {
+  gap: 1.1rem;
+  align-self: stretch;
+}
+
+.tabs a {
+  padding: unset;
+  border-radius: unset;
+  display: flex;
+  align-items: center;
+  font-size: 1rem;
+  font-weight: 500;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  padding-top: 3px;
+}
+
+.tabs a:hover {
+  background: unset;
+  color: var(--fg);
+}
+
+.tabs a.active {
+  background: unset;
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.gsearch input[type="search"] {
+  font-size: .95rem;
+  background: var(--panel);
+}
+
+.badge {
+  font-size: .82rem;
+  font-weight: 600;
+  line-height: 1.45;
+  padding: 0 .45em;
+  border-radius: 2px;
+}
+
+.badge.kind {
+  font-family: unset;
+}
+
+table.grid th {
+  text-transform: unset;
+  letter-spacing: unset;
+  font-weight: 600;
+  font-size: .9rem;
+}
+
+.toolbar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.toolbar .group > .lbl {
+  text-transform: unset;
+  letter-spacing: unset;
+  display: inline-block;
+  font-size: .92rem;
+  font-weight: 600;
+}
+
+.toolbar .group > .lbl::first-letter, .listing-filters .lbl::first-letter {
+  text-transform: uppercase;
+}
+
+.graph-stage {
+  background: unset;
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--grid-major) 1px, transparent 1px), linear-gradient(90deg, var(--grid-major) 1px, transparent 1px), linear-gradient(var(--grid-minor) 1px, transparent 1px), linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px);
+  background-size: 60px 60px, 60px 60px, 12px 12px, 12px 12px;
+}
+
+.side h2 {
+  font-size: 1.2rem;
+}
+
+.side .excerpt {
+  font-family: var(--text);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.side section > h3 {
+  text-transform: unset;
+  letter-spacing: unset;
+  font-family: var(--ui);
+  font-size: .92rem;
+}
+
+.side section.fold > details > summary {
+  text-transform: unset;
+  letter-spacing: unset;
+  font-size: .92rem;
+}
+
+.body-prose {
+  font-family: var(--text);
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+
+.body-prose .katex, .doc-entry .prose .katex, .side .excerpt .katex {
+  font-size: 1em;
+}
+
+.body-prose code:not(pre code), .doc-entry .prose code:not(pre code) {
+  font-size: .78em;
+}
+
+.doc-entry .head .num {
+  font-size: unset;
+  color: var(--muted);
+  font-family: var(--text);
+  font-weight: 700;
+}
+
+.doc-entry .head a:not(.num) {
+  color: var(--fg);
+}
+
+.doc-entry .head a:not(.num):hover {
+  color: var(--accent);
+}
+
+.doc-entry.depth-0 {
+  border-top: 1px solid var(--border-strong);
+  padding-top: 1.4rem;
+  margin-top: 2.4rem;
+}
+
+.doc-entry .prose {
+  font-family: var(--text);
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+
+.step .step-head {
+  text-transform: unset;
+  letter-spacing: unset;
+  font-family: var(--ui);
+  font-size: .9rem;
+}
+
+.toc {
+  font-size: .95rem;
+  line-height: 1.35;
+}
+
+.toc li {
+  margin: .2em 0;
+}
+
+.toc a {
+  color: var(--muted);
+}
+
+.toc a:hover {
+  color: var(--accent);
+}
+
+.doc-layout {
+  grid-template-columns: 15rem minmax(0, 42rem);
+  gap: 3rem;
+  justify-content: center;
+}
+
+.doc-crumbs {
+  font-size: .95rem;
+}
+
+.doc-pager .num {
+  font-family: unset;
+  font-size: unset;
+  color: var(--muted);
+}
+
+.stat-row {
+  gap: 1.2rem;
+  margin: 1.2rem 0 1.8rem;
+}
+
+.stat {
+  background: unset;
+  border: unset;
+  border-left: unset;
+  border-radius: unset;
+  border-top: 4px solid var(--st-none);
+  padding: .45rem .1rem 0;
+}
+
+.stat .n {
+  font-size: 2rem;
+  line-height: 1.1;
+  font-weight: 600;
+}
+
+.stat .l {
+  font-size: .95rem;
+}
+
+.stat.s-absent {
+  border-left-color: unset;
+  border-top-color: var(--st-absent);
+}
+
+.stat.s-missing {
+  border-left-color: unset;
+  border-top-color: var(--st-missing);
+}
+
+.stat.s-stated {
+  border-left-color: unset;
+  border-top-color: var(--st-stated);
+}
+
+.stat.s-proved {
+  border-left-color: unset;
+  border-top-color: var(--st-proved);
+}
+
+.stat.s-proved_with_axioms {
+  border-left-color: unset;
+  border-top-color: var(--st-proved_with_axioms);
+}
+
+.listing-filters .lbl {
+  text-transform: unset;
+  letter-spacing: unset;
+  display: inline-block;
+  font-size: .92rem;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .tabs a {
+    margin-bottom: 0;
+    padding-top: 0;
+    border-bottom-width: 2px;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar-main {
+    flex-wrap: wrap;
+    row-gap: .3rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .tabs {
+    gap: .8rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .tabs a {
+    padding: unset;
+    font-size: .92rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .brand {
+    font-size: 1rem;
+  }
+}
+
+.toc-head {
+  text-transform: unset;
+  letter-spacing: unset;
+  font-family: var(--ui);
+  font-size: .92rem;
+}
+
+.doc-entry .head .kindword {
+  font-family: var(--text);
+}
+
+.doc-entry.is-statement:has(> .head .status-proved) {
+  border-left-color: var(--st-proved);
+}
+
+.doc-entry.is-statement:has(> .head .status-proved_with_axioms) {
+  border-left-color: var(--st-proved_with_axioms);
+}
+
+.doc-entry.is-statement:has(> .head .status-stated) {
+  border-left-color: var(--st-stated);
+}
+
+.doc-entry.is-statement:has(> .head .status-missing) {
+  border-left-color: var(--st-missing);
+  border-left-style: dashed;
+}
+
+.doc-entry.is-statement .head .num {
+  font-family: var(--text);
+}

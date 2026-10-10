@@ -1,0 +1,252 @@
+/* themes/article.css: an experimental style of the site, loaded after
+   style.css when the reader picks it in the top bar's style menu (or with
+   ?theme=article).  Like an amsart PDF:
+   Computer Modern throughout, justified text, amsthm statement heads.
+   Built on drafting.css. */
+
+@import "drafting.css";
+
+:root {
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f3f3f3;
+  --fg: #000000;
+  --muted: #4a4a4a;
+  --faint: #858585;
+  --border: #dadada;
+  --border-strong: #9a9a9a;
+  --accent: #1c3a9c;
+  --accent-soft: #eef1fa;
+  --accent-fg: #ffffff;
+  --rule: #000000;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 6px 20px rgba(0, 0, 0, .1);
+
+  /* xcolor's green!50!black, orange!70!black, red!70!black, teal, gray */
+  --st-absent: #7f7f7f;
+  --st-missing: #b30000;
+  --st-stated: #b35900;
+  --st-proved: #1a7a1a;
+  --st-proved_with_axioms: #00737a;
+  --st-none: #c8c8c8;
+  --lv-error: #b30000;
+  --lv-warning: #b35900;
+  --lv-info: #1c3a9c;
+
+  --graph-node: #ffffff;
+  --graph-compound: #fafafa;
+  --graph-edge: #333333;
+  --graph-junction: #000000;
+  --graph-hl: #e0a000;
+
+  --ui: KaTeX_Main, "Latin Modern Roman", "CMU Serif", Georgia, serif;
+  --mono: KaTeX_Typewriter, "Latin Modern Mono", "CMU Typewriter Text", ui-monospace, monospace;
+  --radius: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* A PDF reader's night mode: the page inverted to warm grey. */
+    --bg: #222220;
+    --panel: #222220;
+    --panel-2: #2d2d2a;
+    --fg: #ecebe6;
+    --muted: #b9b7b0;
+    --faint: #8a8882;
+    --border: #3d3d39;
+    --border-strong: #64635d;
+    --accent: #9fb5ff;
+    --accent-soft: #2b3248;
+    --accent-fg: #222220;
+    --rule: #ecebe6;
+
+    --st-absent: #a3a19b;
+    --st-missing: #ff8a7a;
+    --st-stated: #f0b35a;
+    --st-proved: #7fd17f;
+    --st-proved_with_axioms: #5fcfd3;
+    --st-none: #55544f;
+    --lv-error: #ff8a7a;
+    --lv-warning: #f0b35a;
+    --lv-info: #9fb5ff;
+
+    --graph-node: #222220;
+    --graph-compound: #262624;
+    --graph-edge: #c9c7c0;
+    --graph-junction: #ecebe6;
+  }
+}
+
+body { font-size: 17px; line-height: 1.45; }
+a:hover { text-decoration: underline; }
+
+/* ------------------------------------------------------------ controls */
+
+button, select, input[type="text"], input[type="search"] {
+  border-radius: 0;
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+button:hover { background: var(--panel-2); }
+button.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+label.chk { border-radius: 0; border-color: var(--border); background: transparent; font-size: .95rem; }
+
+/* ---------------------------------------------------- the running head */
+
+.topbar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+.brand { font-size: 1.05rem; font-weight: 400; font-variant: small-caps; letter-spacing: .04em; }
+.brand-mark { display: none; }
+.tabs { gap: 1.3rem; }
+.tabs a { color: var(--accent); font-size: 1rem; font-weight: 400; border-bottom: 0; margin-bottom: 0; padding-top: 0; }
+.tabs a.active { color: var(--fg); font-weight: 400; font-style: italic; }
+.gsearch-key { border-radius: 0; font-family: var(--mono); }
+
+/* ------------------------------------------------------- badges */
+
+/* A status is said the way a margin note would say it: a coloured mark and
+   a word, no box. */
+.badge { border: 0; padding: 0; border-radius: 0; font-size: .85rem; font-weight: 400; font-style: italic; }
+.badge .dot { width: .55em; height: .55em; border-radius: 0; }
+.badge.kind { background: none; color: var(--muted); }
+.chip { border-radius: 0; background: none; font-style: italic; }
+
+.bar { height: 6px; border-radius: 0; border-color: var(--fg); background: var(--bg); }
+.stackbar { border-radius: 0; height: 10px; border-color: var(--fg); }
+
+/* ------------------------------------------------------- code */
+
+code:not(pre code) { background: none; border: 0; padding: 0; }
+pre {
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+  border-radius: 0;
+  padding: .6em 0;
+  font-size: .88em;
+}
+
+/* ------------------------------------------------------- tables: booktabs */
+
+.table-wrap { border: 0; border-radius: 0; background: none; border-top: 1.5px solid var(--fg); border-bottom: 1.5px solid var(--fg); }
+table.grid th { color: var(--fg); font-weight: 400; font-style: italic; font-size: 1rem; border-bottom: 1px solid var(--fg); }
+table.grid td { border-bottom: 0; }
+
+/* ------------------------------------------------------- panels */
+
+/* A PDF has no cards: a panel is a stretch of the page under its heading. */
+.panel { background: none; border: 0; border-radius: 0; padding: 0; margin: 1.8rem 0; }
+details.panel > summary > h3 { font-size: 1.1rem; }
+.error-box { border-radius: 0; box-shadow: none; border-color: var(--fg); }
+
+/* ------------------------------------------------------- document */
+
+.doc-layout { grid-template-columns: 14rem minmax(0, 38rem); gap: 3.5rem; }
+.toc a { color: var(--fg); }
+.toc a:hover { color: var(--accent); }
+.toc-head { font-family: var(--text); font-weight: 700; font-size: 1.1rem; color: var(--fg); }
+
+.doc-crumbs, .doc-pager { font-size: .95rem; }
+.doc-pager { border-color: var(--fg); border-top-width: 1px; border-bottom: 0; }
+.doc-pager .num { color: var(--fg); }
+
+/* Section numbers are the size of their titles and set in the same black. */
+.doc-entry .head .num { color: var(--fg); }
+.doc-entry .head:has(> h1) > .num { font-size: 1.85rem; }
+.doc-entry .head:has(> h2) > .num { font-size: 1.35rem; }
+.doc-entry .head:has(> h3) > .num { font-size: 1.1rem; }
+.doc-entry .head .num { margin-right: .4em; }
+.doc-entry .head a:not(.num) { color: var(--fg); }
+.doc-entry.depth-0 { border-top: 0; padding-top: 0; margin-top: 2.6rem; }
+
+/* Prose is justified and hyphenated, paragraphs indented, not spaced. */
+.body-prose, .doc-entry .prose {
+  font-size: 1.06rem;
+  line-height: 1.5;
+  text-align: justify;
+  hyphens: auto;
+}
+.body-prose p { margin: 0; }
+.body-prose p + p { text-indent: 1.5em; }
+.body-prose .katex-display { margin: .7em 0; }
+.body-prose ul, .body-prose ol { margin: .4em 0; }
+
+/* amsthm: "Lemma 12.18.1 (Title)." run in, bold head, the title upright
+   in parentheses; status pushed to the margin side. */
+.doc-entry.is-statement { border-left: 0; padding-left: 0; margin: 1.3rem 0; }
+.doc-entry.is-statement .head { gap: .3em; }
+.doc-entry.is-statement .head .kindword,
+.doc-entry.is-statement .head .num { font-size: 1.06rem; font-weight: 700; color: var(--fg); }
+.doc-entry.is-statement .head :is(h2, h3, h4, h5) { font-size: 1.06rem; font-weight: 400; }
+.doc-entry.is-statement .head :is(h2, h3, h4, h5)::before { content: "("; }
+.doc-entry.is-statement .head :is(h2, h3, h4, h5)::after { content: ")."; }
+.doc-entry.is-statement .head .badge.kind { display: none; }
+.doc-entry.is-statement .head .badge:last-child { margin-left: auto; }
+.doc-entry.is-statement .prose { margin-top: .25rem; }
+
+/* Theorem-like bodies are italic, up to their proof. */
+.doc-entry:is(.kind-theorem, .kind-lemma, .kind-proposition, .kind-corollary, .kind-conjecture) > .prose { font-style: italic; }
+.doc-entry:is(.kind-theorem, .kind-lemma, .kind-proposition, .kind-corollary, .kind-conjecture) > .prose :is(h1, h2, h3, h4, h5, h6),
+.doc-entry:is(.kind-theorem, .kind-lemma, .kind-proposition, .kind-corollary, .kind-conjecture) > .prose :is(h1, h2, h3, h4, h5, h6) ~ * { font-style: normal; }
+.doc-entry:is(.kind-theorem, .kind-lemma, .kind-proposition, .kind-corollary, .kind-conjecture) > .prose :is(h1, h2, h3, h4, h5, h6) { font-style: italic; }
+/* Remarks: italic head, upright body. */
+.doc-entry.kind-remark .head .kindword,
+.doc-entry.kind-remark .head .num { font-weight: 400; font-style: italic; }
+
+/* Run-in "Proof." */
+.body-prose :is(h1, h2, h3, h4, h5, h6) { font-size: 1em; font-weight: 400; font-style: italic; margin: .6em 0 .1em; }
+
+.step { background: none; border-left: 0; border-radius: 0; padding: .2rem 0 .2rem 1.5em; }
+.step .step-head { font-family: var(--text); font-size: 1rem; font-style: italic; }
+.step .step-head > span:first-child { font-family: var(--text); color: var(--fg); }
+
+/* ------------------------------------------------------- graph: TikZ */
+
+.toolbar { background: var(--bg); border-bottom: 1px solid var(--rule); }
+.toolbar .group > .lbl { font-weight: 400; font-style: italic; color: var(--fg); }
+.graph-stage { background: var(--bg); background-image: none; }
+.side { background: var(--bg); border-left: 1px solid var(--rule); }
+.side section > h3, .side section.fold > details > summary { font-family: var(--text); font-weight: 700; font-size: 1rem; color: var(--fg); }
+.legend { border-radius: 0; background: var(--bg); border-color: var(--fg); }
+.legend .sw { border-radius: 0; }
+.graph-status { border-radius: 0; }
+
+.gnode .shape { stroke-width: 1; }
+.gnode .label { font-weight: 400; }
+.gmath { font-weight: 400; }
+.gnode.status-none .shape { stroke: var(--fg); }
+.gnode.compound > .shape { fill: var(--graph-compound); stroke: var(--border-strong); stroke-dasharray: 3 3; }
+.gnode.selected .shape { stroke: var(--accent); stroke-width: 2; }
+.gedge path { stroke-width: 1.1; }
+
+/* ------------------------------------------------------- progress, checks */
+
+.stat { border-top: 1.5px solid var(--st-none); }
+.stat .n { font-weight: 400; font-size: 2.1rem; }
+.stat .l { font-style: italic; }
+.chart { border: 0; border-radius: 0; background: none; }
+.chart .axis { stroke: var(--fg); }
+
+.check { border: 0; border-left: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: none; padding: .7rem 0; }
+.check .code { font-family: var(--mono); }
+.toolbar { font-size: .92rem; }
+
+/* The statement head runs in as LaTeX's does: one line of text that wraps
+   like prose, the status floated to the margin side. */
+.doc-entry.is-statement .head { display: block; }
+.doc-entry.is-statement .head > * { display: inline; margin-right: .3em; }
+.doc-entry.is-statement .head > .badge:last-child { display: inline-flex; float: right; margin: .25em 0 0 1em; }
+.body-prose :is(h1, h2, h3, h4, h5, h6) { font-weight: 400; font-style: italic; }
+.doc-entry.is-statement .head > .badge.kind { display: none; }
+
+/* amsthm's proof: "Proof." in italic, run in, upright prose, a box at the
+   end.  Never italic, whatever the statement above it. */
+.doc-entry .proof, .doc-entry .proof .body-prose { font-style: normal; }
+.proof { margin: .4rem 0 1.2rem; }
+.proof-head { display: inline; }
+.proof-head + .proof-prose { display: inline; }
+.proof-head + .proof-prose > p:first-child { display: inline; }
+.proof-end { color: var(--fg); margin-top: -1.3em; }
+.proof-head { margin-right: .4em; }

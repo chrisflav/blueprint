@@ -1,0 +1,235 @@
+/* themes/textbook.css: an experimental style of the site, loaded after
+   style.css when the reader picks it in the top bar's style menu (or with
+   ?theme=textbook).  Like a KOMA-Script book:
+   sans-serif headings, Computer Modern text, statements in tinted boxes by
+   kind.  Built on drafting.css. */
+
+@import "drafting.css";
+
+:root {
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f4f3f1;
+  --fg: #000000;
+  --muted: #55524d;
+  --faint: #8c8882;
+  --border: #e0ddd8;
+  --border-strong: #b3aea6;
+  --accent: #8a1c32;
+  --accent-soft: #f7ecee;
+  --accent-fg: #ffffff;
+  --rule: #8a1c32;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 8px 24px rgba(0, 0, 0, .08);
+
+  --st-absent: #8a8680;
+  --st-missing: #c0392b;
+  --st-stated: #b8740f;
+  --st-proved: #2e7d4f;
+  --st-proved_with_axioms: #187f86;
+  --st-none: #cfcac3;
+  --lv-error: #c0392b;
+  --lv-warning: #b8740f;
+  --lv-info: #2c5a8c;
+
+  --graph-node: #ffffff;
+  --graph-compound: #f8f6f3;
+  --graph-edge: #6d6962;
+  --graph-junction: #3a3733;
+  --graph-hl: #e0a000;
+
+  /* box tints per kind of statement */
+  --env-thm: #8a1c32;
+  --env-thm-bg: #fbf3f4;
+  --env-def: #2c5a8c;
+  --env-def-bg: #f1f5fa;
+  --env-rem: #8c8882;
+
+  --ui: KaTeX_SansSerif, "Latin Modern Sans", "CMU Sans Serif", "Helvetica Neue", sans-serif;
+  --mono: KaTeX_Typewriter, "Latin Modern Mono", "CMU Typewriter Text", ui-monospace, monospace;
+  --radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1d1c1f;
+    --panel: #232226;
+    --panel-2: #2b292e;
+    --fg: #ece9e4;
+    --muted: #b7b2ab;
+    --faint: #8a857e;
+    --border: #3a373d;
+    --border-strong: #5c5860;
+    --accent: #f08aa0;
+    --accent-soft: #3a2329;
+    --accent-fg: #1d1c1f;
+    --rule: #f08aa0;
+
+    --st-absent: #a19c95;
+    --st-missing: #ff8a7a;
+    --st-stated: #f0b35a;
+    --st-proved: #7fd19c;
+    --st-proved_with_axioms: #5fcfd3;
+    --st-none: #4a464c;
+    --lv-error: #ff8a7a;
+    --lv-warning: #f0b35a;
+    --lv-info: #8fb8e8;
+
+    --graph-node: #232226;
+    --graph-compound: #211f23;
+    --graph-edge: #b7b2ab;
+    --graph-junction: #ece9e4;
+
+    --env-thm: #f08aa0;
+    --env-thm-bg: #2a2125;
+    --env-def: #8fb8e8;
+    --env-def-bg: #1f252e;
+    --env-rem: #8a857e;
+  }
+}
+
+body { font-size: 15.5px; }
+
+/* KOMA sets every heading in bold sans. */
+h1, h2, h3, h4 { font-family: var(--ui); font-weight: 700; }
+
+/* ------------------------------------------------------------ controls */
+
+button, select, input[type="text"], input[type="search"] { border-radius: var(--radius); background: var(--bg); }
+button.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+label.chk { border-radius: var(--radius); background: transparent; }
+
+/* ------------------------------------------------------- the head */
+
+.topbar { background: var(--bg); border-bottom: 1px solid var(--border-strong); }
+.brand { font-family: var(--ui); font-size: 1.05rem; }
+.brand-mark { border-color: var(--accent); border-radius: 2px; }
+.brand-mark::after { background: var(--accent); }
+.tabs a { font-weight: 400; color: var(--muted); }
+.tabs a.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+
+/* ------------------------------------------------------- badges */
+
+.badge { border-radius: 999px; font-weight: 700; font-size: .78rem; }
+.badge.kind { display: none; }
+
+code:not(pre code) { background: var(--panel-2); border: 0; }
+pre { background: var(--panel-2); border: 0; border-left: 3px solid var(--border-strong); border-radius: 0; }
+
+/* ------------------------------------------------------- tables: booktabs */
+
+.table-wrap { border: 0; border-radius: 0; background: none; border-top: 1.5px solid var(--fg); border-bottom: 1.5px solid var(--fg); }
+table.grid th { color: var(--fg); font-size: .92rem; border-bottom: 1px solid var(--fg); }
+table.grid td { border-bottom-color: var(--border); }
+
+.panel { border-radius: var(--radius); }
+
+/* ------------------------------------------------------- document */
+
+.doc-layout { grid-template-columns: 15rem minmax(0, 40rem); gap: 3.5rem; }
+.toc-head { font-size: 1rem; color: var(--fg); font-weight: 700; }
+.toc a { color: var(--fg); }
+.toc a:hover { color: var(--accent); }
+.doc-pager { border-color: var(--border); }
+
+/* Section heads: the number in the book's colour, hanging before the title. */
+.doc-entry .head .num { color: var(--accent); font-family: var(--ui); }
+.doc-entry .head:has(> h1) > .num { font-size: 1.85rem; }
+.doc-entry .head:has(> h2) > .num { font-size: 1.35rem; }
+.doc-entry .head:has(> h3) > .num { font-size: 1.1rem; }
+.doc-entry .head .num { margin-right: .35em; }
+.doc-entry .head a:not(.num) { color: var(--fg); }
+.doc-entry.depth-0 { border-top: 0; padding-top: 0; margin-top: 2.6rem; }
+.doc-entry.page-head .head { border-bottom: 2px solid var(--accent); padding-bottom: .5rem; }
+
+.body-prose, .doc-entry .prose { font-size: 1.12rem; line-height: 1.55; hyphens: auto; }
+.body-prose :is(h1, h2, h3, h4, h5, h6) { font-family: var(--text); }
+
+/* Statements are boxed: a tinted ground, a rule down the left, and the head
+   set in sans as the box's title. */
+.doc-entry.is-statement {
+  --env: var(--env-thm);
+  --env-bg: var(--env-thm-bg);
+  background: var(--env-bg);
+  border-left: 3px solid var(--env);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: .7rem 1rem .5rem;
+  margin: 1.2rem 0;
+}
+.doc-entry.is-statement.kind-definition { --env: var(--env-def); --env-bg: var(--env-def-bg); }
+.doc-entry.is-statement.kind-remark { --env: var(--env-rem); --env-bg: transparent; padding-top: .3rem; padding-bottom: .2rem; }
+.doc-entry.is-statement .head .kindword,
+.doc-entry.is-statement .head .num { font-family: var(--ui); font-size: 1rem; font-weight: 700; color: var(--env); }
+.doc-entry.is-statement .head :is(h2, h3, h4, h5) { font-family: var(--ui); font-size: 1rem; font-weight: 400; color: var(--fg); }
+.doc-entry.is-statement .head :is(h2, h3, h4, h5)::before { content: "("; }
+.doc-entry.is-statement .head :is(h2, h3, h4, h5)::after { content: ")"; }
+.doc-entry.is-statement .head .badge:last-child { margin-left: auto; }
+.doc-entry.is-statement .prose { margin-top: .35rem; }
+.doc-entry.is-statement .prose > p:last-child { margin-bottom: .3em; }
+
+/* Theorem-like bodies are italic, up to their proof. */
+.doc-entry:is(.kind-theorem, .kind-lemma, .kind-proposition, .kind-corollary, .kind-conjecture) > .prose { font-style: italic; }
+.doc-entry:is(.kind-theorem, .kind-lemma, .kind-proposition, .kind-corollary, .kind-conjecture) > .prose :is(h1, h2, h3, h4, h5, h6) ~ * { font-style: normal; }
+
+.step { border-left-color: var(--env-def); background: var(--bg); }
+.step .step-head > span:first-child { font-family: var(--ui); color: var(--env-def); font-weight: 700; }
+
+/* ------------------------------------------------------- graph */
+
+.toolbar { background: var(--bg); border-bottom: 1px solid var(--border); }
+.toolbar .group > .lbl { color: var(--fg); }
+.graph-stage { background: var(--panel-2); background-image: none; }
+.side { background: var(--bg); }
+.side section > h3, .side section.fold > details > summary { color: var(--fg); font-weight: 700; }
+.legend { background: var(--bg); }
+
+.gnode .shape { stroke-width: 1.2; }
+.gnode.compound > .shape { fill: var(--graph-compound); stroke: var(--border-strong); stroke-dasharray: none; }
+.gnode.selected .shape { stroke: var(--accent); stroke-width: 2.4; }
+
+/* ------------------------------------------------------- progress, checks */
+
+.stat { border-top-width: 3px; }
+.stat .n { font-family: var(--ui); }
+.chart { border: 0; background: none; }
+.check { background: none; }
+
+/* The statement head runs in as LaTeX's does: one line of text that wraps
+   like prose, the status floated to the margin side. */
+.doc-entry.is-statement .head { display: block; }
+.doc-entry.is-statement .head > * { display: inline; margin-right: .3em; }
+.doc-entry.is-statement .head > .badge:last-child { display: inline-flex; float: right; margin: .25em 0 0 1em; }
+.body-prose :is(h1, h2, h3, h4, h5, h6) { font-weight: 400; font-style: italic; }
+.doc-entry.is-statement .head > .badge.kind { display: none; }
+
+/* The box holds the statement only: head and prose are tinted, and the
+   proof follows below it on the page, as a textbook sets it. */
+.doc-entry.is-statement { background: none; border-left: 0; padding: 0; }
+.doc-entry.is-statement > .head,
+.doc-entry.is-statement > .prose {
+  background: var(--env-bg);
+  border-left: 3px solid var(--env);
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+.doc-entry.is-statement > .head { padding-top: .7rem; border-radius: 0 var(--radius) 0 0; margin: 0; }
+.doc-entry.is-statement > .prose { padding-bottom: .5rem; margin-top: 0; padding-top: .35rem; border-radius: 0 0 var(--radius) 0; }
+.doc-entry.is-statement > .head:last-child { padding-bottom: .5rem; border-radius: 0 var(--radius) var(--radius) 0; }
+.doc-entry .proof { font-style: normal; margin: .6rem 0 1.4rem; padding: 0 0 0 1.1rem; }
+.proof-head { display: inline; }
+.proof-head + .proof-prose { display: inline; }
+.proof-head + .proof-prose > p:first-child { display: inline; }
+a.proof-word { font-family: var(--ui); font-style: normal; font-weight: 700; color: var(--env-def); }
+.proof-end { color: var(--fg); margin-top: -1.4em; }
+.proof-head { margin-right: .4em; }
+
+/* A statement that heads its own page: the title is the page's, set like a
+   section's under the book's rule, and only its text is boxed. */
+.doc-entry.page-head.is-statement > .head {
+  background: none;
+  border-left: 0;
+  padding: 0 0 .5rem;
+  border-radius: 0;
+  border-bottom: 2px solid var(--accent);
+  margin-bottom: .6rem;
+}
+.doc-entry.page-head.is-statement > .head > .badge:last-child { margin-top: .9em; }

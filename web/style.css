@@ -204,6 +204,8 @@ label.chk input { margin: 0; }
 .tabs a:hover { background: var(--panel-2); text-decoration: none; }
 .tabs a.active { color: var(--fg); background: var(--accent-soft); font-weight: 560; }
 
+/* The experimental style menu (app.js, THEMES). */
+.topbar-aside .theme-select { font-size: .8rem; padding: .15em .3em; max-width: 7.5rem; }
 .topbar-aside { display: flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--muted); }
 
 /* The search box sits between the tabs and the progress figure, and its list

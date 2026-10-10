@@ -189,6 +189,21 @@ the `uses` written on it are arcs of the statement — declared while the
 statement is visible, derived for whatever it is collapsed into otherwise —
 and it is listed under the statement's "Hidden inside".
 
+### Themes (experimental)
+
+A *Style* menu in the top bar switches between the candidate styles of the
+site, so they can be compared on the real thing before one is chosen:
+Default (`style.css` alone), Drafting, Article, Textbook, PreTeXt and Outline.
+Each other style is a sheet in `themes/`, loaded after `style.css`. A sheet
+lists only the rules it changes; Article and Textbook `@import` Drafting,
+Outline imports PreTeXt, and the themes that use web fonts import them
+themselves, so the default fetches none. A theme may also ask for a sidebar:
+Outline sets `data-sidebar="outline"` on `<html>`, and the document draws the
+whole outline in the sidebar, opened along the way to the page, in place of
+the list of what the page writes out. `?theme=<id>` in the page's URL picks a
+style for a shared link; otherwise the reader's last pick is kept in
+`localStorage` (`blueprint.theme`). The registry is `THEMES` in `app.js`.
+
 ### Cross references
 
 A `[slug]` in prose reads the way a paper's cross reference does: the lead
