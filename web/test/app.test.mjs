@@ -935,6 +935,41 @@ await check('node and edge metadata survives the round trip through the worker',
   ok(edges.some((e) => e.classList.contains('kind-uses')), 'no uses edge kept its kind');
 });
 
+await check('clicking a node brings its edges and their far ends forward and fades the rest', async () => {
+  const layer = root.querySelector('g.glayer');
+  const edges = root.querySelectorAll('.gedge');
+  const nodeAt = (nid) => root.querySelectorAll('.gnode').find((n) => n.dataset.nid === nid);
+  // a leaf with an edge, so that something is lit and something is not
+  const e0 = edges.find((e) => nodeAt(e.dataset.src) && !nodeAt(e.dataset.src).classList.contains('compound'));
+  ok(e0, 'no edge starts at a drawn leaf');
+  const g = nodeAt(e0.dataset.src);
+  const nid = g.dataset.nid;
+  fire(g, 'click', { stopPropagation() {} });
+  ok(layer.classList.contains('focusing'), 'the layer is not marked as focusing');
+  ok(g.classList.contains('selected') && g.classList.contains('focus'), 'the clicked node is not singled out');
+  for (const e of edges) {
+    const mine = e.dataset.src === nid || e.dataset.tgt === nid;
+    if (mine) ok(e.classList.contains('focus'), `${e.dataset.src} -> ${e.dataset.tgt} is not lit`);
+    const far = e.dataset.src === nid ? e.dataset.tgt : e.dataset.tgt === nid ? e.dataset.src : null;
+    if (far && nodeAt(far)) ok(nodeAt(far).classList.contains('focus'), `the far end ${far} faded`);
+  }
+  ok(edges.some((e) => !e.classList.contains('focus')), 'every edge is lit');
+  const head = e0.querySelector('path').getAttribute('marker-end');
+  ok(!head || head.endsWith('-focus)'), `the lit edge kept its plain head ${head}`);
+
+  // A click on empty stage selects nothing and puts everything back.
+  const stage = root.querySelector('div.graph-stage');
+  const svg = stage.querySelector('svg');
+  const press = { button: 0, pointerId: 1, clientX: 5, clientY: 5, target: svg };
+  fire(stage, 'pointerdown', press);
+  fire(stage, 'pointerup', press);
+  ok(!layer.classList.contains('focusing'), 'the layer still fades the rest');
+  ok(!g.classList.contains('selected'), 'the node is still selected');
+  ok(edges.every((e) => !e.classList.contains('focus')), 'an edge is still lit');
+  const back = e0.querySelector('path').getAttribute('marker-end');
+  ok(!back || !back.endsWith('-focus)'), `the edge kept the accent head ${back}`);
+});
+
 await check('a blocked worker falls back to laying out on the main thread', async () => {
   dom.workers.enabled = false;
   dom.workers.created.length = 0;
