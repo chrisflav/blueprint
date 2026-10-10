@@ -40,9 +40,10 @@ def mkBinaryKind (name : String) (constraints : Array String := #[])
 def defaultEdgeKindNames : Array String :=
   #["uses", "implies", "refines", "instance_of", "generalises", "equivalent"]
 
-/-- Kinds a proof may be the proof of. -/
+/-- Kinds a proof may be the proof of: every statement kind, and a remark,
+which often makes a small claim and justifies it. -/
 def defaultProvableKindNames : Array String :=
-  #["corollary", "definition", "lemma", "proposition", "theorem"]
+  #["corollary", "definition", "lemma", "proposition", "remark", "theorem"]
 
 /-- The schema that ships with the tool. -/
 def defaultSchema : Schema where

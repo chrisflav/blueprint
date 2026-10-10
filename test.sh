@@ -322,6 +322,8 @@ printf '\n## Proof\n\nBy [key-prop].\n\n## Remark\n\nSharp.\n' \
 printf '\n## Proof\n\nShort.\n\n## Detailed form\n\nMore precisely, it is.\n\n## Proof\n\nLong.\n' \
   >> "$TMP/mig/blueprint/induction/key-prop.md"
 printf '\n*Proof.* By definition.\n' >> "$TMP/mig/blueprint/induction/base-case.md"
+printf '+++\nkind = "remark"\n+++\nThe base case is trivial.\n\n## Proof\n\nThere is nothing in it.\n' \
+  > "$TMP/mig/blueprint/induction/base-remark.md"
 # A section that is the sketch of a proposition, with a proof and a detail.
 mkdir -p "$TMP/mig/blueprint/induction/sketchy"
 printf '+++\nid    = "sk-prop"\nkind  = "section"\ntitle = "Sketched"\n+++\n*Proposition (sketch).*\n\nEverything holds.\n\n## Proof\n\nBy [sk-detail].\n' \
@@ -373,7 +375,13 @@ if grep -q '^By definition\.$' "$TMP/mig/blueprint/induction/base-case.proof.md"
 else
   bad "an inline *Proof.* marker opens a proof too"; cat "$TMP/mig.1"
 fi
-if grep -q 'split 6 proof' "$TMP/mig.1" && grep -q '^of    = "main-theorem"$' "$MP" \
+if grep -q '^of    = "base-remark"$' "$TMP/mig/blueprint/induction/base-remark.proof.md" \
+   && ! grep -q 'Proof' "$TMP/mig/blueprint/induction/base-remark.md"; then
+  ok "a remark's proof is split off too"
+else
+  bad "a remark's proof is split off too"; cat "$TMP/mig.1"
+fi
+if grep -q 'split 7 proof' "$TMP/mig.1" && grep -q '^of    = "main-theorem"$' "$MP" \
    && grep -q '^By \[key-prop\]\.$' "$MP" && ! grep -q '^uses' "$MP" \
    && ! grep -q 'Proof' "$TMP/mig/blueprint/induction/main-theorem.md" \
    && grep -q '^Sharp\.$' "$TMP/mig/blueprint/induction/main-theorem.md"; then
@@ -516,6 +524,20 @@ wants "$TMP/broken.facts.json" '"decls": {"Broken.nope": {"exists": false}}'
 
 # ------------------------------------------------------------ import-latex
 head_ "blueprint import-latex"
+# A proof after an environment read as a remark (here `example`) is a proof
+# file too.
+mkdir -p "$TMP/lirem"
+printf '\\chapter{One}\n\\section{Two}\n\\begin{example}\\label{ex:a}\nA claim.\n\\end{example}\n\\begin{proof}\nClear.\n\\end{proof}\n' \
+  > "$TMP/lirem/in.tex"
+"$BP" import-latex "$TMP/lirem/in.tex" --out "$TMP/lirem/out/blueprint" > /dev/null 2>&1
+if grep -q '^of = "ex-a"$' "$TMP/lirem/out/blueprint/one/two/ex-a.proof.md" \
+   && grep -q '^kind = "remark"$' "$TMP/lirem/out/blueprint/one/two/ex-a.md" \
+   && ! grep -q 'Proof' "$TMP/lirem/out/blueprint/one/two/ex-a.md"; then
+  ok "a proof after an example is a proof file of its own"
+else
+  bad "a proof after an example is a proof file of its own"; cat "$TMP/lirem/in.tex"; find "$TMP/lirem/out"
+fi
+
 rm -rf "$TMP/li"
 if "$BP" import-latex examples/latex-import/src/content.tex --out "$TMP/li/blueprint" \
      --toml "$TMP/li/blueprint.toml" --report "$TMP/li/report.txt" \

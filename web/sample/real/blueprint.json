@@ -59,7 +59,8 @@
    "proof":
    {"sugar": false,
     "kinds":
-    {"of": ["corollary", "definition", "lemma", "proposition", "theorem"]},
+    {"of":
+     ["corollary", "definition", "lemma", "proposition", "remark", "theorem"]},
     "countable": false,
     "constraints": [],
     "color": "#57b",
