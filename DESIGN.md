@@ -371,7 +371,7 @@ blueprint view    [--collapse K] [--expand ids] prints the quotient graph
 blueprint site    [-o dir] [--history dir] assemble the static website
 blueprint serve   [--port p] [--site dir]  assemble it and serve it locally
 blueprint history add <snapshot> --dir d   file a snapshot, update the index
-blueprint migrate proofs [--facts f]      move proofs out of statement bodies
+blueprint migrate [--facts f]             sketches to statements, proofs out of bodies
 ```
 
 `serve` borrows a static file server (`python3 -m http.server` and three

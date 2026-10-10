@@ -746,10 +746,10 @@ def cmdHistory (root : System.FilePath) (args : Args) : IO UInt32 := do
 
 /-! ## `blueprint migrate` -/
 
-/-- `blueprint migrate proofs [--facts f] [--dry-run]` -/
+/-- `blueprint migrate [--facts f] [--dry-run]` -/
 def cmdMigrate (root : System.FilePath) (args : Args) : IO UInt32 := do
   match args.positional[1]? with
-  | some "proofs" =>
+  | none =>
     let factsPath : System.FilePath := (args.get? "--facts").getD (root / "lean-facts.json").toString
     let facts ← loadFactsIfPresent factsPath
     if args.has "--facts" && facts.isNone then
@@ -764,7 +764,7 @@ def cmdMigrate (root : System.FilePath) (args : Args) : IO UInt32 := do
       IO.println "no Lean facts: every use stays on its statement"
     return 0
   | _ =>
-    IO.eprintln "usage: blueprint migrate proofs [--facts f] [--dry-run]"
+    IO.eprintln "usage: blueprint migrate [--facts f] [--dry-run]"
     return 1
 
 /-! ## Entry point -/
@@ -803,9 +803,9 @@ commands:
          [--history dir]
   history add <blueprint.json> --dir d     file a snapshot in the history
           [--sha s] [--date d]             directory and update its index
-  migrate proofs [--facts f] [--dry-run]   move '## Proof' sections into proof
-                                           objects, and uses only the proof
-                                           needs onto them
+  migrate [--facts f] [--dry-run]          sketch sections become statements,
+                                           proofs objects of their own, and
+                                           uses only a proof needs move to it
 
 global options:
   --root <dir>   project root (default: the working directory)

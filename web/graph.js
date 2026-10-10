@@ -1265,9 +1265,7 @@ function cssEscape(s) {
 
 // Colour says the status, so the type is told by shape: a definition is a
 // sharp box, a theorem, proposition, lemma or corollary a stadium, a remark a
-// note with a folded corner, and a section a double frame.  A sketch-level
-// block (a section that opens with a statement word) is drawn as that
-// statement; see `M.nodeType`.
+// note with a folded corner, and a section a double frame; see `M.nodeType`.
 const FOLD = 9;          // the folded corner of a remark
 const FRAME_GAP = 3;     // the gap between a section's two frames
 const STADIUM_R = 18;    // a statement's end radius: a full half-circle on a one-line

@@ -179,20 +179,16 @@ const TYPE_SHAPE = {
 };
 
 /**
- * What a node is, for drawing: {word, mark, shape}.  A declaration's word is
- * its kind.  A section that opens with a statement word ("*Proposition
- * (sketch).*") is a sketch-level declaration and takes that word; any other
- * section is a section.  `shape` is `definition`, `statement`, `remark`,
- * `section`, or `other`.  Memoised on the model.
+ * What a node is, for drawing: {word, mark, shape}.  The word is its kind; a
+ * sketch of a statement is an object of that statement's kind (`blueprint
+ * migrate` turns the sections that used to stand for one into it).  `shape`
+ * is `definition`, `statement`, `remark`, `section`, or `other`.  Memoised on
+ * the model.
  */
 export function nodeType(model, o) {
   let t = model._types.get(o.id);
   if (t) return t;
-  let word = o.kind;
-  if (o.kind === 'section') {
-    const m = /^\s*\*\s*(Definition|Theorem|Proposition|Lemma|Corollary|Remark)\b/.exec(o.body || '');
-    if (m) word = m[1].toLowerCase();
-  }
+  const word = o.kind;
   const shape = TYPE_SHAPE[word] || (word === 'section' ? 'section' : 'other');
   t = { word, mark: TYPE_MARK[word] || word.slice(0, 3), shape };
   model._types.set(o.id, t);

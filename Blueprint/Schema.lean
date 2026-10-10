@@ -41,7 +41,8 @@ def defaultEdgeKindNames : Array String :=
   #["uses", "implies", "refines", "instance_of", "generalises", "equivalent"]
 
 /-- Kinds a proof may be the proof of. -/
-def defaultProvableKindNames : Array String := #["definition", "lemma", "theorem"]
+def defaultProvableKindNames : Array String :=
+  #["corollary", "definition", "lemma", "proposition", "theorem"]
 
 /-- The schema that ships with the tool. -/
 def defaultSchema : Schema where
@@ -52,6 +53,8 @@ def defaultSchema : Schema where
       mkNodeKind "definition" true "#4a7",
       mkNodeKind "theorem" true "#47a",
       mkNodeKind "lemma" true "#57b",
+      mkNodeKind "proposition" true "#46a",
+      mkNodeKind "corollary" true "#68b",
       mkNodeKind "concept" false "#aa7",
       mkNodeKind "remark" false "#999",
       -- `src` uses `tgt`, drawn from the dependency to its user

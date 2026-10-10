@@ -356,9 +356,10 @@ def builtinTheoremEnvs : Array String :=
 
 /-- Which blueprint kind a LaTeX environment becomes. -/
 def kindOfEnv (e : String) : String :=
-  if e == "theorem" || e == "proposition" || e == "corollary"
-     || e == "conditionaltheorem" || e == "conjecture" || e == "claim"
+  if e == "theorem" || e == "conditionaltheorem" || e == "conjecture" || e == "claim"
      || e == "fact" || e == "problem" then "theorem"
+  else if e == "proposition" then "proposition"
+  else if e == "corollary" then "corollary"
   else if e == "lemma" then "lemma"
   else if e == "definition" || e == "construction" || e == "notation"
           || e == "convention" then "definition"

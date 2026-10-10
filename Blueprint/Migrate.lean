@@ -2,17 +2,22 @@ import Blueprint.Diff
 import Blueprint.ImportLatex
 
 /-!
-# `blueprint migrate proofs`
+# `blueprint migrate`
 
 Moves a blueprint written before proofs were objects (`DESIGN.md` §2.5) onto
-them.  Two steps, each safe to run again:
+them.  Three steps, in one pass over the sources, each safe to run again:
 
-* **Split.**  Every proof in the body of a definition, lemma or theorem
-  (`splitProofs?`) moves into a proof file of its own next to it:
+* **Sketches.**  A section whose body opens with `*Proposition (sketch).*`
+  (any kind of the schema in place of `Proposition`) is that statement, at
+  the level of a sketch: it becomes an object of that kind, tagged `sketch`,
+  without the lead-in.  It keeps its id, its file and whatever refines it.
+* **Split.**  Every proof in the body of a statement the `proof` kind may
+  attach to (`splitProofs?`) moves into a proof file of its own next to it:
   `<stem>.proof.md` for the first, `<stem>.proof-<k>.md` with the id
-  `proof/<id>/<k>` for the `k`-th.  A proof of a restatement under a heading
-  of its own (a `Detailed form`) is titled after it, and the restatement
-  stays with the statement.
+  `proof/<id>/<k>` for the `k`-th, the stem being the id for a directory's
+  `_section.md`.  A proof of a restatement under a heading of its own (a
+  `Detailed form`) is titled after it, and the restatement stays with the
+  statement.  Proofs found after an earlier run are numbered after it.
 * **Move uses.**  When the Lean facts split each declaration's dependencies
   into type and value, a `uses` the statement's sugar key declares and Lean
   needs only in the proof moves to the proof.  A use the facts do not decide
@@ -154,15 +159,16 @@ def frontKey? (line : String) : Option String :=
   | k :: _ :: _ => some (trim k)
   | _ => none
 
-/-- Set the `uses` key of a front matter block to `ids`, keeping the line's
-own spelling of the key, or remove it when `ids` is empty.  An array spread
-over several lines is replaced as a whole. -/
-def setUses (front : Array String) (ids : Array String) : Array String := Id.run do
+/-- Set an array key of a front matter block to `ids`, keeping the line's own
+spelling of the key, or remove it when `ids` is empty.  An array spread over
+several lines is replaced as a whole. -/
+def setArrayKey (key : String) (front : Array String) (ids : Array String) :
+    Array String := Id.run do
   let render (lhs : String) : String :=
     lhs ++ "= [" ++ String.intercalate ", " (ids.toList.map fun i => "\"" ++ i ++ "\"") ++ "]"
-  match front.findIdx? (frontKey? · == some "uses") with
+  match front.findIdx? (frontKey? · == some key) with
   | none =>
-    if ids.isEmpty then return front else return front.push (render "uses ")
+    if ids.isEmpty then return front else return front.push (render (key ++ " "))
   | some i =>
     let mut stop := i
     while stop < front.size && !(front[stop]!.contains ']') do
@@ -172,10 +178,36 @@ def setUses (front : Array String) (ids : Array String) : Array String := Id.run
     let head := front.extract 0 i
     return if ids.isEmpty then head ++ rest else (head.push (render lhs)) ++ rest
 
+/-- Set the `uses` key of a front matter block. -/
+def setUses : Array String → Array String → Array String := setArrayKey "uses"
+
+/-- Set a string key of a front matter block, keeping the line's own spelling
+of the key, or add it at the end. -/
+def setStringKey (key value : String) (front : Array String) : Array String :=
+  match front.findIdx? (frontKey? · == some key) with
+  | some i => front.set! i ((front[i]!.splitOn "=").head! ++ "= \"" ++ value ++ "\"")
+  | none => front.push (key ++ " = \"" ++ value ++ "\"")
+
+/-- A body that opens with `*Proposition (sketch).*`: the kind its word
+names, lower case, and the body without the lead-in. -/
+def sketchLead? (body : String) : Option (String × String) := Id.run do
+  let lines := splitLines (trim body)
+  let some first := lines[0]? | return none
+  let first := trim first
+  if !(first.startsWith "*") then return none
+  let word := String.ofList ((first.toList.drop 1).takeWhile Char.isAlpha)
+  let lead := "*" ++ word ++ " (sketch).*"
+  if word.isEmpty || !(first.startsWith lead) then return none
+  let rest := trim (first.drop lead.length).copy
+  return some (word.toLower, joinBlocks #[#[rest], lines.extract 1 lines.size])
+
 /-! ## The migration -/
 
 /-- What one run did, or would do. -/
 structure MigrateReport where
+  /-- Sections that were sketches of a statement, now that statement: file
+  and the kind. -/
+  sketches : Array (String × String) := #[]
   /-- Proofs moved to a file of their own: statement file and proof file. -/
   split : Array (String × String) := #[]
   /-- Statements that had more than one proof: file and count. -/
@@ -185,8 +217,10 @@ structure MigrateReport where
   /-- Statements with a proof in their body and an anonymous proof object
   already, which there is no file to number after: file. -/
   clash : Array String := #[]
-  /-- Objects of other kinds with a proof heading, left alone: file. -/
+  /-- Objects of other kinds with a proof in their body, left alone: file. -/
   otherKinds : Array String := #[]
+  /-- Sections opening with a statement word the schema has no kind for. -/
+  unknownWords : Array (String × String) := #[]
   deriving Inhabited
 
 /-- Plan the migration of the project at `root`: the files to write, with
@@ -211,22 +245,35 @@ def planMigration (root : System.FilePath) (facts : Option Facts) :
     if o.source.anonymous || o.kind == "proof" then continue
     let path := root / o.source.file
     let text ← IO.FS.readFile path
-    let some (front, body) := splitSource text | continue
-    -- the split
-    let mut stmtBody := body
+    let some (front0, body0) := splitSource text | continue
+    let mut front := front0
+    let mut body := body0
+    let mut kind := o.kind
+    -- 1. a section that is the sketch of a statement becomes that statement
+    if o.kind == "section" then
+      if let some (word, rest) := sketchLead? body then
+        if (b.schema.kind? word).any (·.roles.isEmpty) then
+          kind := word
+          body := rest
+          front := setStringKey "kind" word front
+          front := setArrayKey "tags" front (sortDedup (o.attrStrings "tags" ++ #["sketch"]))
+          rep := { rep with sketches := rep.sketches.push (o.source.file, word) }
+        else
+          rep := { rep with unknownWords := rep.unknownWords.push (o.source.file, word) }
+    -- 2. the proofs in the body
     let mut cut : Array CutProof := #[]
     let existing := b.proofsOf o.id
     match splitProofs? body with
     | none => pure ()
     | some (stmt, prfs) =>
-      if !canProve o.kind then
+      if !canProve kind then
         rep := { rep with otherKinds := rep.otherKinds.push o.source.file }
       else if existing.any (·.source.anonymous) then
         rep := { rep with clash := rep.clash.push o.source.file }
       else
-        stmtBody := stmt
+        body := stmt
         cut := prfs
-    -- the uses Lean needs only in the proof
+    -- 3. the uses Lean needs only in the proof
     let hasProof := !cut.isEmpty || !existing.isEmpty
     let sugar : Array String :=
       ((b.ofKind "uses").filter fun e =>
@@ -240,85 +287,81 @@ def planMigration (root : System.FilePath) (facts : Option Facts) :
         else #[]
       | none => #[]
     for t in toMove do rep := { rep with moved := rep.moved.push (o.id, t) }
-    let front := if toMove.isEmpty then front else
-      setUses front (sugar.filter (!toMove.contains ·))
-    -- the proofs' files: new ones, or the existing one gaining the moved uses
-    if !cut.isEmpty then
-      let stem := ((o.source.file.splitOn "/").getLast!).dropEnd 3 |>.copy
-      let dir := String.intercalate "/" ((o.source.file.splitOn "/").dropLast)
-      let relOf (k : Nat) : String :=
-        (if dir.isEmpty then "" else dir ++ "/") ++ stem ++
-          (if k == 1 then ".proof.md" else s!".proof-{k}.md")
-      -- proofs already split off by an earlier run come first
-      let before := existing.size
-      let total := before + cut.size
-      let rels := (Array.range cut.size).map (relOf <| before + · + 1)
-      let mut taken := false
-      for rel in rels do
-        if ← (root / rel).pathExists then taken := true
-      if taken then
-        rep := { rep with clash := rep.clash.push o.source.file }
-        continue
-      for k in [0 : cut.size] do
-        let c := cut[k]!
-        let pos := before + k + 1
-        -- the first proof gets the derived id `proof/<id>`, the others ids of
-        -- their own; with several, `order` keeps them in the body's order
-        let pfront : Array String :=
-          (if pos == 1 then #[] else #[s!"id    = \"proof/{o.id}/{pos}\""]) ++
-          #["kind  = \"proof\"", s!"of    = \"{o.id}\""] ++
-          (match c.title with
-           | some t => #[s!"title = \"{tomlEscape t}\""]
-           | none => #[]) ++
-          (if total > 1 then #[s!"order = {pos}"] else #[]) ++
-          (if pos == 1 then setUses #[] toMove else #[])
-        writes := writes.push (root / rels[k]!, joinSource pfront c.text)
-        rep := { rep with split := rep.split.push (o.source.file, rels[k]!) }
-      -- an earlier proof without an `order` would sort after the new ones,
-      -- and the first of them takes the uses moved off the statement
-      let earlier := existing.qsort (fun a c => a.id < c.id)
-      for k in [0 : earlier.size] do
-        let p := earlier[k]!
-        let gains := k == 0 && !toMove.isEmpty
-        if (p.attr? "order").isSome && !gains then continue
-        let ptext ← IO.FS.readFile (root / p.source.file)
-        let some (pfront, pbody) := splitSource ptext | continue
-        let mut pfront := pfront
-        if (p.attr? "order").isNone then pfront := pfront.push s!"order = {k + 1}"
-        if gains then
-          let pUses := ((b.ofKind "uses").filter fun e =>
-            e.source.file == p.source.file && e.src? == some p.id).filterMap (·.tgt?)
-          pfront := setUses pfront (sortDedup (pUses ++ toMove))
-        writes := writes.push (root / p.source.file, joinSource pfront pbody)
-      if total > 1 then
-        rep := { rep with several := rep.several.push (o.source.file, total) }
-      writes := writes.push (path, joinSource front stmtBody)
-    else
-      if toMove.isEmpty then continue
-      match existing.find? (!·.source.anonymous) with
-      | none => continue
-      | some p =>
-        let ppath := root / p.source.file
-        let ptext ← IO.FS.readFile ppath
-        let some (pfront, pbody) := splitSource ptext | continue
+    if !toMove.isEmpty then
+      front := setUses front (sugar.filter (!toMove.contains ·))
+    -- the proofs' files: new ones after any split off before, the first of
+    -- which takes the moved uses
+    let file := (o.source.file.splitOn "/").getLast!
+    let dir := String.intercalate "/" ((o.source.file.splitOn "/").dropLast)
+    -- a directory's own object (`_section.md`) names its proofs by its id
+    let stem := if file == sectionFileStem ++ ".md" then o.id else (file.dropEnd 3).copy
+    let relOf (k : Nat) : String :=
+      (if dir.isEmpty then "" else dir ++ "/") ++ stem ++
+        (if k == 1 then ".proof.md" else s!".proof-{k}.md")
+    let before := existing.size
+    let total := before + cut.size
+    let rels := (Array.range cut.size).map (relOf <| before + · + 1)
+    let mut taken := false
+    for rel in rels do
+      if ← (root / rel).pathExists then taken := true
+    if taken then
+      rep := { rep with clash := rep.clash.push o.source.file }
+      continue
+    for k in [0 : cut.size] do
+      let c := cut[k]!
+      let pos := before + k + 1
+      -- the first proof gets the derived id `proof/<id>`, the others ids of
+      -- their own; with several, `order` keeps them in the body's order
+      let pfront : Array String :=
+        (if pos == 1 then #[] else #[s!"id    = \"proof/{o.id}/{pos}\""]) ++
+        #["kind  = \"proof\"", s!"of    = \"{o.id}\""] ++
+        (match c.title with
+         | some t => #[s!"title = \"{tomlEscape t}\""]
+         | none => #[]) ++
+        (if total > 1 then #[s!"order = {pos}"] else #[]) ++
+        (if pos == 1 then setUses #[] toMove else #[])
+      writes := writes.push (root / rels[k]!, joinSource pfront c.text)
+      rep := { rep with split := rep.split.push (o.source.file, rels[k]!) }
+    if total > 1 && !cut.isEmpty then
+      rep := { rep with several := rep.several.push (o.source.file, total) }
+    -- an earlier proof without an `order` would sort after the new ones, and
+    -- the first of them takes the moved uses when no new proof does
+    let earlier := existing.qsort (fun a c => a.id < c.id)
+    for k in [0 : earlier.size] do
+      let p := earlier[k]!
+      let gains := k == 0 && !toMove.isEmpty
+      let needsOrder := (p.attr? "order").isNone && !cut.isEmpty
+      if p.source.anonymous || (!gains && !needsOrder) then continue
+      let ptext ← IO.FS.readFile (root / p.source.file)
+      let some (pfront, pbody) := splitSource ptext | continue
+      let mut pfront := pfront
+      if needsOrder then pfront := pfront.push s!"order = {k + 1}"
+      if gains then
         let pUses := ((b.ofKind "uses").filter fun e =>
           e.source.file == p.source.file && e.src? == some p.id).filterMap (·.tgt?)
-        writes := writes.push (ppath, joinSource (setUses pfront (sortDedup (pUses ++ toMove))) pbody)
-        writes := writes.push (path, joinSource front stmtBody)
+        pfront := setUses pfront (sortDedup (pUses ++ toMove))
+      writes := writes.push (root / p.source.file, joinSource pfront pbody)
+    if front != front0 || body != body0 then
+      writes := writes.push (path, joinSource front body)
   return (writes, rep)
 
 /-- The report as text. -/
 def MigrateReport.render (r : MigrateReport) (dryRun : Bool) : String := Id.run do
-  let verb := if dryRun then "would split" else "split"
-  let mut out := s!"{verb} {r.split.size} proof(s) into files of their own; " ++
-    s!"{if dryRun then "would move" else "moved"} {r.moved.size} use(s) from a statement to its proof\n"
+  let w (did would : String) := if dryRun then would else did
+  let mut out :=
+    s!"{w "turned" "would turn"} {r.sketches.size} sketch section(s) into statements; " ++
+    s!"{w "split" "would split"} {r.split.size} proof(s) into files of their own; " ++
+    s!"{w "moved" "would move"} {r.moved.size} use(s) from a statement to its proof\n"
   for (f, n) in r.several do
     out := out ++ s!"  {f}: {n} proofs, the later ones titled after what they prove\n"
+  for (f, word) in r.unknownWords do
+    out := out ++ s!"  left alone: {f} opens with '{word}', which is not a kind of the schema\n"
   for f in r.clash do
-    out := out ++ s!"  left alone: {f} has a proof heading and a proof object already\n"
+    out := out ++ s!"  left alone: {f} has a proof in its body and an unwritten proof object\n"
   for f in r.otherKinds do
-    out := out ++ s!"  left alone: {f} has a proof heading, but its kind cannot have a proof\n"
+    out := out ++ s!"  left alone: {f} has a proof in its body, but its kind cannot have a proof\n"
   if dryRun then
+    for (f, k) in r.sketches do out := out ++ s!"  {f} becomes a {k}\n"
     for (s, p) in r.split do out := out ++ s!"  split {s} -> {p}\n"
     for (s, t) in r.moved do out := out ++ s!"  move uses {s} -> {t} to its proof\n"
   return out

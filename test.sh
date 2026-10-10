@@ -308,10 +308,10 @@ else
   ok "a use on the wrong half is not also reported missing"
 fi
 
-# `migrate proofs`: a `## Proof` section becomes a proof file, and a use
+# `migrate`: a `## Proof` section becomes a proof file, and a use
 # Lean needs only in the proof follows it there.  The promoted edge file is
 # removed so that `key-prop` is a plain sugar use of `main-theorem`.
-head_ "blueprint migrate proofs"
+head_ "blueprint migrate"
 rm -rf "$TMP/mig"
 cp -r examples/induction "$TMP/mig"
 rm "$TMP/mig/lean-facts.json" "$TMP/mig/blueprint/induction/main-uses-key.md"
@@ -322,7 +322,13 @@ printf '\n## Proof\n\nBy [key-prop].\n\n## Remark\n\nSharp.\n' \
 printf '\n## Proof\n\nShort.\n\n## Detailed form\n\nMore precisely, it is.\n\n## Proof\n\nLong.\n' \
   >> "$TMP/mig/blueprint/induction/key-prop.md"
 printf '\n*Proof.* By definition.\n' >> "$TMP/mig/blueprint/induction/base-case.md"
-"$BP" migrate proofs --root "$TMP/mig" > "$TMP/mig.1" 2>&1
+# A section that is the sketch of a proposition, with a proof and a detail.
+mkdir -p "$TMP/mig/blueprint/induction/sketchy"
+printf '+++\nid    = "sk-prop"\nkind  = "section"\ntitle = "Sketched"\n+++\n*Proposition (sketch).*\n\nEverything holds.\n\n## Proof\n\nBy [sk-detail].\n' \
+  > "$TMP/mig/blueprint/induction/sketchy/_section.md"
+printf '+++\nkind  = "lemma"\ntitle = "Detail"\n+++\nA detail.\n' \
+  > "$TMP/mig/blueprint/induction/sketchy/sk-detail.md"
+"$BP" migrate --root "$TMP/mig" > "$TMP/mig.1" 2>&1
 MP="$TMP/mig/blueprint/induction/main-theorem.proof.md"
 KP="$TMP/mig/blueprint/induction/key-prop"
 if [ "$(cat "$KP.proof.md")" = "$(printf '+++\nkind  = "proof"\nof    = "key-prop"\norder = 1\n+++\nShort.')" ] \
@@ -334,13 +340,23 @@ if [ "$(cat "$KP.proof.md")" = "$(printf '+++\nkind  = "proof"\nof    = "key-pro
 else
   bad "every proof of a body gets a file, the restatement's titled after it"; cat "$TMP/mig.1" "$KP".*
 fi
+SK="$TMP/mig/blueprint/induction/sketchy"
+if grep -q 'turned 1 sketch' "$TMP/mig.1" && grep -q '^kind  = "proposition"$' "$SK/_section.md" \
+   && grep -q '^tags = \["sketch"\]$' "$SK/_section.md" && ! grep -q 'sketch)' "$SK/_section.md" \
+   && grep -q '^Everything holds\.$' "$SK/_section.md" && grep -q '^of    = "sk-prop"$' "$SK/sk-prop.proof.md" \
+   && "$BP" build --root "$TMP/mig" -o "$TMP/mig.json" > /dev/null 2>&1 \
+   && grep -q '"id": "refines/sk-detail/sk-prop"' "$TMP/mig.json"; then
+  ok "a sketch section becomes its statement, keeps its details, and its proof is split off"
+else
+  bad "a sketch section becomes its statement, keeps its details, and its proof is split off"; cat "$TMP/mig.1" "$SK/_section.md"
+fi
 if grep -q '^By definition\.$' "$TMP/mig/blueprint/induction/base-case.proof.md" \
    && ! grep -q 'Proof' "$TMP/mig/blueprint/induction/base-case.md"; then
   ok "an inline *Proof.* marker opens a proof too"
 else
   bad "an inline *Proof.* marker opens a proof too"; cat "$TMP/mig.1"
 fi
-if grep -q '^split 4 proof' "$TMP/mig.1" && grep -q '^of    = "main-theorem"$' "$MP" \
+if grep -q 'split 5 proof' "$TMP/mig.1" && grep -q '^of    = "main-theorem"$' "$MP" \
    && grep -q '^By \[key-prop\]\.$' "$MP" && ! grep -q '^uses' "$MP" \
    && ! grep -q 'Proof' "$TMP/mig/blueprint/induction/main-theorem.md" \
    && grep -q '^Sharp\.$' "$TMP/mig/blueprint/induction/main-theorem.md"; then
@@ -349,7 +365,7 @@ else
   bad "without facts, the proof moves to a file of its own and every use stays"; cat "$TMP/mig.1" "$MP"
 fi
 cp "$TMP/facts.json" "$TMP/mig/lean-facts.json"
-"$BP" migrate proofs --root "$TMP/mig" > "$TMP/mig.2" 2>&1
+"$BP" migrate --root "$TMP/mig" > "$TMP/mig.2" 2>&1
 if grep -q 'moved 1 use' "$TMP/mig.2" && grep -q '^uses = \["key-prop"\]$' "$MP" \
    && grep -q '^uses   = \["compactness"\]$' "$TMP/mig/blueprint/induction/main-theorem.md"; then
   ok "with split facts, a use Lean needs only in the proof moves to it"
@@ -359,7 +375,7 @@ fi
 # A body that gains a further proof after an earlier run: numbered after the
 # proof already there, which is given an order so that it stays first.
 printf '\n## Claim\n\nAlso this.\n\n*Proof.* Clear.\n' >> "$TMP/mig/blueprint/induction/main-theorem.md"
-"$BP" migrate proofs --root "$TMP/mig" > "$TMP/mig.25" 2>&1
+"$BP" migrate --root "$TMP/mig" > "$TMP/mig.25" 2>&1
 if grep -q '^id    = "proof/main-theorem/2"$' "$TMP/mig/blueprint/induction/main-theorem.proof-2.md" \
    && grep -q '^title = "of the claim"$' "$TMP/mig/blueprint/induction/main-theorem.proof-2.md" \
    && grep -q '^order = 1$' "$MP" && grep -q '^## Claim$' "$TMP/mig/blueprint/induction/main-theorem.md"; then
@@ -367,8 +383,8 @@ if grep -q '^id    = "proof/main-theorem/2"$' "$TMP/mig/blueprint/induction/main
 else
   bad "a proof found later is numbered after the one split off before"; cat "$TMP/mig.25" "$MP"
 fi
-"$BP" migrate proofs --root "$TMP/mig" > "$TMP/mig.3" 2>&1
-if grep -q '^split 0 proof.*moved 0 use' "$TMP/mig.3"; then
+"$BP" migrate --root "$TMP/mig" > "$TMP/mig.3" 2>&1
+if grep -q 'turned 0 sketch.*split 0 proof.*moved 0 use' "$TMP/mig.3"; then
   ok "migrating again changes nothing"
 else
   bad "migrating again changes nothing"; cat "$TMP/mig.3"
