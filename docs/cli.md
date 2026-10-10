@@ -627,7 +627,10 @@ A proof can have details of its own, the steps of its argument as lemmas of
 their own: `refines = "proof/<statement>"`.  In the collapse order they are
 details of the statement, since the proof is not in it: expanding the
 statement shows them, the document sets them under the statement, and
-progress counts them in its place.
+progress counts them in its place: a statement proved in Lean whose details
+are not counts as its details do.  The `uses` of the statement and of its
+proof then become coarse edges, and are reported as `unwitnessed-edge`
+unless some detail uses the same target.
 
 **Explicit boundaries.**  Write them out to give an edge its own prose, or to
 build hyperedges and edges between edges:

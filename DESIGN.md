@@ -159,13 +159,20 @@ dependencies of its type and of its value (§5).
 Status and progress stay with the statement. Its Lean names, and so its
 derived status, are the statement's; `proved` already says the proof is
 complete. A proof is not countable and is not below its statement in any
-collapse order, so the statement remains the leaf that progress counts.
+collapse order, so the statement remains the leaf that progress counts,
+unless its proof has details.
 
 A proof may have details of its own: lemmas or steps that refine it, the
 zoomed-in argument. The proof itself is not in any collapse order, so in
 each of them a detail of a proof counts as a detail of its statement:
 expanding the statement shows them, the document sets them under it, and
-progress counts them, the statement no longer being a leaf.
+progress counts them, the statement no longer being a leaf. Two consequences
+follow from the general rules: a statement proved in Lean whose detail
+lemmas are not yet is no longer counted as proved, its details are; and the
+`uses` declared on the statement and its proof are, like any coarse edge,
+`unwitnessed-edge` infos unless a detail uses them too. A statement refining
+a detail of its own proof would close a cycle, which `constraint-acyclic`
+reports.
 
 ## 3. Views and quotients
 

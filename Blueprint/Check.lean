@@ -164,14 +164,21 @@ def structuralChecks (b : Blueprint) : Array Check := Id.run do
     if k.hasConstraint "acyclic" then
       let n := b.objects.size
       let mut adj : Array (Array Nat) := Array.replicate n #[]
-      for o in b.objects do
-        if o.kind != k.name then continue
-        match o.src?, o.tgt? with
-        | some s, some t =>
-          match b.findIdx? s, b.findIdx? t with
-          | some si, some ti => adj := adj.modify si (·.push ti)
+      if k.collapse then
+        -- the order the views use, where a detail of a proof is a detail of
+        -- its statement: that can close a cycle the raw edges do not have
+        -- (a statement refining a detail of its own proof), and it keeps
+        -- every cycle they do have
+        adj := (Collapse.of b k.name).parents
+      else
+        for o in b.objects do
+          if o.kind != k.name then continue
+          match o.src?, o.tgt? with
+          | some s, some t =>
+            match b.findIdx? s, b.findIdx? t with
+            | some si, some ti => adj := adj.modify si (·.push ti)
+            | _, _ => pure ()
           | _, _ => pure ()
-        | _, _ => pure ()
       for g in cycleGroups adj do
         let ids := g.map fun i => b.objects[i]!.id
         cs := cs.push <| Check.error "constraint-acyclic"

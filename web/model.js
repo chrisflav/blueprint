@@ -347,7 +347,9 @@ export function collapseOrder(model, kind) {
   for (const o of model.objects) {
     if (o.kind !== kind) continue;
     const src = boundaryEntry(o, 'src');
-    if (src != null && boundaryEntry(o, 'tgt') != null) hasParent.add(src);
+    const tgt = boundaryEntry(o, 'tgt');
+    // only edges whose ends both exist, as below and in View.lean
+    if (src != null && tgt != null && parents.has(src) && parents.has(tgt)) hasParent.add(src);
   }
   const lift = (id) => {
     let cur = id;

@@ -167,6 +167,15 @@ if python3 -c 'import json,sys; p=json.load(open(sys.argv[1]))["derived"]["progr
 else
   bad "the statement's progress counts the details of its proof"
 fi
+# A statement refining a detail of its own proof closes a cycle in the order
+# the views use, though not among the raw refines edges.
+sed -i 's/^uses   = \["add"\]$/uses   = ["add"]\nrefines = "add-comm-step"/' "$TMP/pd/blueprint/add-comm.md"
+"$BP" check --root "$TMP/pd" > "$TMP/pd.cyc" 2>&1
+if grep -q "\[constraint-acyclic\].*add-comm" "$TMP/pd.cyc"; then
+  ok "a statement refining a detail of its own proof is a cycle"
+else
+  bad "a statement refining a detail of its own proof is a cycle"; cat "$TMP/pd.cyc"; cat "$TMP/pd/blueprint/add-comm.md"
+fi
 
 head_ "kinds: the arrow display hint"
 if [ "$(grep -c '"arrow"' "$TMP/induction.json")" = 1 ] \
