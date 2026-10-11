@@ -161,9 +161,12 @@ function defs(app) {
       markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse',
     }, svgEl('path', {
       d: 'M 0 0.8 L 10 5 L 0 9.2 z',
-      class: hollow ? 'arrowhead hollow' : 'arrowhead',
+      class: (hollow ? 'arrowhead hollow' : 'arrowhead') + (id.endsWith('-focus') ? ' focus' : ''),
     }));
-  return svgEl('defs', marker('bp-arrow', false), marker('bp-arrow-hollow', true));
+  // The `-focus` pair is the accent-coloured head an edge of the selected node
+  // switches to, so the arrow matches its highlighted stroke.
+  return svgEl('defs', marker('bp-arrow', false), marker('bp-arrow-hollow', true),
+    marker('bp-arrow-focus', false), marker('bp-arrow-hollow-focus', true));
 }
 
 function legend(app) {
@@ -1225,7 +1228,10 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
     const b = abs.get(tgtId);
     if (!a || !b) continue;
     const pts = pathPoints(e, a, b, edgeOffset(abs, chain, srcId, tgtId));
-    gEdges.appendChild(drawEdge(app, meta, pts, a, b));
+    const g = drawEdge(app, meta, pts, a, b);
+    g.dataset.src = srcId;
+    g.dataset.tgt = tgtId;
+    gEdges.appendChild(g);
   }
 
   // --- transitions ---------------------------------------------------------
@@ -1250,6 +1256,7 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
     requestAnimationFrame(() => gEdges.classList.remove('fade-in'));
   }
   prevPos = new Map([...abs].map(([id, b]) => [id, { x: b.x, y: b.y }]));
+  ui.chain = chain;
 
   ui.bbox = bboxOf(abs);
   if (!ui.fitted) { fitToView(app); ui.fitted = true; } else applyTransform();
@@ -1580,11 +1587,79 @@ function toggleExpand(app, id, view) {
 }
 
 function applySelection(app, id) {
-  for (const g of ui.layer.querySelectorAll('.gnode.selected')) g.classList.remove('selected');
+  for (const g of ui.layer.querySelectorAll('.gnode')) {
+    g.classList.remove('selected');
+    g.classList.remove('focus');
+  }
+  for (const g of ui.layer.querySelectorAll('.gtitle')) g.classList.remove('focus');
+  for (const g of ui.layer.querySelectorAll('.gedge')) {
+    g.classList.remove('focus');
+    focusArrowhead(g, false);
+  }
+  ui.layer.classList.remove('focusing');
   if (!id) return;
+  const own = new Set();
   for (const g of ui.layer.querySelectorAll(`.gnode[data-id="${cssEscape(id)}"]`)) {
     g.classList.add('selected');
+    own.add(g.dataset.nid);
   }
+  if (!own.size) return;
+  applyFocus(own);
+}
+
+/**
+ * Bring the selected node's neighbourhood forward and fade the rest: its
+ * edges, the nodes at their far ends, and the containers around all of these
+ * (fading a section's box would wash out a highlighted node inside it).  An
+ * open section counts its children as its own, and a relation drawn as a
+ * junction passes the highlight on to its other spokes, so the objects it
+ * relates the selection to light up too.
+ */
+function applyFocus(own) {
+  const chain = ui.chain || new Map();
+  const inside = (nid) => (chain.get(nid) || []).some((c) => own.has(c));
+  const focus = new Set();
+  const lit = [];
+  const edges = [...ui.layer.querySelectorAll('.gedge')];
+  const junctions = new Set([...ui.layer.querySelectorAll('.gnode.junction')].map((g) => g.dataset.nid));
+  const reach = (from) => {
+    const far = [];
+    for (const g of edges) {
+      const { src, tgt } = g.dataset;
+      const hit = from(src) ? tgt : from(tgt) ? src : null;
+      if (hit === null || g.classList.contains('focus')) continue;
+      g.classList.add('focus');
+      lit.push(g);
+      focus.add(src); focus.add(tgt);
+      far.push(hit);
+    }
+    return far;
+  };
+  const near = reach((nid) => own.has(nid) || inside(nid));
+  const hubs = new Set(near.filter((nid) => junctions.has(nid) && !own.has(nid)));
+  if (hubs.size) reach((nid) => hubs.has(nid));
+
+  for (const nid of [...focus, ...own]) {
+    focus.add(nid);
+    for (const c of chain.get(nid) || []) focus.add(c);
+  }
+  for (const sel of ['.gnode', '.gtitle']) {
+    for (const g of ui.layer.querySelectorAll(sel)) {
+      const nid = g.dataset.nid;
+      if (focus.has(nid) || own.has(nid) || inside(nid)) g.classList.add('focus');
+    }
+  }
+  for (const g of lit) focusArrowhead(g, true);
+  ui.layer.classList.add('focusing');
+}
+
+/** Give a highlighted edge the accent-coloured head of `defs`, or take it back. */
+function focusArrowhead(g, on) {
+  const p = g.querySelector('path'); // the drawn path; the wide hit path comes after it
+  const mk = p && p.getAttribute('marker-end');
+  if (!mk) return;
+  const base = mk.replace(/-focus\)$/, ')');
+  p.setAttribute('marker-end', on ? base.replace(/\)$/, '-focus)') : base);
 }
 
 function applyHighlight(app, q) {
