@@ -448,6 +448,11 @@ table.grid tr:last-child td { border-bottom: 0; }
 .toolbar .sep { width: 1px; align-self: stretch; background: var(--border); }
 .toolbar .spacer { flex: 1; }
 .toolbar input[type="search"] { width: 12rem; }
+/* The phone's folding of the filters (see the responsive section): on a wide
+   screen the wrapper lays its groups out as the toolbar's own items, and there
+   is nothing to fold. */
+.toolbar .tb-filters { display: contents; }
+.toolbar .tb-toggle { display: none; }
 
 .graph-stage {
   position: relative;
@@ -604,6 +609,8 @@ table.grid tr:last-child td { border-bottom: 0; }
 .side ul { margin: 0; padding-left: 1.05rem; }
 .side li { margin: .12em 0; }
 .side .hint { color: var(--faint); font-size: .84rem; }
+/* The bar that minimises and closes the panel when it is a sheet on a phone. */
+.side .sheet-bar { display: none; }
 
 /* ---------------------------------------------------------- object page */
 
@@ -849,14 +856,88 @@ a.proof-word { font-style: italic; font-weight: 400; color: inherit; }
 /* ---------------------------------------------------------- responsive */
 
 @media (max-width: 900px) {
+  /* The graph keeps the whole window below the top bar.  The toolbar is one
+     row, its filters folded behind a button, and the side panel is a sheet
+     over the bottom of the graph that is there only while something is
+     selected, can be shrunk to its title, and closed. */
   .graph-page {
+    position: relative;
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(20rem, 1fr) auto;
-    height: auto;
-    min-height: calc(100vh - var(--topbar-h));
+    grid-template-rows: auto 1fr;
   }
-  .graph-stage { min-height: 58vh; }
-  .side { border-left: 0; border-top: 1px solid var(--border); max-height: none; }
+  .toolbar { padding: .4rem .6rem; gap: .4rem; flex-wrap: wrap; }
+  .toolbar .tb-toggle { display: inline-flex; align-items: center; gap: .35em; }
+  .toolbar .tb-toggle::after { content: "\25be"; font-size: .8em; }
+  .toolbar.open .tb-toggle::after { content: "\25b4"; }
+  .toolbar .tb-toggle.filtered::before {
+    content: ""; width: .45em; height: .45em; border-radius: 50%; background: var(--accent);
+  }
+  .toolbar .spacer { display: none; }
+  .toolbar .tb-search { flex: 1 1 6rem; min-width: 0; }
+  .toolbar .tb-search input[type="search"] { width: 100%; min-width: 0; }
+  .toolbar .tb-zoom { flex-wrap: nowrap; }
+  .toolbar .tb-filters { display: none; }
+  .toolbar.open .tb-filters {
+    order: 1;
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .45rem .75rem;
+    max-height: 45vh;
+    overflow-y: auto;
+    padding-top: .4rem;
+    border-top: 1px solid var(--border);
+  }
+  .toolbar .tb-filters .sep { display: none; }
+  .graph-status { right: .75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .side {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 5;
+    max-height: 50%;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -4px 18px rgba(0, 0, 0, .14);
+    padding-top: 0;
+    overscroll-behavior: contain;
+  }
+  .side.unselected { display: none; }
+  .side .sheet-bar {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0 -1rem .5rem;
+    padding: .15rem .6rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .side .sheet-bar button {
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: .8rem;
+    padding: .3rem .5rem;
+  }
+  .side .sheet-grip {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .15rem;
+  }
+  .side .grip-mark { width: 2.4rem; height: 4px; border-radius: 2px; background: var(--border-strong); }
+  .side .sheet-close { font-size: 1rem; }
+  .side.min > :not(.sheet-bar):not(h2):not(.sheet-keep) { display: none; }
+  .side.min > h2 { margin-bottom: .2rem; }
+  .side.min > .sheet-keep { margin: .4rem 0 .6rem; }
   .doc-layout { grid-template-columns: 1fr; }
   .toc { position: static; max-height: none; border-bottom: 1px solid var(--border); padding-bottom: .8rem; }
   .topbar { flex-wrap: wrap; height: auto; padding: .5rem 1rem; gap: .4rem; }

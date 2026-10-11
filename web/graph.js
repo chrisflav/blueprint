@@ -213,31 +213,49 @@ function renderToolbar(app, st) {
   const m = app.model;
   const bar = clear(ui.toolbar);
 
+  // On a phone the filters would fill half the screen, so they fold behind a
+  // button there (style.css); on a wide screen the wrapper is `display:
+  // contents` and the toolbar is the one row it always was.
+  const filtered = !!(st.ekinds || st.status || !st.reduce);
+  bar.classList.toggle('open', !!ui.toolbarOpen);
+  const toggle = bar.appendChild(el('button.tb-toggle', {
+    type: 'button',
+    class: filtered ? 'filtered' : null,
+    'aria-expanded': ui.toolbarOpen ? 'true' : 'false',
+    title: filtered ? 'some edges or statuses are filtered out' : null,
+    onclick: () => {
+      ui.toolbarOpen = !ui.toolbarOpen;
+      bar.classList.toggle('open', ui.toolbarOpen);
+      toggle.setAttribute('aria-expanded', ui.toolbarOpen ? 'true' : 'false');
+    },
+  }, 'Filters'));
+  const filters = bar.appendChild(el('div.tb-filters'));
+
   // collapse kind
   const kindSel = el('select', {
     title: 'collapse kind driving the view',
     onchange: (e) => writeState(app, { collapse: e.target.value, expand: [], sel: null }),
   }, ...m.collapseKinds.map((k) => el('option', { value: k, selected: k === st.collapse }, k)));
-  bar.appendChild(el('div.group', el('span.lbl', 'collapse'), kindSel));
+  filters.appendChild(el('div.group', el('span.lbl', 'collapse'), kindSel));
 
   const order = M.collapseOrder(m, st.collapse);
   // Expanding everything is the one action that can put thousands of nodes on
   // screen, so the button says so rather than springing it on the reader.
   const whenExpanded = drawnNodeCount(m);
   const big = whenExpanded >= BIG_GRAPH;
-  bar.appendChild(el('div.group',
+  filters.appendChild(el('div.group',
     el('button', {
       onclick: () => writeState(app, { expand: [...order.expandable] }),
       title: `lay out all ${whenExpanded.toLocaleString()} objects at once`,
     }, big ? `Expand all (${whenExpanded.toLocaleString()})` : 'Expand all'),
     el('button', { onclick: () => writeState(app, { expand: [] }) }, 'Collapse all')));
 
-  bar.appendChild(el('div.sep'));
+  filters.appendChild(el('div.sep'));
 
   // edge kind filter
   const eks = M.edgeKinds(m).filter((k) => k !== st.collapse);
   const on = st.ekinds ? new Set(st.ekinds) : new Set(eks);
-  bar.appendChild(el('div.group', el('span.lbl', 'edges'),
+  filters.appendChild(el('div.group', el('span.lbl', 'edges'),
     ...eks.map((k) => el('label.chk',
       el('input', {
         type: 'checkbox', checked: on.has(k),
@@ -250,18 +268,18 @@ function renderToolbar(app, st) {
 
   // Transitive reduction of what is drawn (see `buildElk`): a group of its
   // own, since it is not a kind and is off when all the kinds are on.
-  bar.appendChild(el('div.group.reduce',
+  filters.appendChild(el('div.group.reduce',
     el('label.chk', { title: 'hide arcs already implied by a longer path of the same kind' },
       el('input', {
         type: 'checkbox', checked: st.reduce,
         onchange: (e) => writeState(app, { reduce: e.target.checked ? null : '0' }),
       }), 'hide implied')));
 
-  bar.appendChild(el('div.sep'));
+  filters.appendChild(el('div.sep'));
 
   // status filter
   const sOn = st.status ? new Set(st.status) : new Set(M.STATUSES);
-  bar.appendChild(el('div.group', el('span.lbl', 'status'),
+  filters.appendChild(el('div.group', el('span.lbl', 'status'),
     ...M.STATUSES.map((s) => el('label.chk', { class: 'st-chip status-' + s, title: M.STATUS_LABEL[s] },
       el('input', {
         type: 'checkbox', checked: sOn.has(s),
@@ -286,8 +304,8 @@ function renderToolbar(app, st) {
       }, 160);
     },
   });
-  bar.appendChild(el('div.group', search));
-  bar.appendChild(el('div.group',
+  bar.appendChild(el('div.group.tb-search', search));
+  bar.appendChild(el('div.group.tb-zoom',
     el('button', { onclick: () => fitToView(app) , title: 'fit the graph into the viewport' }, 'Fit'),
     el('button', { onclick: () => zoomBy(app, 1.25) }, '+'),
     el('button', { onclick: () => zoomBy(app, 1 / 1.25) }, '\u2212')));
@@ -1422,14 +1440,33 @@ function drawJunction(app, box, meta, view) {
   return g;
 }
 
+// A finger has no dependable `dblclick`: iOS never sends one, Android only
+// sometimes, and either may zoom the page instead.  So for touch the second tap
+// on the same node within `DOUBLE_TAP_MS` is the double-click, counted here,
+// and the browser's own `dblclick` after a touch is ignored.  Mouse and pen
+// keep the browser's.
+const DOUBLE_TAP_MS = 350;
+let lastPointerType = 'mouse'; // of the latest press on the stage
+let lastTap = null;            // {id, t} of the latest single touch tap
+
 function wireNode(app, g, id, view) {
   g.addEventListener('click', (ev) => {
     ev.stopPropagation();
     if (panSuppressClick) return; // the click that ends a pan
+    if (lastPointerType === 'touch') {
+      const now = Date.now();
+      if (lastTap && lastTap.id === id && now - lastTap.t <= DOUBLE_TAP_MS) {
+        lastTap = null;
+        toggleExpand(app, id, view);
+        return;
+      }
+      lastTap = { id, t: now };
+    }
     select(app, id);
   });
   g.addEventListener('dblclick', (ev) => {
     ev.stopPropagation();
+    if (lastPointerType === 'touch') return; // counted in `click` above
     toggleExpand(app, id, view);
   });
   g.addEventListener('keydown', (ev) => {
@@ -1569,6 +1606,28 @@ function select(app, id) {
   writeState(app, { sel: id }, { silent: true });
   applySelection(app, id);
   renderSide(app, ui.state, ui.view, ui.quot);
+  if (id) keepClearOfSheet(id);
+}
+
+/**
+ * On a phone the side panel is a sheet over the bottom of the graph, and the
+ * node just tapped is often under it: pan the graph up until its top is in
+ * sight above the sheet, but never past the top of the stage.
+ */
+function keepClearOfSheet(id) {
+  if (typeof getComputedStyle !== 'function' || getComputedStyle(ui.side).position !== 'absolute') return;
+  const g = ui.layer.querySelector(`.gnode[data-id="${cssEscape(id)}"]`);
+  if (!g) return;
+  const r = g.getBoundingClientRect();
+  const sheet = ui.side.getBoundingClientRect();
+  const stage = ui.stage.getBoundingClientRect();
+  if (!sheet.height) return;
+  // A section's box can be most of the graph; its title strip is what counts.
+  const bottom = Math.min(r.bottom, r.top + 48);
+  const dy = Math.min(bottom + 12 - sheet.top, r.top - stage.top - 12);
+  if (dy <= 0) return;
+  ui.transform.y -= dy;
+  applyTransform(false);
 }
 
 function toggleExpand(app, id, view) {
@@ -1667,22 +1726,70 @@ function installPanZoom(app) {
     zoomBy(app, f, ev.clientX - rect.left, ev.clientY - rect.top);
   }, { passive: false });
 
-  stage.addEventListener('pointerdown', (ev) => {
-    if (ev.button !== 0) return;
+  // Every finger on the stage, so that two of them pinch: the graph point
+  // under their midpoint stays under it while their spread sets the scale.  A
+  // mouse is only ever one pointer, so on a desktop this is the drag below.
+  const down = new Map(); // pointerId -> {x, y}, client coordinates
+  let pinch = null;
+
+  const startDrag = (ev, moved) => {
     drag = {
       x: ev.clientX, y: ev.clientY,
       tx: ui.transform.x, ty: ui.transform.y,
-      moved: false,
+      moved,
       // Remember what was under the pointer when the press started: once a
       // pan begins, pointer capture retargets later events to the stage.
       target: ev.target,
     };
+  };
+  const startPinch = () => {
+    const [a, b] = [...down.values()];
+    const rect = stage.getBoundingClientRect();
+    const t = ui.transform;
+    const mx = (a.x + b.x) / 2 - rect.left;
+    const my = (a.y + b.y) / 2 - rect.top;
+    pinch = {
+      d: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)),
+      k: t.k,
+      gx: (mx - t.x) / t.k, // the graph point under the midpoint
+      gy: (my - t.y) / t.k,
+    };
+    drag = null;
+    stage.classList.add('panning');
+    for (const id of down.keys()) {
+      try { stage.setPointerCapture(id); } catch (e) { /* ignore */ }
+    }
+  };
+
+  stage.addEventListener('pointerdown', (ev) => {
+    lastPointerType = ev.pointerType || 'mouse';
+    if (ev.button !== 0) return;
+    // Only fingers pinch.  A mouse released off the stage never reports it,
+    // and must not count as a first finger next time.
+    if (ev.pointerType !== 'touch') { down.clear(); pinch = null; }
+    down.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (down.size === 2) { startPinch(); return; }
+    if (down.size > 2) return;
+    startDrag(ev, false);
     // No pointer capture yet. Capturing on the press would make the browser
     // dispatch the eventual `click` and `dblclick` to the stage instead of the
     // node under the pointer, and nothing on a node would ever be selectable.
     // The stage captures only once the pointer has actually moved, below.
   });
   stage.addEventListener('pointermove', (ev) => {
+    if (down.has(ev.pointerId)) down.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (pinch) {
+      if (down.size < 2) return;
+      const [a, b] = [...down.values()];
+      const rect = stage.getBoundingClientRect();
+      const mx = (a.x + b.x) / 2 - rect.left;
+      const my = (a.y + b.y) / 2 - rect.top;
+      const d = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+      const k = Math.max(0.08, Math.min(4, pinch.k * d / pinch.d));
+      ui.transform = { k, x: mx - pinch.gx * k, y: my - pinch.gy * k };
+      applyTransform(true);
+      return;
+    }
     if (!drag) return;
     const dx = ev.clientX - drag.x;
     const dy = ev.clientY - drag.y;
@@ -1697,7 +1804,25 @@ function installPanZoom(app) {
     applyTransform(true);
   });
   const end = (ev) => {
-    if (!drag) return;
+    down.delete(ev.pointerId);
+    try { stage.releasePointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+    if (pinch) {
+      if (down.size >= 2) { startPinch(); return; }
+      pinch = null;
+      if (down.size === 1) {
+        // The finger left behind pans on from where it is; lifting it is the
+        // end of a gesture, not a tap.
+        const [id, p] = [...down.entries()][0];
+        startDrag({ clientX: p.x, clientY: p.y, target: stage }, true);
+        try { stage.setPointerCapture(id); } catch (e) { /* ignore */ }
+        return;
+      }
+      stage.classList.remove('panning');
+      panSuppressClick = true;
+      setTimeout(() => { panSuppressClick = false; }, 0);
+      return;
+    }
+    if (!drag || down.size) return;
     const { moved, target } = drag;
     drag = null;
     stage.classList.remove('panning');
@@ -1725,6 +1850,13 @@ function renderSide(app, st, view, quot) {
   const id = st.sel;
   const o = id ? m.byId.get(id) : null;
 
+  // On a phone the panel is a sheet over the bottom of the graph (style.css):
+  // gone while nothing is selected, and shrunk to its title and the expand
+  // button when the reader minimises it.  On a wide screen the bar is hidden
+  // and these classes do nothing.
+  side.classList.toggle('unselected', !o);
+  side.classList.toggle('min', !!(o && ui.sheetMin));
+
   if (!o) {
     side.appendChild(el('h2', 'Nothing selected'));
     side.appendChild(el('p.hint',
@@ -1742,6 +1874,18 @@ function renderSide(app, st, view, quot) {
     return;
   }
 
+  side.appendChild(el('div.sheet-bar',
+    el('button.sheet-grip', {
+      type: 'button',
+      'aria-expanded': ui.sheetMin ? 'false' : 'true',
+      title: ui.sheetMin ? 'show the details' : 'minimise the details',
+      onclick: () => { ui.sheetMin = !ui.sheetMin; renderSide(app, ui.state, ui.view, ui.quot); },
+    }, el('span.grip-mark', { 'aria-hidden': 'true' }), ui.sheetMin ? 'Details \u25b4' : 'Details \u25be'),
+    el('button.sheet-close', {
+      type: 'button', title: 'deselect', 'aria-label': 'Close',
+      onclick: () => select(app, null),
+    }, '\u2715')));
+
   const status = M.statusOf(m, id);
   const heading = side.appendChild(el('h2', M.titleOf(o)));
   side.appendChild(el('div.meta', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status)));
@@ -1753,7 +1897,7 @@ function renderSide(app, st, view, quot) {
   }
 
   if (view.isExpandable(id)) {
-    side.appendChild(el('section',
+    side.appendChild(el('section.sheet-keep',
       el('button', { onclick: () => toggleExpand(app, id, view) },
         view.isExpanded(id) ? 'Collapse' : 'Expand',
         ' (', String(M.childrenOf(view.order, id).length), ' children)')));
