@@ -98,7 +98,7 @@ export function render(root, app) {
       el('h3', 'Progress'),
       el('p.muted.small',
         'The fraction of countable leaves below this object whose derived status is ',
-        el('code', 'proved'), '; for a top-level object, of its direct children.'),
+        el('code', 'proved'), '; for a section, of its direct children (remarks left out).'),
       el('dl.kv', ...progs.flatMap(([k, p]) => [el('dt', k), el('dd', app.progressBar(p))]))));
   }
 

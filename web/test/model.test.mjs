@@ -509,6 +509,51 @@ check('progress totals are consistent with the refines leaves', () => {
   }
 });
 
+check('a remark under a top-level section is not counted in its bar', () => {
+  const s = structuredClone(snapshot);
+  s.schema.kinds.remark = { ...s.schema.kinds.section, countable: false };
+  s.objects.push(
+    { id: 'rem-aside', kind: 'remark', boundary: [], attrs: {}, body: '' },
+    { id: 'refines/rem-aside/sec-foundations', kind: 'refines', attrs: {}, body: '',
+      boundary: [{ role: 'src', id: 'rem-aside' }, { role: 'tgt', id: 'sec-foundations' }] },
+  );
+  const m = M.buildModel(s);
+  const p = M.progressMixOf(m, 'refines', 'sec-foundations');
+  eq(p.total, 5, 'the remark is left out of the total');
+  eq(p.proved, 3, 'proved');
+  eq(p.mix.absent, 1, 'only def-metric is absent');
+});
+
+check('a nested section counts its direct children, without remarks', () => {
+  // sec-main-induction (itself under sec-main) gets a remark and a subsection
+  // holding two lemmas: its bar is over lem-finite-subcover, lem-diagonal and
+  // sec-deep, not over the four lemma leaves below it.
+  const s = structuredClone(snapshot);
+  s.schema.kinds.remark = { ...s.schema.kinds.section, countable: false };
+  const refines = (src, tgt) => ({
+    id: `refines/${src}/${tgt}`, kind: 'refines', attrs: {}, body: '',
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }],
+  });
+  s.objects.push(
+    { id: 'rem-nested', kind: 'remark', boundary: [], attrs: {}, body: '' },
+    { id: 'sec-deep', kind: 'section', boundary: [], attrs: {}, body: '' },
+    { id: 'lem-deep-a', kind: 'lemma', boundary: [], attrs: {}, body: '' },
+    { id: 'lem-deep-b', kind: 'lemma', boundary: [], attrs: {}, body: '' },
+    refines('rem-nested', 'sec-main-induction'),
+    refines('sec-deep', 'sec-main-induction'),
+    refines('lem-deep-a', 'sec-deep'),
+    refines('lem-deep-b', 'sec-deep'),
+  );
+  s.derived.progress.refines['sec-deep'] = { proved: 0, total: 2 };
+  s.derived.progress.refines['sec-main-induction'] = { proved: 2, total: 4 };
+  const m = M.buildModel(s);
+  ok(M.ancestorsOf(M.collapseOrder(m, 'refines'), 'sec-main-induction').length > 0, 'nested');
+  const p = M.progressMixOf(m, 'refines', 'sec-main-induction');
+  eq(p.total, 3, 'two lemmas and the subsection, not the remark');
+  eq(p.proved, 2, 'the two proved lemmas');
+  eq(p.mix.absent, 1, 'the unproved subsection');
+});
+
 check('statusCounts only counts countable kinds', () => {
   const { counts, total } = M.statusCounts(model);
   eq(total, 13, 'thirteen countable objects');
