@@ -202,9 +202,10 @@ export const STATUS_BAR_ORDER = ['proved', 'proved_with_axioms', 'stated', 'miss
  * `progressOf` plus `mix`, the count of each derived status, so a bar can say
  * what the unproved part is.  Below an object, the counted nodes are the
  * countable leaves (countable objects at or below it with no children in the
- * order), as for `progressOf`.  A top-level object counts its direct children
- * instead, each by its own status: its progress is that of the layer right
- * under it, not of everything further down.  Memoised per kind.
+ * order), as for `progressOf`.  A section counts its direct children instead,
+ * each by its own status, leaving out those with nothing countable at or below
+ * them (a remark, a concept): its progress is that of the layer right under
+ * it, not of everything further down.  Memoised per kind.
  */
 export function progressMixOf(model, kind, id) {
   const p = progressOf(model, kind, id);
@@ -219,8 +220,15 @@ export function progressMixOf(model, kind, id) {
       const s = statusOf(model, x) || 'absent';
       mix[s] = (mix[s] || 0) + 1;
     };
-    const children = childrenOf(order, id);
-    if (children.length && !ancestorsOf(order, id).length) {
+    // A child counts when it is countable itself or has countable leaves
+    // below it, so a remark or concept right under a section is left out.
+    const children = childrenOf(order, id).filter((x) => {
+      const o = model.byId.get(x);
+      const k = o && model.kinds[o.kind];
+      return (k && k.countable) || progressOf(model, kind, x);
+    });
+    const self = model.byId.get(id);
+    if (children.length && self && self.kind === 'section') {
       children.forEach(tally);
       out = { proved: mix.proved || 0, total: children.length, mix };
     } else {
