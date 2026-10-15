@@ -147,10 +147,14 @@ def splitList (s : String) : Array String :=
 The constants to report on are the union of the `@[blueprint]` tags of the
 imported environment (the extractor finds those itself), `--names`, the
 `lean` attributes of a snapshot given with `--snapshot`, and the `lean`
-attributes of the blueprint sources under `--root`.  `--descend`, else
+attributes of the blueprint sources under the root.  `--descend`, else
 `[lean] descend` of the root's `blueprint.toml`, overrides the module prefixes
-the dependency walk passes through. -/
-def cmdExtract (args : Args) : IO UInt32 := do
+the dependency walk passes through.
+
+The root is `--root`, else the working directory; the working directory only
+counts as a blueprint project when it has a `blueprint.toml`, so that
+`extract MyProject` still runs anywhere. -/
+def cmdExtract (root : System.FilePath) (args : Args) : IO UInt32 := do
   let rootArg := args.get? "--root"
   let mut modules : Array Lean.Name :=
     (args.positional.toList.drop 1).toArray.map String.toName
@@ -167,8 +171,7 @@ def cmdExtract (args : Args) : IO UInt32 := do
     | .ok s =>
       for o in s.objects do
         names := names ++ o.leanNames
-  if let some r := rootArg then
-    let root : System.FilePath := r
+  if rootArg.isSome || (← (root / "blueprint.toml").pathExists) then
     let (project, schema) ← loadConfig root
     if modules.isEmpty then
       modules := project.leanModules.map String.toName
@@ -852,7 +855,7 @@ def run (argv : List String) : IO UInt32 := do
     | "new" => cmdNew root args
     | "rename" => cmdRename root args
     | "read" => cmdRead args
-    | "extract" => cmdExtract args
+    | "extract" => cmdExtract root args
     | "import-latex" => cmdImportLatex args
     | "diff" => cmdDiff root args
     | "log" => cmdLog root args

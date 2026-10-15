@@ -239,6 +239,17 @@ else
   bad "extract is deterministic"
 fi
 
+# Without `--root` the working directory is the root: run from inside the
+# example, a bare `extract` takes its modules from `blueprint.toml` and the
+# lean names from its sources, as `--root` does.
+(cd examples/induction && "$BP" extract --out "$TMP/facts.cwd.json") \
+  > "$TMP/extract.cwd.log" 2>&1
+if cmp -s "$TMP/facts.json" "$TMP/facts.cwd.json"; then
+  ok "extract defaults the root to the working directory"
+else
+  bad "extract defaults the root to the working directory"; cat "$TMP/extract.cwd.log"
+fi
+
 # One status of each kind, including the two that only the extractor can
 # tell apart: a custom axiom and a `sorry`.
 wants "$TMP/facts.json" \

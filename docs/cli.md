@@ -210,9 +210,13 @@ lake exe blueprint extract MyProject
 lake exe blueprint extract                       # modules from blueprint.toml
 ```
 
-**Which modules.**  The positional arguments, or, when there are none and
-`--root` is given, `[lean] modules` of that root's `blueprint.toml`.  It is
-an error if neither names anything.  Importing a module brings in everything
+**Which root.**  `--root`, else the working directory.  Without `--root`
+the working directory is read as a blueprint project only when it has a
+`blueprint.toml`, so `extract MyProject` also runs outside of one.
+
+**Which modules.**  The positional arguments, or, when there are none,
+`[lean] modules` of the root's `blueprint.toml`.  It is an error if neither
+names anything.  Importing a module brings in everything
 it imports, so naming the project's root module is usually enough.
 
 **Which constants.**  The union of
@@ -220,7 +224,7 @@ it imports, so naming the project's root module is usually enough.
 * every constant carrying `@[blueprint "<id>"]` in the imported environment,
   including constants of *imported* modules — the attribute is stored in a
   persistent environment extension;
-* the `lean` attributes of the blueprint sources under `--root`;
+* the `lean` attributes of the blueprint sources under the root;
 * the `lean` attributes of the snapshot given with `--snapshot`, which is
   the `blueprint build` &rarr; `blueprint extract` &rarr; `blueprint build`
   route of `docs/snapshot-format.md`;
