@@ -108,6 +108,23 @@ is an ancestor of, at any depth, in the collapse order), next to
 `collapse=<kind>`. Typing and picking rewrite these silently and rebuild only
 the table, not the page.
 
+## On a phone
+
+Below 900px wide the graph page keeps the whole window for the graph, and
+nothing changes on a wider screen:
+
+* the toolbar is one row (*Filters*, the highlight search, Fit, `+`, `−`);
+  the collapse kind, Expand/Collapse all and the edge and status filters fold
+  behind *Filters*, which carries a dot while anything is filtered out;
+* the side panel is a sheet over the bottom of the graph, there only while
+  something is selected. Its bar minimises it to the title and the
+  *Expand/Collapse* button, or closes it, which deselects. A node tapped under
+  the sheet is panned up into view;
+* two fingers pinch to zoom about their midpoint and pan; one finger pans;
+* a double tap on a node expands or collapses it. It is counted by the page
+  (`DOUBLE_TAP_MS` in `graph.js`), since a touch browser's own `dblclick` is
+  missing (iOS) or unreliable, and is ignored after a touch.
+
 ## Search
 
 There is one matcher, `model.search`: a case-insensitive substring match over
