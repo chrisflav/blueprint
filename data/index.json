@@ -182,4 +182,12 @@
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "52c74ac481a58605e3bf048d811d10e0fc249de8",
    "file": "data/52c74ac481a58605e3bf048d811d10e0fc249de8.json",
-   "date": "2026-10-15"}]}
+   "date": "2026-10-15"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "7b530bbfffc6ddcbb79ff7126801b4cd5e35253b",
+   "file": "data/7b530bbfffc6ddcbb79ff7126801b4cd5e35253b.json",
+   "date": "2026-10-26"}]}
