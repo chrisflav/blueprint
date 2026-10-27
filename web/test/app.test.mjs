@@ -63,7 +63,7 @@ const app = (await import(path.join(webDir, 'app.js'))).default;
 await tick(20);
 
 const root = dom.document.getElementById('app');
-const { shieldMath, THEMES, applyTheme } = await import(path.join(webDir, 'app.js'));
+const { shieldMath, THEMES, applyTheme, currentTheme } = await import(path.join(webDir, 'app.js'));
 
 await check('math shielding preserves wrapped formulas and numeric starts', () => {
   for (const formula of [
@@ -175,6 +175,28 @@ await check('every theme has its stylesheet, and picking one loads it', async ()
   eq(dom.document.getElementById('theme-css'), null, 'the default loads no theme');
   applyTheme('no-such-theme');
   eq(dom.document.getElementById('theme-css'), null, 'an unknown theme is the default');
+});
+
+await check('the project names the style a reader without a pick sees', () => {
+  const store = new Map();
+  global.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { store.set(k, String(v)); },
+  };
+  try {
+    eq(currentTheme(), '', 'no project, no pick: the default');
+    eq(currentTheme({ theme: 'outline' }), 'outline', 'the project chooses the style');
+    eq(currentTheme({ theme: 'no-such-theme' }), '', 'an unknown project style is the default');
+    store.set('blueprint.theme', 'article');
+    eq(currentTheme({ theme: 'outline' }), 'article', 'the reader\'s pick wins');
+    store.set('blueprint.theme', '');
+    eq(currentTheme({ theme: 'outline' }), '', 'also when the reader picked the default');
+    global.location.search = '?theme=pretext';
+    eq(currentTheme({ theme: 'outline' }), 'pretext', 'and ?theme= wins over both');
+  } finally {
+    delete global.localStorage;
+    global.location.search = '';
+  }
 });
 
 await check('the same options reach the graph side panel', async () => {

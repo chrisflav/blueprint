@@ -498,6 +498,9 @@ descend = ["MyProject", "MyLib"]    # optional: where the dependency walk goes
 "\\Spec" = "\\operatorname{Spec}"
 "\\poly" = "#1[T]"
 
+[site]
+theme = "outline"                   # the style the website opens in
+
 [kinds.theorem]                     # extends the built-in `theorem`
 attrs = ["title", "lean", "review", "tags", "order", "aliases", "owner"]
 
@@ -541,6 +544,14 @@ snapshot as `project.katexMacros` (`docs/snapshot-format.md`), which is where
 the website picks it up, and `blueprint import-latex --toml` writes the table
 from the `\newcommand`s of a LaTeX blueprint.  Nothing in the core expands
 them.
+
+`[site] theme` names the style the website opens in for a reader who has
+not picked one in its *Style* menu: one of the ids of `THEMES` in
+`web/app.js` (`drafting`, `article`, `textbook`, `pretext`, `outline`).  It
+is optional and defaults to the website's default style; the menu keeps
+every style.  `blueprint build` copies it into the snapshot as
+`project.theme`, and the website reads an id it does not know as its
+default.
 
 ### The default schema
 
@@ -734,7 +745,8 @@ merge.  `Topology.coverChoice` is a custom axiom (`proved_with_axioms`),
   nodes, so `check` agrees with it by skipping `$…$` and `$$…$$` in the body.
 * **`project.katexMacros` is left out of the snapshot when it is empty**, so
   that a project without `[katex.macros]` gets exactly the `project` object
-  it got before the field existed.
+  it got before the field existed.  So is `project.theme` when `[site] theme`
+  is not given.
 * **`blueprint read`** is an extra command, see above.
 * **The `attrMap` is merged into the object mapping (§5).**
   `docs/snapshot-format.md` records `attrMap` but says only that the names

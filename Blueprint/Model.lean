@@ -273,6 +273,10 @@ structure Project where
   name with its backslash, and the definition KaTeX is to use for it.  Sorted
   by name; handed to the website as `project.katexMacros`. -/
   katexMacros : Array (String × String) := #[]
+  /-- The style the website opens in for a reader who has not picked one,
+  `[site] theme` in `blueprint.toml`: the id of one of the website's themes,
+  empty for its default.  Handed to the website as `project.theme`. -/
+  theme : String := ""
   deriving Inhabited, BEq
 
 /-- A check produced by `blueprint check`. -/
