@@ -96,8 +96,8 @@ Notes
   LaTeX blueprint.
 - `project.theme` is `[site] theme` of `blueprint.toml`: the id of the style
   the website opens in for a reader who has not picked one.  It is left out
-  when the project names none; a reader defaults it to the website's default
-  style, and so treats an id it does not know.
+  when the project names none; absent or unknown, the website uses its
+  default style.
 - `boundary` entries are ordered as written; roles may repeat.
 - `depth` is precomputed. Well-foundedness is guaranteed for a snapshot that
   `build` emitted without errors.
