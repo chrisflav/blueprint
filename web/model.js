@@ -937,6 +937,46 @@ export function quotient(view, options = {}) {
 }
 
 /**
+ * The drawn entities of a quotient that belong to the visible objects
+ * themselves: an object is drawn only when every end of it is visible as
+ * itself (an end that is an edge object being, in turn, one of these), never
+ * lifted to whatever collapsed object it is hidden in.  So a collapsed section
+ * keeps the arcs declared on it and drops those of its contents, a grouped
+ * arc keeps only such members (and its "×n" counts only them), and the
+ * synthesised derived-only arcs, which stand for contents alone, go.
+ *
+ * An edge object with contents of its own (one the view can expand) is a node
+ * of the view whatever its ends: it stays, as the way into those contents.
+ *
+ * The consistency states are the quotient's: an own arc still reads `both`
+ * when the contents witness it, and `declared-only` when nothing does.
+ */
+export function ownEdges(view, edges) {
+  const model = view.model;
+  const memo = new Map();
+  const own = (id) => {
+    if (memo.has(id)) return memo.get(id);
+    memo.set(id, false); // boundaries are acyclic; this only guards bad data
+    const o = model.byId.get(id);
+    const yes = !!o && ((view.isVisible(id) && view.isExpandable(id)) || o.boundary.every((b) => {
+      const a = view.anchor(b.id);
+      const end = model.byId.get(a);
+      return view.isVisible(a) && !!end && (end.boundary.length === 0 || own(a));
+    }));
+    memo.set(id, yes);
+    return yes;
+  };
+  const out = [];
+  for (const e of edges) {
+    if (e.synthetic) continue;
+    const members = e.members.filter((it) => own(it.id));
+    if (!members.length) continue;
+    out.push(members.length === e.members.length ? e : { ...e, members });
+  }
+  return out;
+}
+
+/**
  * How to draw a set of ends as a plain arc, or null when it needs a junction.
  * Exactly two ends, carrying either src/tgt disjointly, or no src/tgt at all.
  */

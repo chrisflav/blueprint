@@ -988,9 +988,10 @@ await check('"hide implied" drops exactly the implied arcs from the ELK graph, a
   const M = modelMod;
   const model = app.model;
   const ids = (g) => g.edges.map((e) => e.id);
-  for (const expand of [[], ['sec-main'], [...M.collapseOrder(model, 'refines').expandable]]) {
+  for (const [expand, inner] of [[], ['sec-main'], [...M.collapseOrder(model, 'refines').expandable]]
+    .flatMap((x) => [[x, false], [x, true]])) {
     const view = M.makeView(model, 'refines', expand);
-    const base = { collapse: 'refines', expand, ekinds: null, status: null, q: '', sel: null };
+    const base = { collapse: 'refines', expand, ekinds: null, status: null, q: '', sel: null, inner };
     const full = graphMod.buildElk({ model }, { ...base, reduce: false }, view, M.quotient(view));
     const red = graphMod.buildElk({ model }, { ...base, reduce: true }, view, M.quotient(view));
     eq(full.implied, 0, 'nothing is hidden with the option off');
@@ -1004,7 +1005,7 @@ await check('"hide implied" drops exactly the implied arcs from the ELK graph, a
     // The nodes are untouched: the option is about arcs only.
     eq(red.nodes.size, full.nodes.size, 'the same nodes');
   }
-  // Collapsed, three arcs go.  The junction for the prose edge
+  // Collapsed, with the arcs of contents drawn, three arcs go.  The junction for the prose edge
   // uses/thm-tychonoff/lem-ultrafilter has a uses-arc to sec-main and one to
   // sec-foundations, which sec-main uses.  And sec-main -> sec-foundations and
   // sec-applications -> sec-foundations are each also drawn through a junction
@@ -1012,7 +1013,7 @@ await check('"hide implied" drops exactly the implied arcs from the ELK graph, a
   // end is a path, so the plain arc beside it is implied, and the junction,
   // with its spokes, stays.
   const view = M.makeView(model, 'refines', []);
-  const st = { collapse: 'refines', expand: [], ekinds: null, status: null, q: '', sel: null, reduce: true };
+  const st = { collapse: 'refines', expand: [], ekinds: null, status: null, q: '', sel: null, reduce: true, inner: true };
   const { graph, implied } = graphMod.buildElk({ model }, st, view, M.quotient(view));
   eq(implied, 3, 'implied arcs when collapsed');
   const drawnArc = (s, t) => graph.edges.some((e) => e.bp.kind === 'edge' &&
@@ -1027,6 +1028,38 @@ await check('"hide implied" drops exactly the implied arcs from the ELK graph, a
   const off = graphMod.buildElk({ model }, { ...st, ekinds: ['instance_of', 'generalises', 'commutes'] },
     view, M.quotient(view));
   eq(off.implied, 0, 'a filtered kind implies nothing');
+});
+
+await check('by default a collapsed section draws its own arcs, not its contents\'', () => {
+  const model = app.model;
+  const view = M.makeView(model, 'refines', []);
+  const st = { collapse: 'refines', expand: [], ekinds: null, status: null, q: '', sel: null, reduce: false, inner: false };
+  const own = graphMod.buildElk({ model }, st, view, M.quotient(view));
+  const all = graphMod.buildElk({ model }, { ...st, inner: true }, view, M.quotient(view));
+  const arcs = (g) => g.graph.edges.filter((e) => e.bp.kind === 'edge')
+    .map((e) => `${e.bp.entity.src}->${e.bp.entity.tgt}`).sort();
+  eq(arcs(own).join(' '), 'sec-applications->sec-main sec-main->sec-applications sec-main->sec-foundations',
+    'only the arcs declared between the sections');
+  ok(arcs(all).includes('sec-applications->sec-foundations'), 'the contents\' arc is there with the option on');
+  // Nothing on an own arc counts the contents: one member, no "×n".
+  for (const e of own.graph.edges) if (e.bp.kind === 'edge') eq(e.bp.entity.members.length, 1, `${e.id} members`);
+  ok(own.contents > 0, 'the arcs of contents are counted for the status line');
+  eq(all.contents, 0, 'and none are hidden with the option on');
+  eq(own.nodes.size < all.nodes.size, true, 'junctions among contents go with them');
+  // The prose edge with lemmas of its own is still there to be expanded.
+  ok(own.nodes.has('j:uses/thm-tychonoff/lem-ultrafilter'), 'the way into the prose edge\'s lemmas');
+});
+
+await check('"arcs of contents" is a checkbox written to the URL', async () => {
+  await go('#/graph?collapse=refines');
+  const box = [...root.querySelectorAll('.toolbar label.chk')].find((l) => l.textContent === 'arcs of contents');
+  ok(box, 'no checkbox');
+  const input = box.querySelector('input');
+  ok(!input.hasAttribute('checked'), 'on by default');
+  fire(input, 'change', { target: { checked: true } });
+  await tick(5);
+  ok(/[?&]inner=1(&|$)/.test(global.location.hash), `not in the URL: ${global.location.hash}`);
+  await go('#/graph?collapse=refines');
 });
 
 const elkState = installFakeELK();

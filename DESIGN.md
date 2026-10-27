@@ -386,7 +386,12 @@ by CI. Separate TypeScript package under `web/`.
 - Graph view: compound-graph layout via ELK so collapse and expand are real
   layout operations. Objects with incident higher objects are rendered as
   junctions. Line style encodes the three consistency states, colour encodes
-  status, filters by kind and collapse kind.
+  status, filters by kind and collapse kind. By default each visible object
+  draws only its own arcs: an object is drawn when all its ends are visible
+  themselves, so a collapsed section shows the edges declared on it and not
+  the quotiented edges of its contents (§3's derived arcs). Those are one
+  checkbox away, *arcs of contents*, which is where the undeclared-detail lint
+  shows as dashed arcs; the consistency state of an own arc is still §3's.
 - Object page: rendered prose with KaTeX, Lean signature linking to doc-gen4,
   derived and declared status, boundary, everything incident to the object,
   and its position in each collapse order.

@@ -1108,6 +1108,7 @@ a.proof-word { font-style: italic; font-weight: 400; color: inherit; }
 .legend .shp.definition { border-radius: 1px; }
 .legend .shp.statement { border-radius: 999px; }
 .legend .shp.remark { border-radius: 0; clip-path: polygon(0 0, 70% 0, 100% 35%, 100% 100%, 0 100%); }
+.graph-stage:not(.inner-arcs) .legend .lg-derived { display: none; }
 .legend .shp.section { border-radius: 3px; border-width: 1px; box-shadow: inset 0 0 0 1.5px var(--panel), inset 0 0 0 2.5px currentColor; }
 
 /* A title with maths: KaTeX's HTML in a <foreignObject> (see graph.js,

@@ -754,9 +754,42 @@ async function graphChecks(d, f) {
     await sleep(500);
     const status = await waitFor(d, GRAPH_IDLE, { timeout: 120000, interval: 300, label: 'collapse-all layout' });
     const after = await d.js(GRAPH_COUNTS);
+    // The model's count is of objects; a junction is a drawn relation.
+    const objects = after.nodes - after.junctions;
     return {
-      ok: after.nodes === f.defaultNodeCount && !after.error,
-      evidence: `nodes=${after.nodes} (expected ${f.defaultNodeCount} from the model), status=${j(status)}, hash=${j(after.hash)}`,
+      ok: objects === f.defaultNodeCount && !after.error,
+      evidence: `object nodes=${objects} (expected ${f.defaultNodeCount} from the model) besides ${after.junctions} junction(s), status=${j(status)}, hash=${j(after.hash)}`,
+    };
+  });
+
+  // --- each object draws its own arcs ---------------------------------------
+  await check(d, 'graph/collapsed-objects-draw-their-own-arcs', async () => {
+    await gotoGraph(d, new URLSearchParams({ collapse: f.kind }).toString());
+    await settle();
+    const ARCS = `return { dashed: document.querySelectorAll('.gedge.state-derived-only').length,
+      counted: Array.prototype.filter.call(document.querySelectorAll('.gedge:not(.spoke) .elabel'), function (t) { return /^\u00d7/.test(t.textContent); }).length,
+      edges: document.querySelectorAll('.gedge').length, hash: location.hash,
+      legend: (function () { var r = document.querySelector('.legend .lg-derived'); return r ? getComputedStyle(r).display : 'missing'; })(),
+      status: (document.querySelector('#graph-status') || {}).textContent || '' };`;
+    const own = await d.js(ARCS);
+    // The checkbox, clicked for real, brings the arcs of contents back.
+    const box = await d.js(elBoxByText('.toolbar label.chk', 'arcs of contents'));
+    if (!box) return { ok: false, evidence: 'no "arcs of contents" checkbox' };
+    await d.click(box.x, box.y);
+    await sleep(400);
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, label: 'layout with arcs of contents' });
+    const inner = await d.js(ARCS);
+    await d.click(box.x, box.y);
+    await sleep(400);
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, label: 'layout without' });
+    const back = await d.js(ARCS);
+    return {
+      ok: own.dashed === 0 && own.counted === 0 && own.legend === 'none' && /arcs? of contents hidden/.test(own.status)
+        && /[?&]inner=1/.test(inner.hash) && inner.edges >= own.edges && inner.legend !== 'none'
+        && back.edges === own.edges && !/inner=/.test(back.hash),
+      evidence: `own: ${own.edges} .gedge, ${own.dashed} dashed, ${own.counted} "×n", legend row ${own.legend}, status=${j(own.status)}; `
+        + `arcs of contents on: ${inner.edges} .gedge, ${inner.dashed} dashed, ${inner.counted} "×n", legend row ${inner.legend}, hash=${j(inner.hash)}; `
+        + `off again: ${back.edges} .gedge, hash=${j(back.hash)}`,
     };
   });
 
