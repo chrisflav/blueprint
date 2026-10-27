@@ -41,6 +41,9 @@ by editing this file first. Version 1.
         "collapse": false, "countable": false, "sugar": true,
         "arrow": "reverse"                       // display hint: head on src; omitted when "forward"
       },
+      "appendix": { "boundary": {}, "kinds": {}, "attrs": ["title"], "constraints": [],
+                    "collapse": false, "countable": false, "sugar": false,
+                    "graph": "optional" },           // display hint: "optional" | "never"; omitted when "always"
       "refines": { "boundary": { "src": {"min":1,"max":1}, "tgt": {"min":1,"max":1} },
                    "kinds": {}, "attrs": ["title"], "constraints": ["acyclic"],
                    "collapse": true, "countable": false, "sugar": true },
@@ -93,6 +96,11 @@ Notes
   `blueprint import-latex` fills the table from the `\newcommand`s,
   `\renewcommand`s, `\providecommand`s and `\DeclareMathOperator`s of a
   LaTeX blueprint.
+- A kind's `graph` is the website's graph alone (`docs/cli.md`): `optional`
+  objects are drawn unless the reader hides them, `never` objects are read
+  in the document only, and either takes what is below it in a collapse
+  order, what is attached to it and what touches it along.  Left out when
+  `always`, so a reader must default it to `"always"`.
 - `boundary` entries are ordered as written; roles may repeat.
 - `depth` is precomputed. Well-foundedness is guaranteed for a snapshot that
   `build` emitted without errors.

@@ -122,6 +122,7 @@ export function buildModel(snapshot) {
     _outlines: new Map(), // memoised document outlines, per collapse kind
     _mixes: new Map(), // memoised status counts under each object, per collapse kind
     _types: new Map(), // memoised `nodeType`, per object
+    _graphModels: new Map(), // memoised `graphModel`, per choice of what to hide
   };
   return model;
 }
@@ -172,6 +173,25 @@ const TYPE_MARK = {
   corollary: 'cor', remark: 'rem',
 };
 
+/**
+ * Kinds the document sets as headings rather than as numbered statements, and
+ * the graph draws as sections: a section, and an appendix (a section the graph
+ * can hide).
+ */
+const SECTION_KINDS = new Set(['section', 'appendix']);
+
+export function isSectionKind(kind) {
+  return SECTION_KINDS.has(kind);
+}
+
+/**
+ * The kind of the text between statements that belongs to no statement: the
+ * lines at the start of a section, a paragraph between two lemmas, as in the
+ * Stacks project.  The document sets it as bare prose, with no heading and no
+ * number; the graph never draws it (its kind is `graph = "never"`).
+ */
+export const TEXT_KIND = 'hidden';
+
 /** The shape family of each statement word. */
 const TYPE_SHAPE = {
   definition: 'definition', theorem: 'statement', proposition: 'statement',
@@ -189,7 +209,7 @@ export function nodeType(model, o) {
   let t = model._types.get(o.id);
   if (t) return t;
   const word = o.kind;
-  const shape = TYPE_SHAPE[word] || (word === 'section' ? 'section' : 'other');
+  const shape = TYPE_SHAPE[word] || (isSectionKind(word) ? 'section' : 'other');
   t = { word, mark: TYPE_MARK[word] || word.slice(0, 3), shape };
   model._types.set(o.id, t);
   return t;
@@ -228,7 +248,7 @@ export function progressMixOf(model, kind, id) {
       return (k && k.countable) || progressOf(model, kind, x);
     });
     const self = model.byId.get(id);
-    if (children.length && self && self.kind === 'section') {
+    if (children.length && self && isSectionKind(self.kind)) {
       children.forEach(tally);
       out = { proved: mix.proved || 0, total: children.length, mix };
     } else {
@@ -1179,6 +1199,66 @@ function stronglyConnected(succ) {
 }
 
 // ---------------------------------------------------------------------------
+// 4b. What the graph leaves out
+// ---------------------------------------------------------------------------
+
+/**
+ * The `graph` display hint of a kind: `always` (the default), `optional` (an
+ * appendix: drawn unless the reader hides it) or `never` (read in the
+ * document only).
+ */
+export function graphHint(model, kindName) {
+  const k = model.kinds[kindName];
+  const g = k && k.graph;
+  return g === 'optional' || g === 'never' ? g : 'always';
+}
+
+/**
+ * The ids the graph leaves out: every object whose kind is `never` drawn, or
+ * `optional` when `hideOptional` is set; everything below one of those in any
+ * collapse order, so an appendix goes with its contents whichever order the
+ * graph is driven by; and every object with one of them on its boundary, so a
+ * relation never points at something that is not there.  The last two apply
+ * again to what they add, which takes a proof along with its statement and a
+ * lemma refining a left-out relation along with that relation.
+ */
+export function outOfGraph(model, { hideOptional = false } = {}) {
+  const out = new Set();
+  const stack = [];
+  for (const o of model.objects) {
+    const g = graphHint(model, o.kind);
+    if (g === 'never' || (g === 'optional' && hideOptional)) stack.push(o.id);
+  }
+  const orders = model.collapseKinds.map((k) => collapseOrder(model, k));
+  while (stack.length) {
+    const id = stack.pop();
+    if (out.has(id)) continue;
+    out.add(id);
+    for (const order of orders) for (const c of childrenOf(order, id)) stack.push(c);
+    for (const { object } of incidentTo(model, id)) stack.push(object.id);
+  }
+  return out;
+}
+
+/**
+ * The model the graph page draws: `model` itself when nothing is left out, and
+ * otherwise the model of the same snapshot without the objects `outOfGraph`
+ * names.  Every view, quotient, consistency state and reduction computed on it
+ * is then that of a blueprint in which those objects were never written.
+ * Memoised on the model.
+ */
+export function graphModel(model, { hideOptional = false } = {}) {
+  const key = hideOptional ? 'optional' : 'never';
+  const hit = model._graphModels.get(key);
+  if (hit) return hit;
+  const out = outOfGraph(model, { hideOptional });
+  const gm = out.size === 0 ? model
+    : buildModel({ ...model.snapshot, objects: model.objects.filter((o) => !out.has(o.id)) });
+  model._graphModels.set(key, gm);
+  return gm;
+}
+
+// ---------------------------------------------------------------------------
 // 5. Reading order (DESIGN 6: "a blueprint still reads as a paper")
 // ---------------------------------------------------------------------------
 
@@ -1259,15 +1339,17 @@ export function topLevel(model, kind) {
  * "2.3".  An object with several parents is written out under the first and
  * repeated, as a pointer, under the others; the repetition carries the number
  * of the first occurrence and uses none of its own, so every object has exactly
- * one number and a cross reference to it means one place.
+ * one number and a cross reference to it means one place.  A piece of text
+ * (`TEXT_KIND`) is read where it stands and numbered not at all: the lemma
+ * after the lines that open a section is still that section's first.
  *
  * Returns
  *   { kind,
  *     entries,  // the flow, in reading order: {id, object, depth, number,
- *               //   duplicate, parent, children}; `parent` is the enclosing
+ *               //   duplicate, text, parent, children}; `parent` is the enclosing
  *               //   entry (null at the top), `children` the entries under it
  *     roots,    // the top-level entries
- *     byId,     // id -> its first (written-out) entry
+ *     byId,     // id -> its first (written-out) entry, text entries included
  *     steps,    // source id -> the step objects filed under it
  *     proofs,   // statement id -> the proofs filed under it
  *     stepOf }  // step or proof id -> the id it is filed under
@@ -1332,10 +1414,15 @@ export function documentOutline(model, kind) {
       depth: parent ? parent.depth + 1 : 0,
       duplicate: !!first,
       number: null,
+      // Text that belongs to no statement (`TEXT_KIND`, with nothing under
+      // it): read in place, with no number and taking none from its siblings.
+      text: e.object.kind === TEXT_KIND && !hasKids(e.id),
       parent,
       children: [],
     };
-    if (first) {
+    if (entry.text) {
+      if (!first) byId.set(e.id, entry);
+    } else if (first) {
       entry.number = first.number;
     } else {
       const k = (counts.get(parent) || 0) + 1;
@@ -1345,7 +1432,7 @@ export function documentOutline(model, kind) {
     }
     (parent ? parent.children : roots).push(entry);
     entries.push(entry);
-    if (!entry.duplicate) stack.push({ walkDepth: e.depth, entry });
+    if (!entry.duplicate && !entry.text) stack.push({ walkDepth: e.depth, entry });
   }
 
   const outline = { kind, entries, roots, byId, steps, proofs, stepOf };
@@ -1365,11 +1452,12 @@ export function kindWord(kind) {
  * document view sets the entry under.  An object with several parents is
  * referred to by its one number, the first occurrence's.  `null` for an object
  * the document gives no number: one that is not in the flow, or a step or a
- * proof, which is read as part of its source rather than on its own.
+ * proof, which is read as part of its source rather than on its own, or a
+ * piece of text, which has no number.
  */
 export function referenceOf(outline, id) {
   const entry = outline.byId.get(id);
-  if (!entry) return null;
+  if (!entry || entry.text) return null;
   return { word: kindWord(entry.object.kind), number: entry.number };
 }
 

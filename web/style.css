@@ -1220,6 +1220,8 @@ label.chk.st-chip.status-proved_with_axioms { border-color: var(--st-proved_with
 }
 .body-prose h1::after, .body-prose h2::after, .body-prose h3::after { content: '.'; }
 .doc-entry.is-section .prose { margin-top: .6rem; }
+.doc-entry.is-text { margin: 1.1rem 0; }
+.doc-entry.is-text > .prose { margin-top: 0; }
 /* A grid track sized 1fr still has min-width:auto, so one wide formula or an
    unbreakable token pushes the prose column past the viewport. */
 .doc-layout > * { min-width: 0; }

@@ -42,7 +42,11 @@ export function render(root, app) {
   const hasProof = /^#{1,6}\s*proof\b/im.test(o.body || '') ||
     M.incidentTo(m, o.id).some(({ object, role }) => object.kind === 'proof' && role === 'of');
   page.appendChild(el('div.row', { style: { marginTop: '.7rem' } },
-    el('a', { href: graphHref(app, o.id) }, 'Show in graph →'),
+    // An object the graph never draws (a hidden one, or one inside it) has
+    // nowhere to be shown there.
+    !M.graphModel(app.model).byId.has(o.id)
+      ? el('span.muted.small', 'Not drawn in the graph.')
+      : el('a', { href: graphHref(app, o.id) }, 'Show in graph →'),
     documentLink(app, o),
     hasProof ? el('span.spacer') : null,
     hasProof ? app.proofToggle() : null));

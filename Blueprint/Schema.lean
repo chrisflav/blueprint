@@ -23,8 +23,9 @@ def defaultEdgeAttrs : Array String :=
 def cardOne : Cardinality := { min := 1, max := some 1 }
 
 /-- A node kind of the default schema. -/
-def mkNodeKind (name : String) (countable : Bool) (color : String) : KindSpec :=
-  { name, roles := #[], attrs := defaultNodeAttrs, countable, color := some color }
+def mkNodeKind (name : String) (countable : Bool) (color : String)
+    (graph : String := "always") : KindSpec :=
+  { name, roles := #[], attrs := defaultNodeAttrs, countable, color := some color, graph }
 
 /-- A binary (`src`/`tgt`) kind of the default schema. -/
 def mkBinaryKind (name : String) (constraints : Array String := #[])
@@ -51,6 +52,10 @@ def defaultSchema : Schema where
   kinds :=
     let ks : Array KindSpec := #[
       mkNodeKind "section" false "#8899aa",
+      -- a section the graph can hide, contents and all
+      mkNodeKind "appendix" false "#99a0aa" (graph := "optional"),
+      -- read in the document, never drawn in the graph
+      mkNodeKind "hidden" false "#aaaaaa" (graph := "never"),
       mkNodeKind "definition" true "#4a7",
       mkNodeKind "theorem" true "#47a",
       mkNodeKind "lemma" true "#57b",
@@ -177,6 +182,13 @@ def decodeKind (name : String) (base : Option KindSpec) (t : TValue) :
         throw s!"kind '{name}': unknown arrow '{s}' (expected 'forward' or 'reverse')"
       k := { k with arrow := s }
     | none => throw s!"kind '{name}': 'arrow' must be a string"
+  if let some v := t.get? "graph" then
+    match v.asString? with
+    | some s =>
+      unless s == "always" || s == "optional" || s == "never" do
+        throw s!"kind '{name}': unknown graph '{s}' (expected 'always', 'optional' or 'never')"
+      k := { k with graph := s }
+    | none => throw s!"kind '{name}': 'graph' must be a string"
   return k
 
 /-- Decode a whole `blueprint.toml` on top of the default schema. -/

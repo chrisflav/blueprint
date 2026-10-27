@@ -1196,6 +1196,99 @@ check('the document files a proof under its statement', () => {
   eq(M.documentPageOf(outline, PROOF), M.documentPageOf(outline, 'thm-heine-borel'), 'on its statement\'s page');
 });
 
+// --- appendices and hidden objects -------------------------------------------
+//
+// `graph = "optional"` (an appendix) is drawn unless the reader hides it,
+// `graph = "never"` (a hidden object) is never drawn; either way what is below
+// it, what is attached to it and what touches it go too.
+
+const appendixSnapshot = () => {
+  const node = (id, kind) => ({ id, kind, boundary: [], attrs: {}, body: 'text', depth: 0 });
+  const edge = (kind, src, tgt, id = `${kind}/${src}/${tgt}`) => ({
+    id, kind, attrs: {}, body: '', depth: 1,
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }],
+  });
+  const binary = { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } } };
+  return {
+    version: 1,
+    schema: {
+      defaultCollapse: 'refines',
+      kinds: {
+        section: { boundary: {} },
+        appendix: { boundary: {}, graph: 'optional' },
+        hidden: { boundary: {}, graph: 'never' },
+        theorem: { boundary: {}, countable: true },
+        lemma: { boundary: {}, countable: true },
+        refines: { ...binary, collapse: true },
+        uses: binary,
+        proof: { boundary: { of: { min: 1, max: 1 } } },
+      },
+    },
+    objects: [
+      node('main', 'section'),
+      node('thm', 'theorem'),
+      node('intro', 'hidden'),
+      node('app', 'appendix'),
+      node('aux', 'lemma'),
+      edge('refines', 'thm', 'main'),
+      edge('refines', 'intro', 'main'),
+      edge('refines', 'aux', 'app'),
+      edge('uses', 'thm', 'aux'),
+      edge('uses', 'thm', 'intro'),
+      { id: 'proof/aux', kind: 'proof', attrs: {}, body: 'by hand', depth: 1,
+        boundary: [{ role: 'of', id: 'aux' }] },
+    ],
+    derived: { status: { thm: 'stated', aux: 'proved' } },
+  };
+};
+
+check('the graph never draws a hidden object, or what touches it', () => {
+  const m = M.buildModel(appendixSnapshot());
+  eq(M.graphHint(m, 'hidden'), 'never', 'hint of hidden');
+  eq(M.graphHint(m, 'appendix'), 'optional', 'hint of appendix');
+  eq(M.graphHint(m, 'theorem'), 'always', 'no hint means always');
+  sameSet(M.outOfGraph(m), ['intro', 'refines/intro/main', 'uses/thm/intro'], 'out of the graph');
+  const gm = M.graphModel(m);
+  eq(gm === M.graphModel(m), true, 'memoised');
+  eq(gm.byId.has('intro'), false, 'the hidden object is gone');
+  eq(gm.byId.has('aux'), true, 'the appendix is kept by default');
+  const q = M.quotient(M.makeView(gm, 'refines', ['main', 'app']));
+  ok(!q.items.some((it) => it.ends.some((e) => e.id === 'intro')), 'no arc reaches it');
+  // The document reads it all the same, as text: where it stands, numbered
+  // not at all, and taking no number from the statement after it.
+  const outline = M.documentOutline(m, 'refines');
+  const intro = outline.byId.get('intro');
+  ok(intro, 'in the document');
+  eq(intro.text, true, 'a piece of text');
+  eq(intro.number, null, 'with no number');
+  eq(intro.parent && intro.parent.id, 'main', 'inside its section');
+  const flow = outline.entries.map((e) => e.id);
+  ok(flow.indexOf('intro') < flow.indexOf('thm'), 'before the theorem, by id');
+  eq(outline.byId.get('thm').number, outline.byId.get('main').number + '.1',
+    'the theorem is still the section\'s first');
+  eq(outline.byId.get('thm').text, false, 'a statement is not text');
+  eq(M.referenceOf(outline, 'intro'), null, 'nothing to refer to it by');
+  eq(M.documentPageOf(outline, 'intro'), 'main', 'read on its section\'s page');
+});
+
+check('hiding the appendix takes its contents and their relations along', () => {
+  const m = M.buildModel(appendixSnapshot());
+  sameSet(M.outOfGraph(m, { hideOptional: true }), [
+    'intro', 'refines/intro/main', 'uses/thm/intro',
+    'app', 'aux', 'refines/aux/app', 'uses/thm/aux', 'proof/aux',
+  ], 'out of the graph');
+  const gm = M.graphModel(m, { hideOptional: true });
+  eq(gm === M.graphModel(m), false, 'a model of its own');
+  sameSet(M.visibleNodes(M.makeView(gm, 'refines', ['main'])).map((o) => o.id), ['thm'],
+    'only the main section\'s theorem is left');
+  eq(M.quotient(M.makeView(gm, 'refines', [])).items.length, 0, 'nothing is drawn between what is left');
+  // Shown, the appendix is a section like any other.
+  eq(M.nodeType(m, m.byId.get('app')).shape, 'section', 'shaped as a section');
+  eq(M.referenceOf(M.documentOutline(m, 'refines'), 'app').word, 'Appendix', 'referred to as an appendix');
+  // A snapshot with nothing to leave out is drawn from its own model.
+  eq(M.graphModel(model, { hideOptional: true }), model, 'the sample has no appendix');
+});
+
 // ---------------------------------------------------------------------------
 
 if (failures.length) {
