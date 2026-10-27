@@ -253,8 +253,10 @@ statement, the way a hover preview works on a wiki (`preview.js`):
 
 * the reference as it reads here ("Theorem 2.2") and the title, the status,
   what an edge joins, the prose with its maths and its own references (a proof
-  in it starts folded), the slug, the Lean names, and *Open →* to the object
-  page;
+  in it starts folded), the slug, and *Open →* to the object page. Not the
+  Lean names: a statement formalised by many declarations would leave its
+  prose no room in a card of a fixed size, so they have a card of their own
+  (below);
 * it opens after the pointer has rested 300 ms, so a link passed over on the
   way elsewhere opens nothing, and closes 250 ms after the pointer has left
   both the link and the card, so the pointer can cross into the card to scroll
@@ -263,14 +265,23 @@ statement, the way a hover preview works on a wiki (`preview.js`):
   references can be followed without leaving the page; moving back into an
   outer card closes the ones opened from it;
 * the card goes below the link, or above it when there is more room there, and
-  is never taller than that room; Escape, a click, a scroll of the page and a
-  change of route close every card;
+  is never taller than that room; Escape, a click outside the cards, a scroll
+  of the page and a change of route close every card, and so does following a
+  link in one, once it has been followed;
 * a link focused with the keyboard opens its card too. A touch has no hover,
   so on a phone a tap follows the link, as before;
 * not previewed: a broken reference, an object title in a heading (the
   document writes the object out right under it) and a proof's "Proof." line.
   The link's tooltip (its slug) is held back while the pointer is on it, since
   the card says the same and the tooltip would cover it.
+
+In the document, the heading of every object with Lean declarations carries a
+small **Lean** mark after its title, with their number when there are
+several ("Lean 2"). Resting on it, focusing it, or clicking or tapping it
+(so it works on a phone too) opens a card of the same kind listing the
+declarations: each name, linked to its doc-gen4 page when the snapshot has a
+`project.docgen`, with its kind and status from the Lean facts. The
+signatures are on the object page, which the card's *Signatures →* opens.
 
 It is one set of listeners on the document, so it covers every page without
 the pages knowing about it.
@@ -288,7 +299,7 @@ the pages knowing about it.
 | `document.js` | the linear document, one page per entry of the collapse order |
 | `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |
 | `checks.js` | the lint report |
-| `preview.js` | the card a link to an object opens while the pointer rests on it |
+| `preview.js` | the card a link to an object opens while the pointer rests on it, and the document's Lean mark and its card |
 | `comments-server.py` | the local server `blueprint serve` runs: the site plus the comments API (not copied into the site) |
 | `sample/blueprint.json` | a hand-written snapshot exercising every feature |
 | `sample/data/` | four fake historical snapshots and their index |

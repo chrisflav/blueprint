@@ -714,8 +714,39 @@ a.objlink.broken { color: var(--lv-missing, var(--st-missing)); text-decoration:
   font-size: .8rem;
   color: var(--muted);
 }
-.preview-id, .preview-lean code { font-family: var(--mono); font-size: .8rem; overflow-wrap: anywhere; }
+.preview-id { font-family: var(--mono); font-size: .8rem; overflow-wrap: anywhere; }
 .preview-open { margin-left: auto; white-space: nowrap; }
+
+/* The document's "Lean" mark beside a heading, and the card of Lean names it
+   opens (preview.js). */
+button.lean-mark {
+  display: inline-block;
+  align-self: center;
+  margin: 0;
+  padding: .05em .45em;
+  font: 600 .72rem/1.4 var(--mono);
+  letter-spacing: .02em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: help;
+  vertical-align: .15em;
+}
+button.lean-mark:hover, button.lean-mark:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
+.lean-count { margin-left: .3em; font-weight: 400; color: var(--muted); }
+.preview.lean-card { width: max-content; min-width: min(18rem, calc(100vw - 16px)); max-width: min(32rem, calc(100vw - 16px)); }
+ul.lean-names { list-style: none; margin: 0; padding: 0; }
+ul.lean-names li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25em .5em;
+  padding: .3em 0;
+  border-bottom: 1px solid var(--border);
+}
+ul.lean-names li:last-child { border-bottom: 0; }
+ul.lean-names code { font-family: var(--mono); font-size: .85rem; overflow-wrap: anywhere; }
 
 .lean-decl { margin: .7rem 0; }
 .lean-decl pre { margin: .25em 0; white-space: pre-wrap; }

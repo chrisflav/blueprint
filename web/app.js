@@ -10,7 +10,7 @@ import * as objectPage from './object.js';
 import * as documentPage from './document.js';
 import * as progressPage from './progress.js';
 import * as checksPage from './checks.js';
-import { setupPreviews, closePreviews } from './preview.js';
+import { setupPreviews, closePreviews, leanMark } from './preview.js';
 
 const PAGES = {
   graph: graphPage,
@@ -636,6 +636,8 @@ const app = {
   objectHeadBadges,
   /** How a reference to `id` reads here: {word, number, href}, or null. */
   referenceFor: pageReferences,
+  /** The document's "Lean" mark for an object, or null when it has no Lean names. */
+  leanMark: (o) => leanMark(app, o),
 
   /**
    * Navigate to a route.  `replace` swaps the current history entry instead of

@@ -794,14 +794,54 @@ await check('a reference inside a card opens a card of its own', async () => {
   eq(cards().length, 0, 'cards outlived their page');
 });
 
-await check('a card says what an edge joins and which Lean names a statement has', async () => {
+await check('a card says what an edge joins, and leaves the Lean names out', async () => {
   const edge = app.model.objects.find((o) => o.kind === 'uses');
   const card = preview.previewCard(app, edge.id);
   const ends = card.querySelectorAll('.preview-ends a.objlink');
   eq(ends.length, edge.boundary.length, 'one link per end');
-  const lean = app.model.objects.find((o) => M.leanNamesOf(o).length);
-  const foot = preview.previewCard(app, lean.id).querySelector('.preview-lean');
-  ok(foot && foot.textContent.includes(M.leanNamesOf(lean)[0]), 'the Lean name is in the foot');
+  const text = preview.previewCard(app, 'def-filter').textContent;
+  ok(!text.includes('Compact.Filter') && !text.includes('Compact.Ultrafilter'), `Lean names in the card: ${text}`);
+});
+
+/** The Lean marks in the document's headings, by the object they are of. */
+const leanMarks = () => new Map(root.querySelectorAll('.doc-entry .head button.lean-mark')
+  .map((b) => [b.getAttribute('data-lean'), b]));
+
+await check('the document marks each heading with Lean names, and only those', async () => {
+  await go('#/document/sec-foundations?collapse=refines');
+  const marks = leanMarks();
+  ok(marks.size > 0, 'no Lean mark on the page');
+  for (const [id, b] of marks) {
+    const n = M.leanNamesOf(app.model.byId.get(id)).length;
+    ok(n > 0, `${id} has no Lean names but a mark`);
+    eq(b.textContent, n > 1 ? 'Lean' + n : 'Lean', `the mark of ${id} counts its names`);
+  }
+  // Every heading of an object with Lean names on the page has one.
+  for (const h of root.querySelectorAll('.doc-entry .head')) {
+    const a = h.querySelector('a.objlink');
+    const id = a && decodeURIComponent(a.getAttribute('href').replace('#/object/', ''));
+    if (id && M.leanNamesOf(app.model.byId.get(id)).length) ok(h.querySelector('button.lean-mark'), `no mark on ${id}`);
+  }
+  eq(marks.get('def-filter').textContent, 'Lean2', 'two names');
+});
+
+await check('resting on the Lean mark opens a card of its Lean declarations', async () => {
+  await go('#/document/sec-foundations?collapse=refines');
+  const mark = leanMarks().get('def-filter');
+  preview.hover(mark);
+  await tick(SHOWN);
+  eq(cards().length, 1, 'one card');
+  const card = cards()[0].card;
+  ok(card.classList.contains('lean-card'), 'the Lean card, not the statement');
+  const names = card.querySelectorAll('ul.lean-names li');
+  eq(names.length, 2, 'one row per name');
+  eq(names.map((li) => li.querySelector('code').textContent).join(' '), 'Compact.Filter Compact.Ultrafilter', 'the names');
+  eq(names[0].querySelector('a').getAttribute('href'),
+    'https://example.github.io/compact/docs/Compact.html#Compact.Filter', 'linked to the documentation');
+  eq(card.querySelector('.preview-lead').textContent, 'Lean declarations (2)', 'the head counts them');
+  preview.hover(root);
+  await tick(GONE);
+  eq(cards().length, 0, 'the card outlived the pointer');
 });
 
 // ---------------------------------------------------------------------------

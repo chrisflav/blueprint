@@ -205,6 +205,9 @@ export function render(root, app) {
       isSection ? null : el('span.kindword', M.kindWord(o.kind)),
       numNode,
       el('h' + hLevel, el('a.objlink', { href: app.objectHref(o.id) }, M.titleOf(o))),
+      // Its Lean names, in a card of their own, so the heading keeps one word.
+      // Before the badges: themes set the last of them apart.
+      app.leanMark(o),
       isSection ? null : app.kindBadge(o.kind),
       status === null ? null : app.statusBadge(status),
       entry.duplicate ? el('span.chip', 'repeated') : null);

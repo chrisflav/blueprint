@@ -1984,6 +1984,91 @@ async function referenceChecks(d, f) {
     };
   });
 
+  await check(d, 'references/a-link-in-a-card-is-followed', async () => {
+    if (!f.ref) return { skip: true, evidence: 'no [slug] naming a numbered object' };
+    await openObject(d, f.ref.id);
+    await d.move(away.x, away.y);
+    const a = await waitFor(d, REF_LINK('.body-prose', f.ref.target), { timeout: 15000, label: 'reference link' }).catch(() => null);
+    if (!a) return { ok: false, evidence: `no link for [${f.ref.target}] in ${j(f.ref.id)}` };
+    await d.move(a.x, a.y);
+    if (!(await waitCards(1))) return { ok: false, evidence: 'no card' };
+    // The card's own "Open →", clicked for real: the card must not vanish
+    // between the press and the click and hand the click to the page under it.
+    const open = await d.js(`var o = document.querySelector('.preview .preview-open'); var r = o.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, href: o.getAttribute('href') };`);
+    await d.click(open.x, open.y);
+    await sleep(600);
+    const hash = await d.js('return location.hash');
+    const left = (await cardsNow()).length;
+    return {
+      ok: hash === open.href && left === 0,
+      evidence: `clicked "Open →" (${j(open.href)}) in the card of ${j(f.ref.target)}: hash now ${j(hash)}, ${left} card(s) left`,
+    };
+  });
+
+  // The document's Lean mark: a statement with Lean names on the page it is
+  // read on, its mark beside the heading, and the card it opens.
+  const leanFixture = (() => {
+    for (const e of f.outline.entries) {
+      const names = M.leanNamesOf(e.object);
+      if (!e.duplicate && names.length) return { id: e.id, names, page: M.documentPageOf(f.outline, e.id) };
+    }
+    return null;
+  })();
+  const LEAN_MARK = (id) => `var b = document.querySelector('#' + CSS.escape(${j(anchorOf(id))}) + ' > .head button.lean-mark');
+    if (!b) return null; var r = inView(b);
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, top: r.top, bottom: r.bottom, text: b.textContent };
+    ${IN_VIEW}`;
+  const LEAN_CARD = `var c = document.querySelector('.preview.lean-card'); if (!c) return null;
+    var r = c.getBoundingClientRect(); var hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { id: c.getAttribute('data-preview'), lead: c.querySelector('.preview-lead').textContent,
+             names: Array.prototype.map.call(c.querySelectorAll('ul.lean-names li code'), function (x) { return x.textContent; }),
+             left: r.left, top: r.top, right: r.right, bottom: r.bottom, onTop: !!hit && c.contains(hit),
+             vw: window.innerWidth, vh: window.innerHeight };`;
+
+  await check(d, 'references/lean-mark-shows-the-lean-names', async () => {
+    if (!leanFixture) return { skip: true, evidence: 'no object with Lean names in the document' };
+    const { id, names, page } = leanFixture;
+    await route(d, docPage(page, id));
+    await d.move(away.x, away.y);
+    const b = await steadyLink(d, LEAN_MARK(id));
+    if (!b) return { ok: false, evidence: `no Lean mark in the heading of ${j(id)} on ${docPage(page, id)}` };
+    await d.move(b.x, b.y);
+    const c = await waitFor(d, LEAN_CARD, { timeout: 4000, label: 'Lean card' }).catch(() => null);
+    if (!c) return { ok: false, evidence: `resting on the Lean mark of ${j(id)} opened no card` };
+    await sleep(300); // past the fade-in
+    await d.shot(`${SHOTS}/${d.name}-lean-card.png`);
+    const inside = c.left >= 0 && c.top >= 0 && c.right <= c.vw && c.bottom <= c.vh;
+    const clear = c.top >= b.bottom || c.bottom <= b.top;
+    await d.move(away.x, away.y);
+    await sleep(700);
+    const after = await d.js(LEAN_CARD);
+    return {
+      ok: c.id === id && j(c.names) === j(names) && inside && clear && c.onTop && !after,
+      evidence: `mark ${j(b.text)} of ${j(id)}: card ${j(c.lead)} lists ${j(c.names)} (want ${j(names)}), inside the window=${inside}, clear of the mark=${clear}, on top=${c.onTop}; moved away: ${after ? 'still open' : 'closed'}`,
+    };
+  });
+
+  await check(d, 'references/lean-mark-opens-on-a-click', async () => {
+    if (!leanFixture) return { skip: true, evidence: 'no object with Lean names in the document' };
+    const { id, page } = leanFixture;
+    await route(d, docPage(page, id));
+    const b = await steadyLink(d, LEAN_MARK(id));
+    if (!b) return { ok: false, evidence: `no Lean mark for ${j(id)}` };
+    // A click opens it at once, as a tap must where there is no hover.
+    await d.click(b.x, b.y);
+    await sleep(100);
+    const opened = await d.js(LEAN_CARD);
+    // A click elsewhere on the page closes it.
+    await d.click(away.x, away.y);
+    await sleep(200);
+    const closed = !(await d.js(LEAN_CARD));
+    return {
+      ok: !!opened && opened.id === id && closed,
+      evidence: `clicked the mark of ${j(id)}: ${opened ? 'card open after 100 ms' : 'no card'}; clicked elsewhere: ${closed ? 'closed' : 'still open'}`,
+    };
+  });
+
   await consoleCheck(d, 'references');
 }
 

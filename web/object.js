@@ -353,7 +353,7 @@ function leanPanel(app, o, facts) {
   const docgen = app.model.project && app.model.project.docgen;
   const items = facts.map(({ name, fact }) => {
     const head = docgen
-      ? el('a', { href: docgenUrl(docgen, name), target: '_blank', rel: 'noopener' }, el('code', name))
+      ? el('a', { href: M.docgenUrl(docgen, name), target: '_blank', rel: 'noopener' }, el('code', name))
       : el('code', name);
     if (!fact) {
       return el('div.lean-decl', head, ' ', el('span.badge.status-absent', el('span.dot'), 'no facts'));
@@ -383,14 +383,6 @@ function leanPanel(app, o, facts) {
     el('h3', 'Lean declarations'),
     docgen ? null : el('p.muted.small', 'No ', el('code', 'project.docgen'), ' in the snapshot, so names are not linked.'),
     ...items);
-}
-
-function docgenUrl(base, name) {
-  const parts = String(name).split('.');
-  const decl = parts.pop();
-  const mod = parts.join('/');
-  const b = base.endsWith('/') ? base : base + '/';
-  return `${b}${mod}.html#${encodeURIComponent(name)}`;
 }
 
 function incidencePanel(app, o) {
