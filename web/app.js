@@ -10,6 +10,7 @@ import * as objectPage from './object.js';
 import * as documentPage from './document.js';
 import * as progressPage from './progress.js';
 import * as checksPage from './checks.js';
+import { setupPreviews, closePreviews } from './preview.js';
 
 const PAGES = {
   graph: graphPage,
@@ -633,6 +634,8 @@ const app = {
   levelBadge,
   progressBar,
   objectHeadBadges,
+  /** How a reference to `id` reads here: {word, number, href}, or null. */
+  referenceFor: pageReferences,
 
   /**
    * Navigate to a route.  `replace` swaps the current history entry instead of
@@ -1048,6 +1051,7 @@ let lastPageKey = null;
 function render() {
   app.route = parseHash();
   closeGlobalSearch(); // back, forward, a link: the list is about the page left behind
+  closePreviews(); // and so are the cards of the links on it
   updateTabs(app.route.view);
   const pageKey = app.route.view + ' ' + (app.route.id || '');
   if (pageKey !== lastPageKey) {
@@ -1098,6 +1102,7 @@ async function boot() {
   }
   await loadHistory();
   setupGlobalSearch();
+  setupPreviews(app);
   window.addEventListener('hashchange', () => {
     if (suppressRoute > 0) {
       suppressRoute -= 1;

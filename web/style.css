@@ -658,6 +658,65 @@ dl.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 a.objlink { font-weight: 500; }
 a.objlink.broken { color: var(--lv-missing, var(--st-missing)); text-decoration: line-through dotted; cursor: help; }
 
+/* The card a link to an object shows while the pointer rests on it
+   (preview.js): its head, the prose, scrolling when it is long, and a foot.
+   Placed by the script, against the window. */
+.preview {
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(32rem, calc(100vw - 16px));
+  max-height: min(26rem, 45vh);
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: .94rem;
+  line-height: 1.5;
+  text-align: left;
+  animation: preview-in .12s ease-out;
+}
+@keyframes preview-in { from { opacity: 0; transform: translateY(3px); } }
+@media (prefers-reduced-motion: reduce) { .preview { animation: none; } }
+.preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .2em .5em;
+  padding: .55rem .85rem .45rem;
+  border-bottom: 1px solid var(--border);
+}
+.preview-lead { font-weight: 650; }
+.preview-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.preview-head .badge { margin-left: auto; align-self: center; }
+.preview-ends { padding: .4rem .85rem 0; font-size: .86rem; }
+.preview-ends .role { color: var(--muted); font-size: .8rem; }
+.preview-body {
+  flex: 1 1 auto;
+  min-height: 2.5em;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: .55rem .85rem;
+}
+.preview-body > :last-child { margin-bottom: 0; }
+.preview-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .2em .9em;
+  padding: .4rem .85rem;
+  border-top: 1px solid var(--border);
+  background: var(--panel-2);
+  border-radius: 0 0 var(--radius) var(--radius);
+  font-size: .8rem;
+  color: var(--muted);
+}
+.preview-id, .preview-lean code { font-family: var(--mono); font-size: .8rem; overflow-wrap: anywhere; }
+.preview-open { margin-left: auto; white-space: nowrap; }
+
 .lean-decl { margin: .7rem 0; }
 .lean-decl pre { margin: .25em 0; white-space: pre-wrap; }
 /* The axiom and dependency lists are runs of `code` chips with nothing but a
