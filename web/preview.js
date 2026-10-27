@@ -3,8 +3,9 @@
 //
 // Every link to an object (`a.objlink`: a `[slug]` reference in prose, a title
 // in a listing) previews what it leads to: the reference ("Lemma 2.3") and
-// title, the status, the prose with its maths, the Lean names, a link on to
-// the object page.  The pointer can move into the card, to scroll it, open a
+// title, the status, the prose with its maths, a link on to the object page.
+// The document's "Lean" mark beside a heading (`leanMark`) opens a card of the
+// same kind with the object's Lean declarations; a tap opens that one too.  The pointer can move into the card, to scroll it, open a
 // folded proof or follow a link, and a link in the card opens a card of its
 // own beside it, so a chain of references can be read without leaving the
 // page.  Moving off the link and its cards closes them after a moment; so do
@@ -24,9 +25,10 @@ const MARGIN = 8; // between a card and the edge of the window, px
 
 let app = null;
 // The open cards, outermost first: `stack[i + 1]` was opened from a link in
-// `stack[i].card`.  Each entry is {anchor, id, card, keyboard}.
+// `stack[i].card`.  Each entry is {anchor, id, build, card, keyboard}, `anchor`
+// being the link or Lean mark it was opened from.
 const stack = [];
-let pending = null; // {anchor, id, level, keyboard}: waiting out SHOW_MS
+let pending = null; // {anchor, id, build, level, keyboard}: waiting out SHOW_MS
 let showTimer = null;
 let hideTimer = null;
 let untitled = null; // {anchor, title}: the tooltip taken off the hovered link
@@ -86,19 +88,70 @@ export function previewCard(ctx, id) {
   // The statement is what a preview is for: a proof in it starts folded.
   for (const d of body.querySelectorAll('details.proof')) d.open = false;
 
-  const lean = M.leanNamesOf(o);
+  // The Lean names are left to the document's Lean mark: a statement with
+  // many of them would leave its prose no room.
   const foot = el('div.preview-foot',
     el('code.preview-id', o.id),
-    lean.length
-      ? el('span.preview-lean', 'Lean: ', ...lean.slice(0, 3).flatMap((n, i) => [i ? ', ' : null, el('code', n)]),
-        lean.length > 3 ? ` and ${lean.length - 3} more` : null)
-      : null,
     el('a.preview-open', { href: ctx.objectHref(id) }, 'Open →'));
 
   const card = el('div.preview', { role: 'dialog', 'aria-label': `${lead}${title ? ' ' + title : ''}`, 'data-preview': id },
     head, ends, body, foot);
   ctx.renderMath(head);
   if (ends) ctx.renderMath(ends); // titles carry maths
+  return card;
+}
+
+/**
+ * The mark the document sets beside the heading of an object with Lean
+ * declarations; resting on it, focusing it or tapping it opens `leanCard`.
+ * null for an object with none.
+ */
+export function leanMark(ctx, o) {
+  const n = M.leanNamesOf(o).length;
+  if (!n) return null;
+  return ctx.el('button.lean-mark', {
+    type: 'button', 'data-lean': o.id,
+    'aria-label': n === 1 ? 'Its Lean declaration' : `Its ${n} Lean declarations`,
+  }, 'Lean', n > 1 ? ctx.el('span.lean-count', String(n)) : null);
+}
+
+/**
+ * The card of an object's Lean declarations: each name, linked to its
+ * documentation when the snapshot says where that is (`project.docgen`), with
+ * its kind and status from the Lean facts.  The signatures are on the object
+ * page, one click on.
+ */
+export function leanCard(ctx, id) {
+  const { el } = ctx;
+  const m = ctx.model;
+  const o = m.byId.get(id);
+  const ref = ctx.referenceFor(id);
+  const facts = M.leanFactsFor(m, o);
+  const docgen = m.project && m.project.docgen;
+  const status = M.statusOf(m, id);
+  const head = el('div.preview-head',
+    el('span.preview-lead', facts.length === 1 ? 'Lean declaration' : `Lean declarations (${facts.length})`),
+    el('span.preview-title', 'of ' + (ref ? ref.word + ' ' + ref.number : M.titleOf(o))),
+    status === null ? null : ctx.statusBadge(status));
+  const rows = facts.map(({ name, fact }) => el('li',
+    docgen
+      ? el('a', { href: M.docgenUrl(docgen, name), target: '_blank', rel: 'noopener' }, el('code', name))
+      : el('code', name),
+    fact && fact.kind ? el('span.chip', fact.kind) : null,
+    // Without any facts there is nothing to say of one name in particular.
+    !m.facts ? null
+      : !fact ? el('span.badge.status-absent', el('span.dot'), 'no facts')
+        : fact.exists === false ? el('span.badge.status-missing', el('span.dot'), 'does not exist')
+          : fact.status ? ctx.statusBadge(fact.status) : null));
+  const card = el('div.preview.lean-card', {
+    role: 'dialog', 'aria-label': `Lean declarations of ${M.titleOf(o)}`, 'data-preview': id,
+  },
+  head,
+  el('div.preview-body', el('ul.lean-names', ...rows)),
+  el('div.preview-foot',
+    el('code.preview-id', o.id),
+    el('a.preview-open', { href: ctx.objectHref(id) }, 'Signatures →')));
+  ctx.renderMath(head);
   return card;
 }
 
@@ -128,11 +181,23 @@ export function setupPreviews(ctx) {
   });
   on('focusin', (ev) => focus(ev.target));
   on('keydown', (ev) => { if (ev.key === 'Escape' && stack.length) closePreviews(); });
-  // A click anywhere but inside a card, or on a link inside one, is the
-  // reader moving on.
-  on('pointerdown', (ev) => {
-    if (levelOf(ev.target) < 0 || linkOf(ev.target)) closePreviews();
-  }, true);
+  // A press anywhere but inside a card is the reader moving on.  A link in a
+  // card closes the cards once it has been followed: closed on the press, the
+  // card would be gone from under the pointer before the click, which would
+  // land on whatever the card was covering.
+  on('pointerdown', (ev) => { if (levelOf(ev.target) < 0) closePreviews(); }, true);
+  on('click', (ev) => {
+    const t = triggerOf(ev.target);
+    if (isLeanMark(t)) {
+      // A tap has no hover to open the card, and a click is the plainest ask.
+      const c = cardOf(t);
+      if (!c) return;
+      cancelPending();
+      open({ anchor: t, ...c, level: levelOf(t) + 1, keyboard: false });
+    } else if (t && levelOf(t) >= 0) {
+      setTimeout(closePreviews, 0);
+    }
+  });
   // A card is placed against its link; once the page moves under it, it is
   // somewhere else.  A card scrolling its own prose is fine.
   on('scroll', (ev) => { if (stack.length && levelOf(ev.target) < 0) closePreviews(); }, true);
@@ -158,7 +223,7 @@ export function openPreviews() {
  * tests, which have no pointer, can drive it.
  */
 export function hover(target) {
-  const a = linkOf(target);
+  const a = triggerOf(target);
   if (!untitled || untitled.anchor !== a) restoreTitle();
   const level = levelOf(target);
   const opened = a ? stack.findIndex((e) => e.anchor === a) : -1;
@@ -168,24 +233,24 @@ export function hover(target) {
   clearTimeout(hideTimer);
   hideTimer = keep < stack.length - 1 ? setTimeout(() => closeFrom(keep + 1), HIDE_MS) : null;
 
-  const id = a && opened < 0 ? previewTarget(app && app.model, a) : null;
-  if (!id) {
+  const c = a && opened < 0 ? cardOf(a) : null;
+  if (!c) {
     if (!pending || !pending.keyboard) cancelPending();
     return;
   }
   takeTitle(a);
   if (pending && pending.anchor === a) return;
-  schedule({ anchor: a, id, level: level + 1, keyboard: false });
+  schedule({ anchor: a, ...c, level: level + 1, keyboard: false });
 }
 
 function focus(target) {
-  const id = previewTarget(app && app.model, target);
+  const c = cardOf(target);
   let visible = false;
   try {
     visible = !!(target && target.matches && target.matches(':focus-visible'));
   } catch (e) { /* a browser without :focus-visible: the keyboard gets no cards */ }
-  if (id && visible) {
-    schedule({ anchor: target, id, level: levelOf(target) + 1, keyboard: true });
+  if (c && visible) {
+    schedule({ anchor: target, ...c, level: levelOf(target) + 1, keyboard: true });
     return;
   }
   // The focus moved on from a card the keyboard opened.
@@ -208,14 +273,14 @@ function cancelPending() {
   pending = null;
 }
 
-function open({ anchor, id, level, keyboard }) {
+function open({ anchor, id, build, level, keyboard }) {
   if (!app || !app.model || !app.model.byId.has(id)) return;
   if (anchor.isConnected === false) return; // the page was redrawn meanwhile
   if (level > stack.length) return; // the card it was in has gone
   closeFrom(level);
   let card;
   try {
-    card = previewCard(app, id);
+    card = build();
   } catch (e) {
     // A preview is a convenience: the link still works without one.
     if (typeof console !== 'undefined' && console.error) console.error('preview failed:', e);
@@ -224,7 +289,7 @@ function open({ anchor, id, level, keyboard }) {
   card.style.zIndex = String(60 + level);
   (document.body || document.documentElement).appendChild(card);
   place(card, anchor);
-  stack.push({ anchor, id, card, keyboard });
+  stack.push({ anchor, id, build, card, keyboard });
 }
 
 function closeFrom(level) {
@@ -271,11 +336,28 @@ function levelOf(node) {
   return -1;
 }
 
-function linkOf(node) {
+/** The link or Lean mark `node` is in, or null. */
+function triggerOf(node) {
   for (let p = node; p && p.nodeType; p = p.parentNode) {
-    if (p.nodeType === 1 && p.tagName === 'A') return p;
+    if (p.nodeType === 1 && (p.tagName === 'A' || isLeanMark(p))) return p;
   }
   return null;
+}
+
+function isLeanMark(node) {
+  return !!(node && node.classList && node.classList.contains('lean-mark'));
+}
+
+/** The card a link or Lean mark opens, as {id, build}, or null for none. */
+function cardOf(t) {
+  const m = app && app.model;
+  if (!m || !t) return null;
+  if (isLeanMark(t)) {
+    const id = t.getAttribute('data-lean');
+    return m.byId.has(id) ? { id, build: () => leanCard(app, id) } : null;
+  }
+  const id = previewTarget(m, t);
+  return id ? { id, build: () => previewCard(app, id) } : null;
 }
 
 // The link's tooltip says its slug, which the card says too; left in place,

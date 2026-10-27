@@ -1566,6 +1566,17 @@ export function leanFactsFor(model, object) {
   return list.map((name) => ({ name, fact: model.facts ? model.facts[name] || null : null }));
 }
 
+/**
+ * Where doc-gen4 documents a Lean declaration, under `base` (the snapshot's
+ * `project.docgen`): the page of its module, at its anchor.
+ */
+export function docgenUrl(base, name) {
+  const parts = String(name).split('.');
+  parts.pop();
+  const b = base.endsWith('/') ? base : base + '/';
+  return `${b}${parts.join('/')}.html#${encodeURIComponent(name)}`;
+}
+
 /** `[slug]` links in a body, as a list of slugs (duplicates removed). */
 export function bodyLinks(body) {
   const out = [];
