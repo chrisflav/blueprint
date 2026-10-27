@@ -408,6 +408,54 @@ check('derived-only relations carried by junctions get a synthetic dashed arc', 
   eq(itemById(qTwo, 'uses/thm-tychonoff/def-compact').junction, true, 'witness is a junction');
 });
 
+// --- own arcs: a collapsed object draws its own, not its contents' ----------
+
+const ownArcs = (q) => M.ownEdges(q.view, q.edges);
+const arcIds = (edges) => edges.filter((e) => e.type === 'edge').map((e) => `${e.src}->${e.tgt}`);
+
+check('collapsed: each section keeps its own arcs and drops its contents\'', () => {
+  const own = ownArcs(qCollapsed);
+  sameSet(arcIds(own), ['sec-main->sec-foundations', 'sec-main->sec-applications', 'sec-applications->sec-main'],
+    'only the arcs declared between sections');
+  const g = own.find((e) => e.src === 'sec-main' && e.tgt === 'sec-foundations');
+  sameSet(g.members.map((x) => x.id), ['uses/sec-main/sec-foundations'], 'its own edge, not the three witnesses');
+  eq(g.state, 'both', 'still witnessed by the contents');
+  eq(own.find((e) => e.tgt === 'sec-applications').state, 'declared-only', 'still unwitnessed');
+  // Two members in the quotient, the second written on a proof inside
+  // sec-applications: the own arc keeps one, so it carries no "×2".
+  sameSet(edgeFor(qCollapsed, 'sec-applications', 'sec-main', 'uses').members.map((x) => x.id),
+    ['uses/sec-applications/sec-main', 'uses/proof~thm-heine-borel/lem-finite-subcover'], 'the quotient\'s arc');
+  sameSet(own.find((e) => e.src === 'sec-applications' && e.tgt === 'sec-main').members.map((x) => x.id),
+    ['uses/sec-applications/sec-main'], 'the own arc, not mutating the quotient');
+  eq(own.filter((e) => e.synthetic).length, 0, 'no synthesised arc');
+  // A junction among hidden edges (commutes, generalises) is contents too;
+  // the prose edge with lemmas of its own stays, as the way into them.
+  sameSet(own.filter((e) => e.type === 'junction').map((e) => e.members[0].id), [TYCH_ULTRA],
+    'only the edge with contents of its own');
+  for (const e of own) {
+    if (e.type === 'junction') continue;
+    for (const it of e.members) {
+      for (const b of it.object.boundary) has(vCollapsed.visible, vCollapsed.anchor(b.id), `${it.id}: every end visible`);
+    }
+  }
+});
+
+check('expanded: arcs between visible leaves are theirs, arcs into a collapsed section are not', () => {
+  const own = ownArcs(qTwo);
+  const ids = arcIds(own);
+  has(ids, 'thm-heine-borel->thm-tychonoff', 'leaf to leaf, both visible');
+  for (const id of ids) ok(!id.endsWith('->sec-foundations'), `${id}: an arc of sec-foundations' contents`);
+  eq(own.filter((e) => e.synthetic).length, 0, 'no synthesised arc');
+});
+
+check('a uses written on a proof is its statement\'s own arc while the statement is visible', () => {
+  const proofUse = model.objects.find((o) => o.kind === 'uses' && model.byId.get(o.boundary[0].id).kind === 'proof');
+  if (!proofUse) return; // the sample has none: nothing to say
+  const v = M.makeView(model, 'refines', [...M.collapseOrder(model, 'refines').expandable]);
+  const own = M.ownEdges(v, M.quotient(v).edges);
+  ok(own.some((e) => e.members.some((x) => x.id === proofUse.id)), `${proofUse.id} kept`);
+});
+
 check('multi-parent objects appear under each parent', () => {
   // lem-diagonal is visible (both its parents are expanded).
   has(vTwo.visible, 'lem-diagonal', 'visible');

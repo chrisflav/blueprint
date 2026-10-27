@@ -76,6 +76,9 @@ function readState(app) {
     // Hide arcs implied by a longer path of their kind: on unless turned off,
     // since on a real blueprint those arcs are most of the ink.
     reduce: p.get('reduce') !== '0',
+    // Draw a collapsed object's contents' arcs on it as well (DESIGN 3's
+    // derived arcs): off unless asked for, so each object shows its own.
+    inner: p.get('inner') === '1',
   };
 }
 
@@ -119,6 +122,7 @@ export function render(root, app) {
   ui.state = st;
 
   renderToolbar(app, st);
+  ui.stage.classList.toggle('inner-arcs', st.inner);
   const view = M.makeView(app.model, st.collapse, st.expand);
   const quot = M.quotient(view);
   ui.view = view;
@@ -197,7 +201,8 @@ function legend(app) {
     el('b', { style: { marginTop: '.3em' } }, 'lines'),
     el('div.row', sample(line(), head(false)), 'declared + derived'),
     el('div.row', sample(line('hollow'), head(true)), 'declared, unwitnessed'),
-    el('div.row', sample(line('dashed'), head(false)), 'derived, undeclared'),
+    // Only the contents of collapsed objects draw these (`arcs of contents`).
+    el('div.row.lg-derived', sample(line('dashed'), head(false)), 'derived, undeclared'),
     el('b', { style: { marginTop: '.3em' } }, 'fill'),
     swatch('proved', 'proved'),
     swatch('proved_with_axioms', 'extra axioms'),
@@ -276,7 +281,12 @@ function renderToolbar(app, st) {
       el('input', {
         type: 'checkbox', checked: st.reduce,
         onchange: (e) => writeState(app, { reduce: e.target.checked ? null : '0' }),
-      }), 'hide implied')));
+      }), 'hide implied'),
+    el('label.chk', { title: 'also draw, on a collapsed object, the arcs of what is hidden inside it' },
+      el('input', {
+        type: 'checkbox', checked: st.inner,
+        onchange: (e) => writeState(app, { inner: e.target.checked ? '1' : null }),
+      }), 'arcs of contents')));
 
   filters.appendChild(el('div.sep'));
 
@@ -712,8 +722,12 @@ export function buildElk(app, st, view, quot) {
   }
 
   // --- drawn entities ------------------------------------------------------
+  // Each visible object's own arcs, unless the reader asked for the arcs of
+  // the contents of collapsed objects too (`M.ownEdges`).
   const keepEntity = (e) => !enabledKinds || enabledKinds.has(e.kind);
-  const kept = quot.edges.filter(keepEntity);
+  const shown = st.inner ? quot.edges : M.ownEdges(view, quot.edges);
+  const kept = shown.filter(keepEntity);
+  const contents = st.inner ? 0 : quot.edges.filter(keepEntity).length - kept.length;
   const junctionEntities = kept.filter((e) => e.type === 'junction');
 
   // An object drawn as a junction becomes a node of its own; the ELK id of an
@@ -820,7 +834,7 @@ export function buildElk(app, st, view, quot) {
     edges,
   };
   const edgeMeta = new Map(edges.map((e) => [e.id, e.bp]));
-  return { graph, nodes, edgeMeta, implied: implied ? implied.size : 0 };
+  return { graph, nodes, edgeMeta, implied: implied ? implied.size : 0, contents };
 }
 
 /**
@@ -883,7 +897,7 @@ export function plainGraph(graph) {
 // ---------------------------------------------------------------------------
 
 function signatureOf(st) {
-  return JSON.stringify([st.collapse, [...st.expand].sort(), st.ekinds, st.status, st.reduce]);
+  return JSON.stringify([st.collapse, [...st.expand].sort(), st.ekinds, st.status, st.reduce, st.inner]);
 }
 
 async function scheduleLayout(app, st, view, quot) {
@@ -907,7 +921,7 @@ async function scheduleLayout(app, st, view, quot) {
     if (token !== layoutToken) return; // superseded while waiting
   }
 
-  const { graph, nodes, edgeMeta, implied } = buildElk(app, st, view, quot);
+  const { graph, nodes, edgeMeta, implied, contents } = buildElk(app, st, view, quot);
 
   const n = countNodes(graph);
   status.textContent = `laying out ${n.toLocaleString()} node${n === 1 ? '' : 's'}\u2026`;
@@ -922,6 +936,7 @@ async function scheduleLayout(app, st, view, quot) {
     const nCount = countNodes(laid);
     status.textContent = `${nCount.toLocaleString()} nodes, ${(laid.edges || []).length} links \u2014 ` +
       (st.reduce ? `${implied} implied arc${implied === 1 ? '' : 's'} hidden \u2014 ` : '') +
+      (contents ? `${contents} arc${contents === 1 ? '' : 's'} of contents hidden \u2014 ` : '') +
       `${view.expanded.size} expanded, collapse kind \u201c${st.collapse}\u201d`;
   } catch (e) {
     // Everything on this path is covered, the drawing included: a failure has
@@ -1937,15 +1952,22 @@ function renderSide(app, st, view, quot) {
     side.appendChild(el('p.hint',
       'Click a node to inspect it, double-click (or press Enter) to expand or collapse it. ',
       'Drag to pan, scroll to zoom.'));
+    // What is drawn: each object's own arcs, or the whole quotient with the
+    // arcs of contents (see `buildElk`).
+    const drawn = (st.inner ? quot.edges : M.ownEdges(view, quot.edges))
+      .reduce((a, e) => a + e.members.length, 0);
     side.appendChild(el('section',
       el('h3', 'This view'),
       el('ul',
         el('li', el('b', String(view.visible.size)), ' visible objects'),
-        el('li', el('b', String(quot.items.length)), ' drawn relations'),
+        el('li', el('b', String(drawn)), ' drawn relations'),
         el('li', el('b', String([...quot.internal.values()].reduce((a, b) => a + b.length, 0))),
           ' relations hidden inside collapsed objects'),
-        el('li', el('b', String(quot.edges.filter((e) => e.synthetic).length)),
-          ' synthesised derived-only arcs'))));
+        st.inner
+          ? el('li', el('b', String(quot.edges.filter((e) => e.synthetic).length)),
+            ' synthesised derived-only arcs')
+          : el('li', el('b', String(quot.items.length - drawn)),
+            ' relations of contents not drawn (', el('i', 'arcs of contents'), ')'))));
     return;
   }
 

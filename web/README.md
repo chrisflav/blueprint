@@ -76,8 +76,21 @@ All state lives in the URL hash, so every view is a shareable link.
 
 The graph route carries its full view state as query parameters:
 `collapse=<kind>`, `expand=<comma separated ids>`, `ekinds=<edge kinds>`,
-`status=<derived statuses>`, `q=<search>`, `sel=<selected id>`, and
-`reduce=0` when *hide implied* is off.
+`status=<derived statuses>`, `q=<search>`, `sel=<selected id>`,
+`reduce=0` when *hide implied* is off, and `inner=1` when *arcs of contents*
+is on.
+
+Each visible object draws its own arcs (`ownEdges` in `model.js`): an object
+is drawn only when every end of it is visible as itself, never lifted to the
+collapsed object it is hidden in. So a collapsed section shows the edges
+declared on the section and not those of the statements inside it, and its
+"×n" counts only its own edges. An edge object with contents of its own (one
+that can be expanded) stays whatever its ends, as the way into them. The arcs
+still carry their consistency state: solid when the contents witness the
+section's edge, a hollow head when nothing inside does. *Arcs of contents*
+(off by default) draws the full quotient of DESIGN.md §3 instead, the hidden
+statements' edges lifted onto their sections and dashed where no section edge
+declares them; the status line counts the arcs of contents it hid.
 
 *Hide implied* (on by default) draws the transitive reduction of the graph as
 drawn: an arc is left out when a longer path of the same kind already joins
