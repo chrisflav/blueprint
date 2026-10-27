@@ -214,7 +214,13 @@ def decodeConfig (t : TValue) (defaultName : String) :
         | none => throw s!"'[katex.macros] {k}' must be a string, got a {v.typeName}"
       pure (ms.qsort (fun a b => a.1 < b.1))
     | some v => throw s!"'[katex.macros]' must be a table, got a {v.typeName}"
-  let project : Project := { name, title, dir, leanModules, leanDescend, katexMacros }
+  let theme ← match (t.get? "site").bind (·.get? "theme") with
+    | none => pure ""
+    | some v => match v.asString? with
+      | some s => pure s
+      | none => throw s!"'[site] theme' must be a string, got a {v.typeName}"
+  let project : Project :=
+    { name, title, dir, leanModules, leanDescend, katexMacros, theme }
   let mut schema := defaultSchema
   if let some v := lookup "defaultCollapse" then
     match v.asString? with

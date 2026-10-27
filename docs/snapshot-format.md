@@ -18,7 +18,8 @@ by editing this file first. Version 1.
       "\\Fq": "\\mathbf F_q",
       "\\Spec": "\\operatorname{Spec}",
       "\\poly": "#1[T]"
-    }
+    },
+    "theme": "outline"                           // optional, see below
   },
 
   "schema": {
@@ -93,6 +94,10 @@ Notes
   `blueprint import-latex` fills the table from the `\newcommand`s,
   `\renewcommand`s, `\providecommand`s and `\DeclareMathOperator`s of a
   LaTeX blueprint.
+- `project.theme` is `[site] theme` of `blueprint.toml`: the id of the style
+  the website opens in for a reader who has not picked one.  It is left out
+  when the project names none; a reader defaults it to the website's default
+  style, and so treats an id it does not know.
 - `boundary` entries are ordered as written; roles may repeat.
 - `depth` is precomputed. Well-foundedness is guaranteed for a snapshot that
   `build` emitted without errors.

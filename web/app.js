@@ -751,7 +751,8 @@ function dataUrlFromQuery() {
 // that the styles can be tried on the real site before one is chosen.  A
 // theme may also ask for a sidebar (`data-sidebar` on <html>, read by
 // document.js).  The choice comes from `?theme=<id>` in the page's URL, else
-// from the reader's last pick, kept in localStorage.
+// from the reader's last pick, kept in localStorage, else from the project
+// (`project.theme`, `[site] theme` in blueprint.toml).
 export const THEMES = [
   { id: '', label: 'Default' },
   { id: 'drafting', label: 'Drafting' },
@@ -766,16 +767,19 @@ function knownTheme(id) {
   return THEMES.find((t) => t.id === id) || null;
 }
 
-/** The theme the page should show: `?theme=`, else the reader's pick. */
-export function currentTheme() {
+/** The theme the page should show: `?theme=`, else the reader's pick (the
+ *  default included), else the project's, else the default. */
+export function currentTheme(project) {
   try {
     const q = new URLSearchParams(location.search).get('theme');
     if (q !== null && knownTheme(q)) return q;
   } catch (e) { /* no location: the tests */ }
   try {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(THEME_KEY) : null;
-    if (saved && knownTheme(saved)) return saved;
+    if (saved !== null && knownTheme(saved)) return saved;
   } catch (e) { /* private mode */ }
+  const declared = project && project.theme;
+  if (typeof declared === 'string' && knownTheme(declared)) return declared;
   return '';
 }
 
@@ -1101,6 +1105,13 @@ async function boot() {
   } catch (err) {
     showLoadError(err, new URL(url, location.href).href);
     return;
+  }
+  // The project's style is known only now: switch to it unless the URL or the
+  // reader chose another, and draw the top bar again so its menu shows it.
+  const theme = currentTheme(app.model && app.model.project);
+  if (theme !== app.theme) {
+    applyTheme(theme);
+    updateChrome();
   }
   await loadHistory();
   setupGlobalSearch();
