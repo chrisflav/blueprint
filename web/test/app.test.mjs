@@ -709,6 +709,102 @@ await check('an opened listing stays open while the panel is rebuilt', async () 
 });
 
 // ---------------------------------------------------------------------------
+// 2e. a link to an object previews it while the pointer rests on it
+// ---------------------------------------------------------------------------
+
+const preview = await import(path.join(webDir, 'preview.js'));
+const M = modelMod;
+const SHOWN = 360; // past preview.js's SHOW_MS
+const GONE = 300; // past its HIDE_MS
+const cards = () => preview.openPreviews();
+const refLink = (slug) => [...root.querySelectorAll('.body-prose a.objlink')]
+  .find((a) => a.getAttribute('data-ref') === slug || a.getAttribute('title') === slug);
+
+await check('which links preview, and what', async () => {
+  await go('#/object/def-compact');
+  const m = app.model;
+  eq(preview.previewTarget(m, refLink('def-filter')), 'def-filter', 'a [slug] reference');
+  const div = dom.document.createElement('div');
+  div.appendChild(app.objLink(m, 'sec-main'));
+  eq(preview.previewTarget(m, div.querySelector('a')), 'sec-main', 'a title in a listing');
+  app.renderBody(div, '[no-such-object]', app.knownIds());
+  eq(preview.previewTarget(m, div.querySelector('a.broken')), null, 'a broken reference');
+  const h = dom.document.createElement('h2');
+  h.appendChild(app.objLink(m, 'sec-main'));
+  eq(preview.previewTarget(m, h.querySelector('a')), null, 'a heading: the object is written out under it');
+  eq(preview.previewTarget(m, app.el('a', { href: '#/graph' }, 'Graph')), null, 'a link to a page');
+});
+
+await check('resting on a reference opens its card; moving off closes it', async () => {
+  await go('#/object/def-compact');
+  const a = refLink('def-filter');
+  preview.hover(a);
+  eq(a.getAttribute('title'), null, 'the tooltip would cover the card');
+  await tick(SHOWN);
+  eq(cards().length, 1, 'one card');
+  const card = cards()[0].card;
+  eq(card.getAttribute('data-preview'), 'def-filter', 'the card of the referenced object');
+  eq(card.querySelector('.preview-lead').textContent, 'Definition 1.2', 'it reads as the reference does');
+  eq(card.querySelector('.preview-title').textContent, M.titleOf(app.model.byId.get('def-filter')), 'its title');
+  ok(card.querySelector('.preview-body').textContent.length > 20, 'its prose');
+  eq(card.querySelector('.preview-open').getAttribute('href'), '#/object/def-filter', 'a way on to its page');
+  ok(card.parentNode === dom.document.body, 'the card is on the page');
+
+  // Through the gap into the card: it stays.
+  preview.hover(root);
+  await tick(50);
+  preview.hover(card.querySelector('.preview-body'));
+  await tick(GONE);
+  eq(cards().length, 1, 'the card closed on the way into it');
+  eq(a.getAttribute('title'), 'def-filter', 'the tooltip is back once the pointer is off the link');
+
+  // Elsewhere for a moment: it goes.
+  preview.hover(root);
+  await tick(GONE);
+  eq(cards().length, 0, 'the card outlived the pointer');
+  ok(card.parentNode === null, 'and left its element behind');
+});
+
+await check('a link passed over on the way elsewhere opens nothing', async () => {
+  await go('#/object/def-compact');
+  preview.hover(refLink('def-filter'));
+  await tick(100);
+  preview.hover(root);
+  await tick(SHOWN);
+  eq(cards().length, 0, 'a card opened');
+});
+
+await check('a reference inside a card opens a card of its own', async () => {
+  await go('#/object/def-compact');
+  preview.hover(refLink('def-filter'));
+  await tick(SHOWN);
+  const outer = cards()[0].card;
+  // def-filter's prose refers back to def-compact.
+  const inner = [...outer.querySelectorAll('a.objlink')].find((x) => x.getAttribute('title') === 'def-compact');
+  ok(inner, 'no reference in the card');
+  preview.hover(inner);
+  await tick(SHOWN);
+  eq(cards().map((c) => c.id).join(' > '), 'def-filter > def-compact', 'the chain of cards');
+  // Back into the outer card: the inner one goes, the outer one stays.
+  preview.hover(outer.querySelector('.preview-head'));
+  await tick(GONE);
+  eq(cards().map((c) => c.id).join(' > '), 'def-filter', 'after moving back');
+  // A change of route closes them all.
+  await go('#/object/def-filter');
+  eq(cards().length, 0, 'cards outlived their page');
+});
+
+await check('a card says what an edge joins and which Lean names a statement has', async () => {
+  const edge = app.model.objects.find((o) => o.kind === 'uses');
+  const card = preview.previewCard(app, edge.id);
+  const ends = card.querySelectorAll('.preview-ends a.objlink');
+  eq(ends.length, edge.boundary.length, 'one link per end');
+  const lean = app.model.objects.find((o) => M.leanNamesOf(o).length);
+  const foot = preview.previewCard(app, lean.id).querySelector('.preview-lean');
+  ok(foot && foot.textContent.includes(M.leanNamesOf(lean)[0]), 'the Lean name is in the foot');
+});
+
+// ---------------------------------------------------------------------------
 // 3. the graph lays out in a worker
 // ---------------------------------------------------------------------------
 

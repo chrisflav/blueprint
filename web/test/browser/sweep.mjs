@@ -1888,6 +1888,102 @@ async function referenceChecks(d, f) {
     };
   });
 
+  // The open preview cards (preview.js) as `cs`, innermost last: their boxes,
+  // whether the topmost thing at each card's centre is that card, and the
+  // first reference in each one's prose.
+  const CARD_LIST = `
+    var cs = Array.prototype.slice.call(document.querySelectorAll('.preview')).map(function (c) {
+      var r = c.getBoundingClientRect();
+      var hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      var link = c.querySelector('.preview-body a.objlink:not(.broken)');
+      var lr = link ? link.getClientRects()[0] : null;
+      return { id: c.getAttribute('data-preview'),
+               lead: (c.querySelector('.preview-lead') || {}).textContent || '',
+               left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom),
+               onTop: !!hit && c.contains(hit), katex: c.querySelectorAll('.katex').length,
+               katexErrors: c.querySelectorAll('.katex-error').length,
+               link: lr ? { x: lr.left + lr.width / 2, y: lr.top + lr.height / 2 } : null,
+               vw: window.innerWidth, vh: window.innerHeight };
+    });
+  `;
+  const cardsNow = () => d.js(CARD_LIST + 'return cs;');
+  const waitCards = (n) => waitFor(d, CARD_LIST + `return cs.length === ${n} ? cs : null;`,
+    { timeout: 4000, label: `${n} preview card(s)` }).catch(() => null);
+  const away = { x: Math.round(WIDTH * 0.98), y: Math.round(HEIGHT * 0.97) };
+  // When no card opens: what the page saw of the pointer since `listen()`, and
+  // what is under it now.
+  const listen = () => d.js(`window.__hoverSeen = [];
+    if (!window.__hoverListening) {
+      window.__hoverListening = true;
+      document.addEventListener('pointerover', function (e) {
+        if (window.__hoverSeen) window.__hoverSeen.push(e.target.tagName + '.' + e.target.className + ':' + e.pointerType);
+      }, true);
+    }
+    return true;`);
+  const whyNoCard = (x, y) => d.js(`var e = document.elementFromPoint(${x}, ${y});
+    return 'under the pointer: ' + (e ? e.tagName + '.' + e.className + ' ' + JSON.stringify((e.textContent || '').slice(0, 40)) : 'nothing')
+      + ', scrollY=' + window.scrollY + ', pointerover seen: ' + JSON.stringify((window.__hoverSeen || []).slice(-6));`);
+
+  await check(d, 'references/hover-shows-a-preview', async () => {
+    if (!f.ref) return { skip: true, evidence: 'no [slug] naming a numbered object' };
+    await openObject(d, f.ref.id);
+    await d.move(away.x, away.y);
+    const a = await waitFor(d, REF_LINK('.body-prose', f.ref.target), { timeout: 15000, label: 'reference link' }).catch(() => null);
+    if (!a) return { ok: false, evidence: `no link for [${f.ref.target}] in ${j(f.ref.id)}` };
+    await listen();
+    await d.move(a.x, a.y);
+    const shown = await waitCards(1);
+    if (!shown) return { ok: false, evidence: `resting on [${f.ref.target}] at (${a.x}, ${a.y}) opened no card; ${await whyNoCard(a.x, a.y)}` };
+    const c = shown[0];
+    const title = await d.js(`var a = document.querySelector('.body-prose a.objlink[data-ref=${j(f.ref.target)}]'); return a ? a.getAttribute('title') : 'no link';`);
+    await sleep(300); // past the fade-in
+    await d.shot(`${SHOTS}/${d.name}-preview.png`);
+    const inside = c.left >= 0 && c.top >= 0 && c.right <= c.vw && c.bottom <= c.vh;
+    const clear = c.top >= a.y + 4 || c.bottom <= a.y - 4; // not over the line it came from
+    // Through the gap and into the card: it stays.
+    await d.move(Math.round((c.left + c.right) / 2), Math.round((c.top + c.bottom) / 2));
+    await sleep(700);
+    const stayed = (await cardsNow()).length;
+    // Off it, somewhere else: it goes.
+    await d.move(away.x, away.y);
+    await sleep(700);
+    const after = (await cardsNow()).length;
+    return {
+      ok: c.id === f.ref.target && c.lead === f.ref.label && inside && clear && c.onTop && !c.katexErrors
+        && title === null && stayed === 1 && after === 0,
+      evidence: `card ${j(c.id)} reads ${j(c.lead)} (want ${j(f.ref.label)}) at [${c.left},${c.top}]-[${c.right},${c.bottom}] in ${c.vw}x${c.vh}, link at y=${Math.round(a.y)}, `
+        + `clear of it=${clear}, on top=${c.onTop}, ${c.katex} KaTeX spans / ${c.katexErrors} errors, tooltip while hovered=${j(title)}; `
+        + `moved into it: ${stayed} card(s); moved away: ${after}`,
+    };
+  });
+
+  await check(d, 'references/a-preview-previews-its-own-links', async () => {
+    if (!f.ref) return { skip: true, evidence: 'no [slug] naming a numbered object' };
+    await openObject(d, f.ref.id);
+    await d.move(away.x, away.y);
+    const a = await waitFor(d, REF_LINK('.body-prose', f.ref.target), { timeout: 15000, label: 'reference link' }).catch(() => null);
+    if (!a) return { ok: false, evidence: `no link for [${f.ref.target}] in ${j(f.ref.id)}` };
+    await listen();
+    await d.move(a.x, a.y);
+    const one = await waitCards(1);
+    if (!one) return { ok: false, evidence: `no first card; ${await whyNoCard(a.x, a.y)}` };
+    if (!one[0].link) {
+      await d.key('Escape');
+      return { skip: true, evidence: `the card of ${j(one[0].id)} has no reference in its prose` };
+    }
+    await d.move(Math.round(one[0].link.x), Math.round(one[0].link.y));
+    const two = await waitCards(2);
+    await d.key('Escape');
+    await sleep(200);
+    const afterEscape = (await cardsNow()).length;
+    return {
+      ok: !!two && two[0].id === one[0].id && two[1].onTop && afterEscape === 0,
+      evidence: two
+        ? `${j(two.map((c) => c.id + ' ' + c.lead))}, the inner one on top=${two[1].onTop}; after Escape: ${afterEscape}`
+        : `resting on the link in ${j(one[0].id)}'s card opened no second card`,
+    };
+  });
+
   await consoleCheck(d, 'references');
 }
 

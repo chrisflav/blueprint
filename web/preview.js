@@ -1,0 +1,296 @@
+// preview.js — a card with an object's statement, shown while the pointer
+// rests on a link to it.
+//
+// Every link to an object (`a.objlink`: a `[slug]` reference in prose, a title
+// in a listing) previews what it leads to: the reference ("Lemma 2.3") and
+// title, the status, the prose with its maths, the Lean names, a link on to
+// the object page.  The pointer can move into the card, to scroll it, open a
+// folded proof or follow a link, and a link in the card opens a card of its
+// own beside it, so a chain of references can be read without leaving the
+// page.  Moving off the link and its cards closes them after a moment; so do
+// Escape, a click, a scroll and a change of route.
+//
+// It is one set of listeners on the document, so it covers links drawn at any
+// time by any page without the pages knowing about it.  A touch has no hover:
+// a tap on a link follows it, as before.  A link reached with the keyboard
+// shows its card too.
+
+import * as M from './model.js';
+
+const SHOW_MS = 300; // resting on a link this long opens its card
+const HIDE_MS = 250; // off the link and its cards this long closes them
+const GAP = 6; // between a link and its card, px
+const MARGIN = 8; // between a card and the edge of the window, px
+
+let app = null;
+// The open cards, outermost first: `stack[i + 1]` was opened from a link in
+// `stack[i].card`.  Each entry is {anchor, id, card, keyboard}.
+const stack = [];
+let pending = null; // {anchor, id, level, keyboard}: waiting out SHOW_MS
+let showTimer = null;
+let hideTimer = null;
+let untitled = null; // {anchor, title}: the tooltip taken off the hovered link
+let pointer = null; // {x, y}: the last pointer position, to pick a wrapped link's line
+
+/**
+ * The id of the object a link previews, or null.  Only links to an object
+ * that exists; not a broken reference, not a title in a heading (the document
+ * writes the object out right under it), not the "Proof." that opens a proof.
+ */
+export function previewTarget(model, a) {
+  if (!model || !a || a.tagName !== 'A' || !a.classList) return null;
+  if (!a.classList.contains('objlink') || a.classList.contains('broken')) return null;
+  if (a.classList.contains('proof-word')) return null;
+  for (let p = a.parentNode; p && p.nodeType === 1; p = p.parentNode) {
+    if (/^H[1-6]$/.test(p.tagName)) return null;
+    if (p.classList && p.classList.contains('preview')) break;
+  }
+  let id = a.getAttribute('data-ref');
+  if (!id) {
+    const m = String(a.getAttribute('href') || '').match(/^#\/object\/([^?]*)/);
+    if (!m) return null;
+    try {
+      id = decodeURIComponent(m[1]);
+    } catch (e) {
+      return null;
+    }
+  }
+  return model.byId.has(id) ? id : null;
+}
+
+/** The card for object `id`, not yet placed anywhere. */
+export function previewCard(ctx, id) {
+  const { el } = ctx;
+  const m = ctx.model;
+  const o = m.byId.get(id);
+  const ref = ctx.referenceFor(id);
+  const of = o.kind === 'proof' ? M.attachedTo(o) : null;
+  const own = o.attrs && typeof o.attrs.title === 'string' && o.attrs.title ? o.attrs.title : null;
+  const lead = of ? 'Proof' : ref ? ref.word + ' ' + ref.number : M.kindWord(o.kind);
+  const title = of ? 'of ' + M.titleOf(m.byId.get(of)) + (own ? ' (' + own + ')' : '') : own;
+  const status = M.statusOf(m, id);
+  const head = el('div.preview-head',
+    el('span.preview-lead', lead),
+    title ? el('span.preview-title', title) : null,
+    status === null ? null : ctx.statusBadge(status));
+
+  // An edge says what it joins; a proof's title has said it already.
+  const ends = !of && o.boundary.length
+    ? el('div.preview-ends', ...o.boundary.map((b, i) => [
+      i ? el('span.muted', ' · ') : null,
+      el('span.role', b.role), ' ', ctx.objLink(m, b.id)]))
+    : null;
+
+  const body = el('div.preview-body.body-prose');
+  ctx.renderBody(body, o.body, ctx.knownIds());
+  // The statement is what a preview is for: a proof in it starts folded.
+  for (const d of body.querySelectorAll('details.proof')) d.open = false;
+
+  const lean = M.leanNamesOf(o);
+  const foot = el('div.preview-foot',
+    el('code.preview-id', o.id),
+    lean.length
+      ? el('span.preview-lean', 'Lean: ', ...lean.slice(0, 3).flatMap((n, i) => [i ? ', ' : null, el('code', n)]),
+        lean.length > 3 ? ` and ${lean.length - 3} more` : null)
+      : null,
+    el('a.preview-open', { href: ctx.objectHref(id) }, 'Open →'));
+
+  const card = el('div.preview', { role: 'dialog', 'aria-label': `${lead}${title ? ' ' + title : ''}`, 'data-preview': id },
+    head, ends, body, foot);
+  ctx.renderMath(head);
+  if (ends) ctx.renderMath(ends); // titles carry maths
+  return card;
+}
+
+// ---------------------------------------------------------------------------
+// the controller
+// ---------------------------------------------------------------------------
+
+/** Install the listeners.  `ctx` is the `app` object. */
+export function setupPreviews(ctx) {
+  app = ctx;
+  // One set of listeners per page, however many copies of the app run in it:
+  // a script importing app.js from another context (the browser sweep does)
+  // gets a module of its own, whose cards would double every one of these.
+  // The mark is on the DOM, the one thing both contexts share.
+  const root = document.documentElement;
+  if (root.hasAttribute('data-previews')) return;
+  root.setAttribute('data-previews', '');
+  const on = (type, fn, capture) => document.addEventListener(type, fn, capture);
+  on('pointerover', (ev) => {
+    if (ev.pointerType === 'touch') return;
+    pointer = { x: ev.clientX, y: ev.clientY };
+    hover(ev.target);
+  });
+  on('pointerout', (ev) => {
+    // Out of the window: nothing is hovered any more.
+    if (ev.pointerType !== 'touch' && !ev.relatedTarget) hover(null);
+  });
+  on('focusin', (ev) => focus(ev.target));
+  on('keydown', (ev) => { if (ev.key === 'Escape' && stack.length) closePreviews(); });
+  // A click anywhere but inside a card, or on a link inside one, is the
+  // reader moving on.
+  on('pointerdown', (ev) => {
+    if (levelOf(ev.target) < 0 || linkOf(ev.target)) closePreviews();
+  }, true);
+  // A card is placed against its link; once the page moves under it, it is
+  // somewhere else.  A card scrolling its own prose is fine.
+  on('scroll', (ev) => { if (stack.length && levelOf(ev.target) < 0) closePreviews(); }, true);
+  window.addEventListener('resize', () => closePreviews());
+}
+
+/** Close every card and forget a card about to open. */
+export function closePreviews() {
+  clearTimeout(showTimer);
+  clearTimeout(hideTimer);
+  showTimer = hideTimer = null;
+  pending = null;
+  closeFrom(0);
+}
+
+/** The open cards, outermost first, for the tests. */
+export function openPreviews() {
+  return stack.map((e) => ({ id: e.id, card: e.card, anchor: e.anchor }));
+}
+
+/**
+ * The pointer is now over `target` (null: off the window).  Exported so the
+ * tests, which have no pointer, can drive it.
+ */
+export function hover(target) {
+  const a = linkOf(target);
+  if (!untitled || untitled.anchor !== a) restoreTitle();
+  const level = levelOf(target);
+  const opened = a ? stack.findIndex((e) => e.anchor === a) : -1;
+  // Keep the cards up to the one the pointer is in, and the one opened from
+  // the link it is on; the rest go once it has been elsewhere a moment.
+  const keep = Math.max(level, opened);
+  clearTimeout(hideTimer);
+  hideTimer = keep < stack.length - 1 ? setTimeout(() => closeFrom(keep + 1), HIDE_MS) : null;
+
+  const id = a && opened < 0 ? previewTarget(app && app.model, a) : null;
+  if (!id) {
+    if (!pending || !pending.keyboard) cancelPending();
+    return;
+  }
+  takeTitle(a);
+  if (pending && pending.anchor === a) return;
+  schedule({ anchor: a, id, level: level + 1, keyboard: false });
+}
+
+function focus(target) {
+  const id = previewTarget(app && app.model, target);
+  let visible = false;
+  try {
+    visible = !!(target && target.matches && target.matches(':focus-visible'));
+  } catch (e) { /* a browser without :focus-visible: the keyboard gets no cards */ }
+  if (id && visible) {
+    schedule({ anchor: target, id, level: levelOf(target) + 1, keyboard: true });
+    return;
+  }
+  // The focus moved on from a card the keyboard opened.
+  if (levelOf(target) < 0 && stack.some((e) => e.keyboard)) closePreviews();
+}
+
+function schedule(p) {
+  cancelPending();
+  pending = p;
+  showTimer = setTimeout(() => {
+    showTimer = null;
+    pending = null;
+    open(p);
+  }, SHOW_MS);
+}
+
+function cancelPending() {
+  clearTimeout(showTimer);
+  showTimer = null;
+  pending = null;
+}
+
+function open({ anchor, id, level, keyboard }) {
+  if (!app || !app.model || !app.model.byId.has(id)) return;
+  if (anchor.isConnected === false) return; // the page was redrawn meanwhile
+  if (level > stack.length) return; // the card it was in has gone
+  closeFrom(level);
+  let card;
+  try {
+    card = previewCard(app, id);
+  } catch (e) {
+    // A preview is a convenience: the link still works without one.
+    if (typeof console !== 'undefined' && console.error) console.error('preview failed:', e);
+    return;
+  }
+  card.style.zIndex = String(60 + level);
+  (document.body || document.documentElement).appendChild(card);
+  place(card, anchor);
+  stack.push({ anchor, id, card, keyboard });
+}
+
+function closeFrom(level) {
+  while (stack.length > level) {
+    const { card } = stack.pop();
+    if (card.parentNode) card.parentNode.removeChild(card);
+  }
+}
+
+/** Under the link, or above it when there is more room there; inside the window. */
+function place(card, anchor) {
+  const vw = window.innerWidth || document.documentElement.clientWidth || 1200;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 800;
+  const r = lineOf(anchor);
+  const w = card.offsetWidth || 0;
+  const h = card.offsetHeight || 0;
+  const below = vh - r.bottom - GAP - MARGIN;
+  const above = r.top - GAP - MARGIN;
+  const down = h <= below || below >= above;
+  // Never over the link: on the side it opens, the card is at most as tall as
+  // the room there, and its prose scrolls.
+  const room = Math.max(0, down ? below : above);
+  if (h > room) card.style.maxHeight = Math.round(room) + 'px';
+  const top = down ? r.bottom + GAP : r.top - GAP - Math.min(h, room);
+  const left = Math.max(MARGIN, Math.min(r.left, vw - w - MARGIN));
+  card.style.left = Math.round(left) + 'px';
+  card.style.top = Math.round(top) + 'px';
+}
+
+/** The box of the line of a wrapped link the pointer is on. */
+function lineOf(anchor) {
+  const rects = typeof anchor.getClientRects === 'function' ? [...anchor.getClientRects()] : [];
+  if (rects.length > 1 && pointer) {
+    const hit = rects.find((r) => pointer.y >= r.top - 1 && pointer.y <= r.bottom + 1);
+    if (hit) return hit;
+  }
+  return anchor.getBoundingClientRect();
+}
+
+/** Which card `node` is in: its index in the stack, -1 for the page. */
+function levelOf(node) {
+  if (!node) return -1;
+  for (let i = stack.length - 1; i >= 0; i -= 1) if (stack[i].card.contains(node)) return i;
+  return -1;
+}
+
+function linkOf(node) {
+  for (let p = node; p && p.nodeType; p = p.parentNode) {
+    if (p.nodeType === 1 && p.tagName === 'A') return p;
+  }
+  return null;
+}
+
+// The link's tooltip says its slug, which the card says too; left in place,
+// the browser would draw it over the card a moment later.
+function takeTitle(a) {
+  if (untitled && untitled.anchor === a) return;
+  restoreTitle();
+  const title = a.getAttribute('title');
+  if (title === null) return;
+  untitled = { anchor: a, title };
+  a.removeAttribute('title');
+}
+
+function restoreTitle() {
+  if (!untitled) return;
+  untitled.anchor.setAttribute('title', untitled.title);
+  untitled = null;
+}
