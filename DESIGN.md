@@ -392,6 +392,12 @@ by CI. Separate TypeScript package under `web/`.
   the quotiented edges of its contents (§3's derived arcs). Those are one
   checkbox away, *arcs of contents*, which is where the undeclared-detail lint
   shows as dashed arcs; the consistency state of an own arc is still §3's.
+  A kind's `graph` display hint keeps objects out of the picture: an
+  `appendix` (`optional`) is drawn unless the reader hides it, a `hidden`
+  object (`never`) only ever in the document, and either takes its contents
+  and the relations touching it along.  A `hidden` object is the text that
+  belongs to no statement, the lines that open a section say: the document
+  sets it in place as bare prose, unnumbered.
 - Object page: rendered prose with KaTeX, Lean signature linking to doc-gen4,
   derived and declared status, boundary, everything incident to the object,
   and its position in each collapse order.

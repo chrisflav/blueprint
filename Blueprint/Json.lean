@@ -51,7 +51,8 @@ def KindSpec.toJson (k : KindSpec) : Json :=
   Json.mkObj (base.toList ++ (match k.color with
     | some c => [("color", Json.str c)]
     | none => []) ++
-    (if k.arrow == "forward" then [] else [("arrow", Json.str k.arrow)]))
+    (if k.arrow == "forward" then [] else [("arrow", Json.str k.arrow)]) ++
+    (if k.graph == "always" then [] else [("graph", Json.str k.graph)]))
 
 /-- The schema as JSON. -/
 def Schema.toJson (s : Schema) : Json :=
@@ -214,7 +215,8 @@ def KindSpec.ofJson (name : String) (j : Json) : KindSpec :=
     countable := fieldBoolD j "countable" false
     sugar := fieldBoolD j "sugar" false
     color := (field? j "color").bind fun (v : Json) => v.getStr?.toOption
-    arrow := ((field? j "arrow").bind fun (v : Json) => v.getStr?.toOption).getD "forward" }
+    arrow := ((field? j "arrow").bind fun (v : Json) => v.getStr?.toOption).getD "forward"
+    graph := ((field? j "graph").bind fun (v : Json) => v.getStr?.toOption).getD "always" }
 
 /-- Read a schema. -/
 def Schema.ofJson (j : Json) : Schema :=

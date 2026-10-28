@@ -181,6 +181,18 @@ export function render(root, app) {
   // the prose inside them is deferred until it is scrolled to.
   const build = (entry) => {
     const o = entry.object;
+    // A piece of text belonging to no statement (the lines that open a
+    // section, a paragraph between two lemmas) is read where it stands: its
+    // prose and nothing else, no heading, no number, not in the contents.
+    if (entry.text) {
+      if (entry.duplicate) return; // said once, under its first parent
+      const text = el('section', { class: 'doc-entry is-text kind-' + o.kind, id: 'doc-' + cssId(o.id) });
+      const prose = text.appendChild(el('div.prose.body-prose'));
+      defer(prose, () => app.renderBody(prose, o.body, known, refs));
+      for (const step of outline.steps.get(o.id) || []) text.appendChild(stepBlock(app, step, known, refs));
+      flow.appendChild(text);
+      return;
+    }
     const num = entry.number;
     const isHead = entry === pageEntry;
     const rel = isHead ? -1 : entry.depth - base;
@@ -197,7 +209,7 @@ export function render(root, app) {
     // way a paper sets one: "Definition 1.2.14 (Title)." with the kind as the
     // lead word, and the body indented under it.  The number of an entry
     // with a page of its own is the link to that page.
-    const isSection = o.kind === 'section';
+    const isSection = M.isSectionKind(o.kind);
     const numNode = entry.children.length && !entry.duplicate && !isHead
       ? el('a.num', { href: href(o.id), title: 'open ' + num + ' on its own page' }, num)
       : el('span.num', num);
@@ -391,7 +403,7 @@ function pager(app, outline, pageEntry, href) {
   const { el } = app;
   if (!pageEntry) return null;
   const siblings = (pageEntry.parent ? pageEntry.parent.children : outline.roots)
-    .filter((e) => !e.duplicate);
+    .filter((e) => !e.duplicate && !e.text);
   const i = siblings.indexOf(pageEntry);
   const prev = i > 0 ? siblings[i - 1] : null;
   const next = i >= 0 && i + 1 < siblings.length ? siblings[i + 1] : null;
@@ -562,7 +574,7 @@ function outlineSidebar(app, outline, pageEntry, levels, href, scrollTo) {
   const list = (entries) => {
     const ul = el('ul');
     for (const e of entries) {
-      if (e.duplicate) continue;
+      if (e.duplicate || e.text) continue;
       const open = path.has(e.id) && e.children.length > 0;
       const li = el('li', {
         class: 'depth-' + e.depth + (open ? ' open' : '') + (pageEntry && e === pageEntry ? ' current' : '') +

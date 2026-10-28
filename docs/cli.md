@@ -514,12 +514,21 @@ countable  = false
 sugar      = true
 color      = "#4a7"
 arrow      = "reverse"              # "forward" (src -> tgt) | "reverse" (tgt -> src)
+graph      = "always"               # "always" | "optional" | "never"
 ```
 
 `arrow` only changes the picture: which end of a binary kind's arc carries the
 head, and so which end ELK lays out first.  The built-in `uses` is `reverse`,
 so `uses/a/b` ("a uses b") is drawn from `b` to `a`, dependencies above what
 depends on them; every other built-in kind is `forward`.
+
+`graph` only changes the website's graph, never the document: `always` (the
+default) draws objects of the kind, `optional` draws them unless the reader
+ticks *hide appendix* in the graph's toolbar, and `never` leaves them to the
+document alone.  An object the graph leaves out takes along everything below
+it in every collapse order, everything attached to it (its proofs), and every
+relation with it on its boundary.  The built-in `appendix` is `optional` and
+the built-in `hidden` is `never`; every other built-in kind is `always`.
 
 A `[kinds.X]` table *extends* the built-in kind `X` if there is one: keys you
 do not mention keep their default.  Giving `boundary` replaces the whole role
@@ -558,6 +567,8 @@ default.
 | kind | boundary | notes |
 |------|----------|-------|
 | `section` | — | |
+| `appendix` | — | a section the graph can hide: `graph = "optional"` |
+| `hidden` | — | text belonging to no statement, such as the lines that open a section: read in place in the document, unnumbered, never drawn in the graph (`graph = "never"`) |
 | `definition` | — | countable |
 | `theorem` | — | countable |
 | `lemma` | — | countable |

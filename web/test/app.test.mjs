@@ -1084,6 +1084,45 @@ await check('"arcs of contents" is a checkbox written to the URL', async () => {
   await go('#/graph?collapse=refines');
 });
 
+await check('"hide appendix" is offered only when there is an appendix to hide', async () => {
+  await go('#/graph?collapse=refines');
+  const labels = [...root.querySelectorAll('.toolbar label.chk')].map((l) => l.textContent);
+  ok(labels.includes('arcs of contents'), 'the toolbar was not drawn');
+  ok(!labels.includes('hide appendix'), 'offered on a snapshot without an appendix');
+});
+
+await check('a hidden appendix leaves the ELK graph with its contents and arcs; a hidden object always does', () => {
+  const node = (id, kind) => ({ id, kind, boundary: [], attrs: {}, body: '', depth: 0 });
+  const edge = (kind, src, tgt) => ({ id: `${kind}/${src}/${tgt}`, kind, attrs: {}, body: '', depth: 1,
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }] });
+  const binary = { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } } };
+  const m = M.buildModel({
+    version: 1,
+    schema: { defaultCollapse: 'refines', kinds: {
+      section: { boundary: {} }, appendix: { boundary: {}, graph: 'optional' },
+      hidden: { boundary: {}, graph: 'never' }, lemma: { boundary: {}, countable: true },
+      refines: { ...binary, collapse: true }, uses: binary } },
+    objects: [node('main', 'section'), node('a', 'lemma'), node('note', 'hidden'),
+      node('app', 'appendix'), node('b', 'lemma'),
+      edge('refines', 'a', 'main'), edge('refines', 'note', 'main'), edge('refines', 'b', 'app'),
+      edge('uses', 'a', 'b'), edge('uses', 'a', 'note')],
+    derived: {},
+  });
+  const st = { collapse: 'refines', expand: ['main', 'app'], ekinds: null, status: null, q: '', sel: null,
+    reduce: false, inner: false };
+  const drawn = (hideOptional) => {
+    const view = M.makeView(M.graphModel(m, { hideOptional }), 'refines', st.expand);
+    const { nodes, graph } = graphMod.buildElk({ model: m }, { ...st, appendix: !hideOptional }, view, M.quotient(view));
+    return { nodes: [...nodes.keys()].sort(), edges: graph.edges.map((e) => e.id) };
+  };
+  const shown = drawn(false);
+  eq(shown.nodes.join(), 'a,app,b,main', 'shown: the appendix and its lemma, never the hidden note');
+  eq(shown.edges.length, 1, 'shown: the use of the appendix\'s lemma is drawn');
+  const hidden = drawn(true);
+  eq(hidden.nodes.join(), 'a,main', 'hidden: the appendix goes with its lemma');
+  eq(hidden.edges.length, 0, 'hidden: and so does the arc to it');
+});
+
 const elkState = installFakeELK();
 
 await check('the graph lays out in a Blob worker that imports elkjs’s worker half', async () => {

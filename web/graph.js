@@ -79,7 +79,20 @@ function readState(app) {
     // Draw a collapsed object's contents' arcs on it as well (DESIGN 3's
     // derived arcs): off unless asked for, so each object shows its own.
     inner: p.get('inner') === '1',
+    // Draw the appendices (objects of a kind with `graph = "optional"`): on
+    // unless the reader hides them.
+    appendix: p.get('appendix') !== '0',
   };
+}
+
+/**
+ * The model the graph draws (`M.graphModel`): the snapshot without what is
+ * never drawn, and without the appendices and everything in them while those
+ * are hidden.  Everything about the drawing is computed on it; what an object
+ * *is* (its progress, its status) still comes from `app.model`.
+ */
+function drawnModel(app, st) {
+  return M.graphModel(app.model, { hideOptional: !st.appendix });
 }
 
 const NONE = '__none__';
@@ -123,7 +136,7 @@ export function render(root, app) {
 
   renderToolbar(app, st);
   ui.stage.classList.toggle('inner-arcs', st.inner);
-  const view = M.makeView(app.model, st.collapse, st.expand);
+  const view = M.makeView(drawnModel(app, st), st.collapse, st.expand);
   const quot = M.quotient(view);
   ui.view = view;
   ui.quot = quot;
@@ -218,19 +231,19 @@ function legend(app) {
 
 function renderToolbar(app, st) {
   const { el, clear } = app;
-  const m = app.model;
+  const m = drawnModel(app, st);
   const bar = clear(ui.toolbar);
 
   // On a phone the filters would fill half the screen, so they fold behind a
   // button there (style.css); on a wide screen the wrapper is `display:
   // contents` and the toolbar is the one row it always was.
-  const filtered = !!(st.ekinds || st.status || !st.reduce);
+  const filtered = !!(st.ekinds || st.status || !st.reduce || !st.appendix);
   bar.classList.toggle('open', !!ui.toolbarOpen);
   const toggle = bar.appendChild(el('button.tb-toggle', {
     type: 'button',
     class: filtered ? 'filtered' : null,
     'aria-expanded': ui.toolbarOpen ? 'true' : 'false',
-    title: filtered ? 'some edges or statuses are filtered out' : null,
+    title: filtered ? 'some edges, statuses or appendices are filtered out' : null,
     onclick: () => {
       ui.toolbarOpen = !ui.toolbarOpen;
       bar.classList.toggle('open', ui.toolbarOpen);
@@ -286,7 +299,15 @@ function renderToolbar(app, st) {
       el('input', {
         type: 'checkbox', checked: st.inner,
         onchange: (e) => writeState(app, { inner: e.target.checked ? '1' : null }),
-      }), 'arcs of contents')));
+      }), 'arcs of contents'),
+    // Only offered when there is an appendix to hide.
+    hasAppendix(app.model)
+      ? el('label.chk', { title: 'leave the appendices, and everything in them, out of the graph' },
+        el('input', {
+          type: 'checkbox', checked: !st.appendix,
+          onchange: (e) => writeState(app, { appendix: e.target.checked ? '0' : null }),
+        }), 'hide appendix')
+      : null));
 
   filters.appendChild(el('div.sep'));
 
@@ -322,6 +343,11 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => fitToView(app) , title: 'fit the graph into the viewport' }, 'Fit'),
     el('button', { onclick: () => zoomBy(app, 1.25) }, '+'),
     el('button', { onclick: () => zoomBy(app, 1 / 1.25) }, '\u2212')));
+}
+
+/** Is there anything the "hide appendix" checkbox would hide? */
+function hasAppendix(m) {
+  return m.objects.some((o) => M.graphHint(m, o.kind) === 'optional');
 }
 
 /** How many nodes the fully expanded view would draw: every object that is
@@ -639,7 +665,7 @@ function sizeLeaf(node, expandable, section) {
  * items become small nodes with one ELK edge per end.
  */
 export function buildElk(app, st, view, quot) {
-  const m = app.model;
+  const m = view.model;
   const order = view.order;
   const enabledKinds = st.ekinds ? new Set(st.ekinds) : null;
   const enabledStatus = st.status ? new Set(st.status) : null;
@@ -673,7 +699,7 @@ export function buildElk(app, st, view, quot) {
     const o = m.byId.get(id);
     const compound = view.isExpanded(id);
     const title = M.titleOf(o);
-    const prog = M.progressMixOf(m, st.collapse, id);
+    const prog = M.progressMixOf(app.model, st.collapse, id);
     const node = {
       id,
       bp: {
@@ -897,7 +923,8 @@ export function plainGraph(graph) {
 // ---------------------------------------------------------------------------
 
 function signatureOf(st) {
-  return JSON.stringify([st.collapse, [...st.expand].sort(), st.ekinds, st.status, st.reduce, st.inner]);
+  return JSON.stringify([st.collapse, [...st.expand].sort(), st.ekinds, st.status, st.reduce, st.inner,
+    st.appendix]);
 }
 
 async function scheduleLayout(app, st, view, quot) {
@@ -914,7 +941,7 @@ async function scheduleLayout(app, st, view, quot) {
   const token = ++layoutToken;
   // The first titles with maths on the page wait for KaTeX's fonts before
   // they are measured for good; a graph without maths goes straight on.
-  const fonts = mathSettled(app, boxTitles(app.model, view));
+  const fonts = mathSettled(app, boxTitles(view.model, view));
   if (fonts) {
     ui.stage.classList.add('laying-out');
     await fonts;
@@ -1935,7 +1962,7 @@ function installPanZoom(app) {
 
 function renderSide(app, st, view, quot) {
   const { el, clear } = app;
-  const m = app.model;
+  const m = view.model;
   const side = clear(ui.side);
   const id = st.sel;
   const o = id ? m.byId.get(id) : null;
@@ -1988,7 +2015,7 @@ function renderSide(app, st, view, quot) {
   side.appendChild(el('div.meta', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status)));
   side.appendChild(el('div.obj-id', id));
 
-  const prog = M.progressMixOf(m, st.collapse, id);
+  const prog = M.progressMixOf(app.model, st.collapse, id);
   if (prog) {
     side.appendChild(el('section', el('h3', 'Progress (' + st.collapse + ')'), app.progressBar(prog)));
   }

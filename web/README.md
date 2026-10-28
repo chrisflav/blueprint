@@ -77,8 +77,20 @@ All state lives in the URL hash, so every view is a shareable link.
 The graph route carries its full view state as query parameters:
 `collapse=<kind>`, `expand=<comma separated ids>`, `ekinds=<edge kinds>`,
 `status=<derived statuses>`, `q=<search>`, `sel=<selected id>`,
-`reduce=0` when *hide implied* is off, and `inner=1` when *arcs of contents*
-is on.
+`reduce=0` when *hide implied* is off, `inner=1` when *arcs of contents*
+is on, and `appendix=0` when *hide appendix* is on.
+
+The graph is drawn from `graphModel` in `model.js`: the snapshot without the
+objects of a kind with `graph = "never"` (the built-in `hidden`), and, while
+*hide appendix* is ticked, without those of a kind with `graph = "optional"`
+(the built-in `appendix`). Either takes everything below it in any collapse
+order, its proofs and every relation touching it along (`outOfGraph`), so
+every view, consistency state and reduction is that of a blueprint in which
+they were never written. The checkbox is offered only when the snapshot has an
+appendix. The document, the object pages and the progress page read the whole
+snapshot; there an appendix is a section and a hidden object is text (see
+below), and an object the graph never draws says so instead of offering
+*Show in graph*.
 
 Each visible object draws its own arcs (`ownEdges` in `model.js`): an object
 is drawn only when every end of it is visible as itself, never lifted to the
@@ -197,6 +209,14 @@ object with several parents in the order is written out under its first parent
 and repeated under the others as a pointer back to it; the repetition carries
 the first occurrence's number and takes none of its own, so every object has
 exactly one number.
+
+A `hidden` object with nothing under it is *text*, as the Stacks project has
+it: the lines that open a section, or a paragraph between two lemmas, that
+belong to no statement. It is set where its `order` puts it, as bare prose with
+no heading, no kind word and no number, and takes no number from its
+siblings, so the lemma after the lines that open section 2 is still 2.1. It is
+not in the contents, the pager or the outline sidebar, and a `[slug]` link to
+it keeps its title rather than reading "Section 2.1".
 
 ### Proofs
 

@@ -198,6 +198,12 @@ structure KindSpec where
   /-- Display hint for binary kinds: `forward` draws the arrow `src → tgt`,
   `reverse` draws it `tgt → src`.  Only the picture changes, never the data. -/
   arrow : String := "forward"
+  /-- Display hint for the website's graph: `always` draws objects of this
+  kind, `optional` draws them unless the reader hides them (an appendix),
+  `never` leaves them to the document alone.  An object the graph leaves out
+  takes everything below it in a collapse order, and every relation touching
+  it, along.  Only the picture changes, never the data. -/
+  graph : String := "always"
   deriving Inhabited, BEq
 
 namespace KindSpec
