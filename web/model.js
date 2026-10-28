@@ -123,6 +123,7 @@ export function buildModel(snapshot) {
     _mixes: new Map(), // memoised status counts under each object, per collapse kind
     _types: new Map(), // memoised `nodeType`, per object
     _graphModels: new Map(), // memoised `graphModel`, per choice of what to hide
+    _namingRe: null, // the words that already name a reference, see `referenceLabel`
   };
   return model;
 }
@@ -1277,25 +1278,53 @@ function compareIds(model, a, b) {
 }
 
 /**
+ * Proofs with details of their own that the collapse order puts nowhere: a
+ * proof (DESIGN 2.5) is not below its statement in any order, so one that
+ * lemmas refine is a root of it, and would be read at the top of the document,
+ * away from what it proves.  Each is read right after its statement instead.
+ * Returns statement id -> [proof id], sorted.  A proof whose statement is
+ * itself one of its details keeps its place as a root, so the walk below still
+ * reaches both.
+ */
+function detailedProofs(model, order) {
+  const out = new Map();
+  for (const o of model.objects) {
+    if (o.kind !== 'proof') continue;
+    if (parentsOf(order, o.id).length || !childrenOf(order, o.id).length) continue;
+    const of = attachedTo(o);
+    if (of == null || of === o.id || !model.byId.has(of)) continue;
+    if (descendantsOf(order, o.id).includes(of)) continue;
+    if (!out.has(of)) out.set(of, []);
+    out.get(of).push(o.id);
+  }
+  for (const list of out.values()) list.sort((a, b) => compareIds(model, a, b));
+  return out;
+}
+
+/**
  * The linear document: roots of the collapse order sorted by `order` then id,
  * recursively through their children.  Objects with several parents appear
- * under each, the later occurrences flagged `duplicate`.
+ * under each, the later occurrences flagged `duplicate`.  A proof with details
+ * of its own is read right after its statement, before what refines the
+ * statement (`detailedProofs`).
  */
 export function readingOrder(model, kind) {
   const order = collapseOrder(model, kind);
   const seen = new Set();
   const out = [];
 
-  const roots = [...order.roots].sort((a, b) => compareIds(model, a, b));
+  const proofsAfter = detailedProofs(model, order);
+  const placed = new Set([...proofsAfter.values()].flat());
+  const roots = [...order.roots].filter((id) => !placed.has(id)).sort((a, b) => compareIds(model, a, b));
 
   const walk = (id, depth, path) => {
     const duplicate = seen.has(id);
     seen.add(id);
     out.push({ id, object: model.byId.get(id), depth, duplicate });
     if (duplicate) return; // do not repeat a whole subtree
-    const kids = childrenOf(order, id)
+    const kids = (proofsAfter.get(id) || []).concat(childrenOf(order, id)
       .slice()
-      .sort((a, b) => compareIds(model, a, b));
+      .sort((a, b) => compareIds(model, a, b)));
     for (const c of kids) {
       if (path.includes(c)) continue; // defensive
       walk(c, depth + 1, path.concat([id]));
@@ -1325,7 +1354,9 @@ export function topLevel(model, kind) {
  *     not content, and are left to the graph;
  *   * a proof is filed under the statement it proves and read there, after it;
  *     it has no number of its own.  A proof with children of its own in the
- *     collapse order keeps its own place, as a step does;
+ *     collapse order is an entry, numbered as one, with its details under it;
+ *     it is read right after its statement, as the first entry below it,
+ *     unless the order gives it a place of its own;
  *   * a binary edge with prose or a title but no children of its own is a
  *     *step* of its source object, rendered as a block under it — "By
  *     induction on the dimension" belongs under the theorem it proves, not as
@@ -1459,6 +1490,63 @@ export function referenceOf(outline, id) {
   const entry = outline.byId.get(id);
   if (!entry || entry.text) return null;
   return { word: kindWord(entry.object.kind), number: entry.number };
+}
+
+// The words prose names a reference with, besides the schema's own kind words:
+// a blueprint imported from LaTeX says "Thm [x]" and "Proposition [x]" whatever
+// the kind of `x` turned out to be, and "Thm Theorem 2.3" or "Theorem Section
+// 2.3" is worse than letting the author's word stand, which is what
+// `Theorem~\ref{…}` gave in the paper.
+export const REFERENCE_WORDS = [
+  'theorem', 'thm', 'lemma', 'lem', 'proposition', 'prop', 'corollary', 'cor',
+  'definition', 'def', 'defn', 'remark', 'rem', 'example', 'exercise',
+  'construction', 'conjecture', 'claim', 'notation', 'observation',
+  'assumption', 'hypothesis', 'axiom', 'section', 'sec', 'chapter', 'chap',
+  'appendix', 'equation', 'eq',
+];
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * The text a `[slug]` reference reads as, given the prose `before` it: "Lemma
+ * 2.3", or only "2.3" when the prose already names it, with the entry's own
+ * word ("by Lemma [x]") or any word a reference is named with ("Thm [x]",
+ * "Props. [x]", any kind of the schema), so it does not read "Lemma Lemma 2.3"
+ * or "Thm Theorem 2.3".  `ref` is what `referenceOf` returns.  The website's
+ * links and the PDF export both read references this way.
+ */
+export function referenceLabel(model, ref, before) {
+  const text = String(before || '');
+  const said = new RegExp('(?:^|[^\\p{L}])' + escapeRegExp(ref.word) + '\\s+$', 'iu');
+  return said.test(text) || namesReference(model, text) ? ref.number : ref.word + ' ' + ref.number;
+}
+
+// One pattern per model: "<word>[s][.] " at the end of the text before the
+// reference, the word whole (`\p{L}`, so "dilemma [x]" does not count).
+function namesReference(model, before) {
+  if (!model._namingRe) {
+    const words = new Set(REFERENCE_WORDS);
+    for (const k of Object.keys(model.kinds || {})) words.add(kindWord(k).toLowerCase());
+    const alt = [...words].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|');
+    model._namingRe = new RegExp('(?:^|[^\\p{L}])(?:' + alt + ')s?\\.?\\s+$', 'iu');
+  }
+  return model._namingRe.test(before);
+}
+
+/** A `[slug]` reference in prose: the slug is group 1.  Not `[text](url)`. */
+export const SLUG_PATTERN = '\\[([A-Za-z0-9][A-Za-z0-9._~/-]*)\\](?!\\()';
+
+/**
+ * The maths spans of a body, as the website hands them to KaTeX: `$$…$$`,
+ * `\[…\]`, `\(…\)`, `$…$`, in that order, with fenced and inline code (group
+ * 1) matched first so that maths inside code stays code.  Group 2 is the maths
+ * span, delimiters included.  Inline formulas may wrap across source lines and
+ * start with digits (`$0=[0]$`).  A fresh global RegExp per call.
+ */
+export function mathRegExp() {
+  return /(```[\s\S]*?```|`[^`\n]*`)|(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s)(?:[^$\\]|\\[\s\S])+?\$)/g;
 }
 
 /**
@@ -1708,7 +1796,7 @@ export function docgenUrl(base, name) {
 /** `[slug]` links in a body, as a list of slugs (duplicates removed). */
 export function bodyLinks(body) {
   const out = [];
-  const re = /\[([A-Za-z0-9][A-Za-z0-9._~/-]*)\](?!\()/g;
+  const re = new RegExp(SLUG_PATTERN, 'g');
   let m;
   while ((m = re.exec(body || '')) !== null) {
     if (!out.includes(m[1])) out.push(m[1]);

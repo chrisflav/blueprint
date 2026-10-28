@@ -374,7 +374,7 @@ With `--since <rev>` it also runs the diff against that revision and prints
 the status changes, any regression, and the summary line.  Unlike `diff`, a
 regression does not change the exit status here.
 
-### `blueprint site [-o dir] [--facts f] [--history dir]`
+### `blueprint site [-o dir] [--facts f] [--history dir] [--pdf [--history-limit n]]`
 
 Assembles the static website:
 
@@ -388,8 +388,21 @@ Assembles the static website:
   `data/<sha>.json` when `history add` already filed it, and otherwise as an
   entry pointing at `blueprint.json` itself.
 
+With `--pdf` it then prepares the PDFs the website's *Export PDF* button
+hands out (`docs/pdf-export.md`): every choice its dialog offers — each
+collapse kind, each part of the document, each depth, with and without
+appendices — for the current snapshot and the `--history-limit` (default
+10) newest snapshots of the history, under `<dir>/data/exports/<snapshot
+hash>/` with a `manifest.json`.  What is already there for a snapshot is
+reused, the exports of snapshots no longer kept are removed, and images are
+read from the project for the current snapshot.  It runs
+`<dir>/export/cli.mjs site` under node and needs TeX Live (pdfLaTeX).
+
 The exit status is that of `build`: 1 when an error level check fires, and
-the site is written either way.
+the site is written either way.  With `--pdf` it is that of the export when
+an export of the current snapshot failed (1) or there is no TeX or node (3);
+each failure is printed and recorded in the manifest, where the dialog
+shows it.
 
 **Where `web/` comes from.**  In order:
 
@@ -402,11 +415,14 @@ the site is written either way.
 `.lake/packages/blueprint/.lake/build/bin/`, and walking up finds
 `.lake/packages/blueprint/web`.
 
-### `blueprint serve [--port p] [--site dir] [--facts f] [--history dir]`
+### `blueprint serve [--port p] [--site dir] [--facts f] [--history dir] [--pdf]`
 
-Runs `site` first, so what is served is fresh, then serves `dir` (default
-`<root>/_site`) on `--port` (default 8000) with the first of these that is
-installed:
+Runs `site` first (with `--pdf` if given), so what is served is fresh, then
+serves `dir` (default `<root>/_site`) on `--port` (default 8000).  With
+`python3` at hand that is `web/comments-server.py`, which also keeps the
+comments of object pages and makes, on demand, a PDF the site was not built
+with (`POST api/export`, `docs/pdf-export.md`), reading images from the
+project root; otherwise it is the first of these that is installed:
 
 ```
 python3 -m http.server <port> --directory <dir>
@@ -420,6 +436,34 @@ in the toolchain is not part of this tool's dependencies — so `serve` borrows
 one.  When none of the four is installed it says so, prints all four command
 lines with the path of the assembled site, and exits 1; the site is still
 there to serve by hand.
+
+### `blueprint export [--scope id] [--depth n|all] [--collapse K] [--no-appendices] [-o dir] [--name base] [--tex-only] [--snapshot f] [--facts f] [--list] [--json] [--timeout s] [--label text]`
+
+Writes the document, or one part of it, as LaTeX and PDF:
+`<name>.tex` and `<name>.pdf` in `-o` (default: the working directory),
+`<name>` saying what it is (`paper-whole`, `paper-3-products`,
+`paper-2-covers-and-compact-spaces-depth-2`).  `--scope` names the part by
+its object id — a section, or any entry of the document with what is below
+it — and defaults to the whole blueprint; `--depth` is how many levels below
+it are written out (default `all`); `--collapse` the hierarchy (default the
+snapshot's `defaultCollapse`); `--no-appendices` leaves out the appendices
+inside the part.  `--list` prints the parts that can be exported, with their
+number of levels.  `--tex-only` writes the `.tex` without running TeX.
+`--json` prints the result, with its diagnostics, as JSON.
+
+The snapshot is built as `build` builds it (with `--facts`, else
+`lean-facts.json` when it is there), unless `--snapshot` names a compiled
+one; images are read relative to their Markdown files under the root and
+packaged with the TeX (`assets/`, `<name>-source.zip`).  What is selected,
+in what order and under which numbers is the website's document, read by the
+same code (`web/export/latex.js`), which `docs/pdf-export.md` describes;
+the command hands the snapshot to `web/export/cli.mjs` under node.
+
+Exit status: 0; 1 when TeX failed (the `.tex` and `<name>.log` are kept and
+no PDF is left behind) or the blueprint has errors; 2 for a part that does
+not exist or is not one (a proof is read with its statement), a bad depth or
+hierarchy; 3 when TeX or node is not installed.  It needs node 18 or later,
+and TeX Live with pdfLaTeX unless `--tex-only`.
 
 ### `blueprint history add <blueprint.json> --dir <dir> [--sha s] [--date d]`
 
@@ -682,6 +726,7 @@ lake exe blueprint check --root examples/broken --lean     # exits 1
 
 lake exe blueprint site --root examples/induction          # _site/ next to it
 lake exe blueprint serve --root examples/induction         # and serve it
+lake exe blueprint export --root examples/paper --scope products   # a section as PDF
 lake exe blueprint diff HEAD~10 HEAD --root examples/induction
 
 lake exe blueprint import-latex examples/latex-import/src/content.tex \
@@ -701,6 +746,13 @@ diff -r /tmp/li examples/latex-import/expected
   and a `lean-facts.json` so that `check --lean` has something to say.
 * `examples/broken` — every error level check, documented line by line in
   `examples/broken/README.md`.
+* `examples/paper` — a short paper as a blueprint, for the PDF export:
+  nested sections, text that belongs to no statement, an appendix with a
+  table, code and an image, a lemma under two sections, a proof refined by
+  lemmas and with a step, a `## Proof` in a body, `[katex.macros]`, displays
+  and non-ASCII text.  `export/` holds what `blueprint export` makes of it
+  (the whole blueprint, the section `products`, the theorem `thm-fip`), and
+  `web/sample/paper/blueprint.json` is its snapshot.
 * `examples/latex-import` — a small LaTeX blueprint under `src/` and, under
   `expected/`, byte for byte what `blueprint import-latex` makes of it: two
   chapters, the theorem-like environments, a proof with `\uses`, `align` and

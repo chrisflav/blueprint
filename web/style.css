@@ -208,6 +208,39 @@ label.chk input { margin: 0; }
 .topbar-aside .theme-select { font-size: .8rem; padding: .15em .3em; max-width: 7.5rem; }
 .topbar-aside { display: flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--muted); }
 
+/* Export PDF: the one filled button of the top bar, so it is found without
+   looking for it (pdf.js).  Text and icon, never the icon alone. */
+.export-pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: .4em;
+  flex: none;
+  padding: .38em .8em;
+  font-size: .86rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
+.export-pdf:hover { background: color-mix(in srgb, var(--accent) 86%, var(--fg)); }
+.export-pdf:focus-visible, .export-inline:focus-visible, .export-dialog :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.export-pdf:disabled { opacity: .55; }
+.export-icon { flex: none; }
+/* The same action on a document page, next to its controls. */
+.export-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: .35em;
+  font-weight: 560;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* The search box sits between the tabs and the progress figure, and its list
    hangs below the top bar, over the page, right-aligned with the box so it
    never runs off the right edge. */
@@ -942,6 +975,92 @@ a.proof-word { font-style: italic; font-weight: 400; color: inherit; }
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
 }
+
+/* ------------------------------------------------------- export dialog */
+
+.export-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 7vh 16px 16px;
+  background: rgba(10, 14, 20, .42);
+  overflow-y: auto;
+}
+.export-dialog {
+  width: min(36rem, 100%);
+  padding: 1.1rem 1.25rem 1rem;
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+}
+.export-dialog h2 { margin: 0 0 .25rem; font-size: 1.15rem; }
+.export-from { margin: 0 0 .8rem; }
+/* A fieldset is as wide as its widest content unless told otherwise, which
+   pushed the dialog off a phone's screen. */
+.export-scope { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); padding: .45rem .75rem .6rem; margin: 0 0 .75rem; }
+.export-scope legend { padding: 0 .3em; font-size: .82rem; color: var(--muted); font-weight: 600; }
+/* The radio, then its text, then (below the text) the menu or the note. */
+.export-choice { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: .5rem; row-gap: .2rem; align-items: baseline; padding: .3rem 0; cursor: pointer; }
+.export-choice input { margin: 0; grid-column: 1; }
+.export-choice > span, .export-choice > select { grid-column: 2; min-width: 0; }
+.export-part-title { font-weight: 600; overflow-wrap: anywhere; }
+.export-other { width: 100%; max-width: 100%; }
+.export-options { display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; align-items: center; margin-bottom: .4rem; }
+.export-field { display: inline-flex; align-items: center; gap: .45rem; font-size: .9rem; }
+.export-field > span { color: var(--muted); font-weight: 600; font-size: .82rem; }
+.export-field select { max-width: 100%; }
+.export-check { display: inline-flex; align-items: center; gap: .3rem; font-size: .9rem; cursor: pointer; }
+.export-hint { margin: .2rem 0 .6rem; line-height: 1.45; }
+.export-summary { margin: .4rem 0 .8rem; font-size: .9rem; overflow-wrap: anywhere; }
+.export-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.export-go {
+  font-weight: 600;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border-color: var(--accent);
+  padding: .45em 1.1em;
+}
+.export-go:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 86%, var(--fg)); }
+.export-status:empty { display: none; }
+.export-status { margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--border); }
+.export-busy { display: flex; align-items: center; gap: .55rem; margin: 0; color: var(--muted); }
+.export-spinner {
+  width: 1em; height: 1em; flex: none;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: export-spin .8s linear infinite;
+}
+@keyframes export-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .export-spinner { animation-duration: 2.4s; } }
+.export-done { margin: 0 0 .6rem; font-weight: 600; }
+.export-links { display: flex; flex-wrap: wrap; gap: .5rem; }
+.button-link {
+  display: inline-flex; align-items: center;
+  padding: .4em .85em;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--fg);
+  font-size: .9rem;
+}
+.button-link:hover { background: var(--panel-2); text-decoration: none; }
+.button-link.primary { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.export-error {
+  margin: 0 0 .6rem;
+  padding: .55rem .75rem;
+  border: 1px solid var(--lv-error);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--lv-error) 9%, var(--panel));
+}
+.export-error p { margin: .2rem 0; }
+.export-warnings { margin-top: .6rem; font-size: .85rem; color: var(--muted); }
+.export-warnings ul { margin: .3rem 0 0; padding-left: 1.2rem; }
 
 /* ---------------------------------------------------------- responsive */
 

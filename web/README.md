@@ -177,7 +177,9 @@ hand: it serves the site and answers `GET`/`POST api/comments/<id>`, keeping
 one JSON file per object under `--comments` (default `<root>/comments`). Comment
 HTML is parsed in an inert document and cut down to the tags markdown produces
 before it is shown. Served without that server, the section says comments are
-unavailable. `blueprint site` leaves the script out of the published site.
+unavailable. `blueprint site` leaves the script out of the published site. The same
+server makes PDFs on demand for the Export PDF dialog (`POST api/export`,
+`../docs/pdf-export.md`).
 
 ### The document's pages
 
@@ -224,6 +226,14 @@ A proof (`DESIGN.md` §2.5) is set right after the statement it proves, as
 "*Proof.* … ∎", with the steps filed under it, and has no number of its own:
 a reference to it, its `?focus=` and its page are its statement's. The
 statement's object page shows its proofs the same way.
+
+A proof that lemmas refine has details of its own, and so is an entry of the
+document, numbered and with a page, its details below it. The collapse order
+puts it nowhere (a proof is below no statement), so it is read right after
+its statement, as the statement's first entry (`detailedProofs` in
+`model.js`), rather than at the top of the document. A step filed under a
+step — a relation between relations — is set inside the step it starts
+from.
 
 Every proof is a `<details class="proof">` (`proofDisclosure` in `app.js`)
 whose summary is its "Proof." line, so one click folds or unfolds one proof,
@@ -280,6 +290,29 @@ default order on the object page. The slug stays the link's tooltip.
   resolves nowhere is a broken link exactly as before, and explicit link text,
   `[text](…)`, is markdown's and untouched.
 
+### Export PDF
+
+The top bar's **Export PDF** button (also on every document page, next to
+its controls) opens a dialog that says what will be exported before anything
+is made (`pdf.js`): *this part* — the document page's entry, or the part an
+object page's object (or the graph's selection) is read in — or *the whole
+blueprint*, which is the default at the top of the document, or *another
+part* picked by its number and title; the hierarchy when there are several;
+the detail, all levels by default or a number of levels below the part; and
+whether to include appendices, when the part has any. It shows how many
+entries and proofs that is, and which snapshot it comes from, a historical
+one included. *Export PDF* then finds the PDF prepared for exactly that
+snapshot and choice (`data/exports/<hash of the snapshot's bytes>/`, made by
+`blueprint site --pdf`), or has the local server of `blueprint serve` make
+it, checks that what came back is a PDF, and downloads it, with *Open in a
+new tab* and the TeX source next to it. Failing that it says why — nothing
+prepared, the server has no TeX, TeX failed in a named object, with its log
+— and still hands out the TeX source, which the page writes itself. A second
+click while one export runs does nothing; Escape closes the dialog and gives
+the focus back. What is in the PDF and in what order is the document's
+(`export/latex.js` reads `documentOutline`); `../docs/pdf-export.md` is the
+reference.
+
 ### Previews
 
 Resting the pointer on a link to an object — a `[slug]` reference in prose, a
@@ -335,16 +368,24 @@ the pages knowing about it.
 | `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |
 | `checks.js` | the lint report |
 | `preview.js` | the card a link to an object opens while the pointer rests on it, and the document's Lean mark and its card |
+| `pdf.js` | the Export PDF button and dialog: the part, the detail, finding or making the PDF, the TeX source |
+| `export/latex.js` | **pure**: a part of the document as a LaTeX document — the request, the plan (order, shared objects, depth), the TeX. Imported by the dialog and by the command line |
+| `export/markdown-tex.js`, `export/unicode.js` | **pure**: a body's Markdown and maths as LaTeX; the characters pdfLaTeX is told about |
+| `export/sha256.js` | SHA-256, where the browser has no `crypto.subtle`; the name of a snapshot's export directory |
+| `export/cli.mjs`, `export/store.mjs`, `export/compile.mjs`, `export/zip.mjs` | node only: the command line, the `data/exports` store, TeX in a sandbox, the source archive |
 | `comments-server.py` | the local server `blueprint serve` runs: the site plus the comments API (not copied into the site) |
 | `sample/blueprint.json` | a hand-written snapshot exercising every feature |
 | `sample/data/` | four fake historical snapshots and their index |
+| `sample/paper/blueprint.json` | the snapshot of `examples/paper`, the PDF export's fixture, regenerated with `lake exe blueprint build --root examples/paper -o web/sample/paper/blueprint.json` and checked by `./test.sh` |
 | `test/dom-shim.mjs` | a minimal DOM, so the page modules can run under node |
 | `test/gen-large.mjs` | generates a synthetic snapshot the size of a real project |
 | `test/bench.mjs` | the performance harness (indexing, quotient, ELK, pages) |
 | `sample/real/blueprint.json` | a snapshot produced by the Lean tool itself, kept as a second fixture, regenerated with `lake exe blueprint build --root examples/induction --facts examples/induction/lean-facts.json -o web/sample/real/blueprint.json` and checked by `./test.sh` |
 | `test/browser/` | the pre-deploy sweep: the whole site driven in real headless Firefox and Chromium (`test/browser/README.md`) |
 | `test/model.test.mjs` | unit tests for `model.js` |
-| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, the document pages and their lazy rendering, the ELK worker and its fallbacks, the progress filters, the top bar's search and the link previews |
+| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, the document pages and their lazy rendering, the ELK worker and its fallbacks, the progress filters, the top bar's search, the link previews and the Export PDF dialog |
+| `test/export.test.mjs` | the PDF export without TeX: selection, order, numbers, depth, shared objects, proofs, text, appendices, references, maths, escaping, images, the store and the command line's errors |
+| `test/export-compile.test.mjs` | the PDF export with TeX (skipped without pdflatex): real PDFs read back, TeX errors, the sandbox, the time limit |
 
 Both samples can be opened directly:
 
@@ -444,6 +485,8 @@ pages keep working.
 ```sh
 nix-shell -p nodejs_22 --run "node test/model.test.mjs"   # pure logic
 nix-shell -p nodejs_22 --run "node test/app.test.mjs"     # the pages, in a DOM shim
+nix-shell -p nodejs_22 --run "node test/export.test.mjs"  # the PDF export's TeX
+nix-shell -p nodejs_22 texliveMedium poppler-utils --run "node test/export-compile.test.mjs"
 ```
 
 `model.js` is deliberately free of DOM references so the whole of DESIGN.md §3

@@ -36,7 +36,7 @@ const ONLY = args.get('only') || null;
 // Which groups of checks to run at all — the A/B of a single fix does not need
 // to lay out 1,068 nodes on the way past.
 const SECTIONS = new Set((args.get('sections')
-  || 'boot,graph,layout,object,document,references,progress,search,checks,nav,sample').split(',').map((s) => s.trim()));
+  || 'boot,graph,layout,object,document,references,progress,search,checks,nav,export,sample').split(',').map((s) => s.trim()));
 const WIDTH = Number(args.get('width') || 1400);
 const HEIGHT = Number(args.get('height') || 900);
 const LAUNCH = args.get('no-launch') !== 'true';
@@ -2626,6 +2626,136 @@ async function navChecks(d, f) {
 }
 
 // ---------------------------------------------------------------------------
+// 6b. Export PDF: the button, the dialog, the PDF
+// ---------------------------------------------------------------------------
+
+// Where an element is and whether it can be seen and clicked there.
+const BOX = (sel) => `
+  var e = document.querySelector(${JSON.stringify(sel)});
+  if (!e) return null;
+  var r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+  var at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height, left: r.left, right: r.right,
+           top: r.top, bottom: r.bottom, text: e.textContent.trim(), disabled: !!e.disabled,
+           visible: cs.visibility !== 'hidden' && cs.display !== 'none' && r.width > 0 && r.height > 0,
+           onTop: !!at && (at === e || e.contains(at)), bg: cs.backgroundColor, color: cs.color,
+           vw: innerWidth, vh: innerHeight, scrollW: document.documentElement.scrollWidth };
+`;
+
+async function exportChecks(d, f) {
+  const part = f.outline.entries.find((e) => e.children.length && !e.duplicate && !e.text);
+  const leaf = f.deepLeaf;
+  const clickBox = async (sel) => {
+    const b = await d.js(BOX(sel));
+    if (!b) throw new Error(`no ${sel}`);
+    await d.click(b.x, b.y);
+    return b;
+  };
+  const dialogState = `
+    var p = document.querySelector('.export-dialog');
+    if (!p) return null;
+    var checked = p.querySelector('input[name="export-scope"]:checked');
+    var r = p.getBoundingClientRect();
+    return { choice: checked && checked.value, titles: Array.prototype.map.call(p.querySelectorAll('.export-part-title'), function (x) { return x.textContent; }),
+             summary: (p.querySelector('.export-summary') || {}).textContent || '', role: p.getAttribute('role'),
+             modal: p.getAttribute('aria-modal'), left: r.left, right: r.right, vw: innerWidth,
+             focusInside: p.contains(document.activeElement), scrollW: document.documentElement.scrollWidth };
+  `;
+
+  await check(d, 'export/button-is-in-the-top-bar-labelled-and-prominent', async () => {
+    await route(d, '#/document');
+    await sleep(400);
+    const b = await d.js(BOX('#export-pdf'));
+    const bar = await d.js(`return getComputedStyle(document.querySelector('.topbar')).backgroundColor`);
+    return {
+      ok: !!b && b.visible && b.onTop && !b.disabled && b.text === 'Export PDF' && b.h >= 26 && b.top >= 0 && b.bottom <= 120
+        && b.right <= b.vw && b.bg !== bar && b.scrollW <= b.vw,
+      evidence: b ? `"${b.text}" ${Math.round(b.w)}x${Math.round(b.h)} at (${Math.round(b.left)},${Math.round(b.top)}) in a ${b.vw}px window, `
+        + `on top=${b.onTop}, enabled=${!b.disabled}, background ${b.bg} on a ${bar} bar, page width ${b.scrollW}` : 'no #export-pdf',
+    };
+  });
+
+  await check(d, 'export/dialog-offers-the-part-being-read', async () => {
+    if (!part) return { skip: true, evidence: 'the document has no part with entries below it' };
+    await route(d, '#/document/' + encodeURIComponent(part.id));
+    await sleep(500);
+    await clickBox('#export-pdf');
+    const s = await waitFor(d, dialogState, { label: 'the dialog' });
+    const want = `${M.kindWord(part.object.kind)} ${part.number}`;
+    return {
+      ok: s.choice === 'part' && s.titles[0].startsWith(want) && s.role === 'dialog' && s.modal === 'true' && s.focusInside
+        && /all levels/.test(s.summary) && s.left >= 0 && s.right <= s.vw && s.scrollW <= s.vw,
+      evidence: `on ${part.id}'s page: chosen=${j(s.choice)}, titles=${j(s.titles)}, summary=${j(s.summary)}, `
+        + `focus inside=${s.focusInside}, dialog ${Math.round(s.left)}..${Math.round(s.right)} of ${s.vw}px`,
+    };
+  });
+
+  await check(d, 'export/escape-closes-and-gives-the-focus-back', async () => {
+    if (!(await d.js(`return !!document.querySelector('.export-dialog')`))) await clickBox('#export-pdf');
+    await d.key('Escape');
+    await sleep(200);
+    const s = await d.js(`return { open: !!document.querySelector('.export-dialog'), focus: document.activeElement && (document.activeElement.id || document.activeElement.className) }`);
+    // and the keyboard alone opens it again
+    await d.js(`document.getElementById('export-pdf').focus(); return 1`);
+    await d.key('Enter');
+    await sleep(400);
+    const again = await d.js(`return !!document.querySelector('.export-dialog')`);
+    await d.key('Escape');
+    await sleep(150);
+    return { ok: !s.open && s.focus === 'export-pdf' && again, evidence: `after Escape open=${s.open}, focus on ${j(s.focus)}; Enter on the button reopens: ${again}` };
+  });
+
+  await check(d, 'export/an-object-page-offers-the-part-it-is-read-in', async () => {
+    if (!leaf) return { skip: true, evidence: 'no leaf fixture' };
+    await route(d, '#/object/' + encodeURIComponent(leaf));
+    await sleep(500);
+    await clickBox('#export-pdf');
+    const s = await waitFor(d, dialogState, { label: 'the dialog' });
+    const page = f.deepLeafPage;
+    const pe = page && f.outline.byId.get(page);
+    await d.key('Escape');
+    return {
+      ok: !!pe && s.choice === 'part' && s.titles[0].startsWith(`${M.kindWord(pe.object.kind)} ${pe.number}`),
+      evidence: `${leaf} is read on ${page}: chosen=${j(s.choice)}, ${j(s.titles[0])}`,
+    };
+  });
+
+  await check(d, 'export/the-button-gets-the-pdf-it-promises', async () => {
+    await route(d, '#/document');
+    await sleep(400);
+    await clickBox('#export-pdf');
+    await waitFor(d, dialogState, { label: 'the dialog' });
+    await clickBox('.export-go');
+    const busy = await d.js(`var b = document.querySelector('.export-go'); return b && b.disabled`);
+    await waitFor(d, `return !!document.querySelector('.export-done') || !!document.querySelector('.export-error')`, { timeout: 120000, label: 'the export' });
+    const s = await d.js(`
+      var a = document.querySelector('a.export-download');
+      var err = document.querySelector('.export-error');
+      if (!a) return { error: err ? err.textContent : '(nothing)', tex: !!Array.prototype.filter.call(document.querySelectorAll('.export-status button, .export-status a'), function (x) { return /TeX source/.test(x.textContent); }).length };
+      return fetch(a.href).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+        var head = String.fromCharCode.apply(null, new Uint8Array(buf.slice(0, 5)));
+        return { name: a.getAttribute('download'), bytes: buf.byteLength, head: head, done: document.querySelector('.export-done').textContent };
+      });
+    `);
+    await d.key('Escape');
+    if (s.error) {
+      // A site built without --pdf and served without the export server has
+      // no PDF to give: that is not a deployment the button promises one in.
+      if (/No PDFs were prepared for this site/.test(s.error) && s.tex) {
+        return { skip: true, evidence: `no PDFs on this deployment (built without --pdf, plain static server); the dialog says so and offers the TeX: ${j(s.error.slice(0, 120))}` };
+      }
+      return { ok: false, evidence: `no PDF: ${j(s.error.slice(0, 200))}` };
+    }
+    return {
+      ok: s.head === '%PDF-' && s.bytes > 1000 && /\.pdf$/.test(s.name) && busy === true,
+      evidence: `${j(s.done)}: ${s.name}, ${s.bytes} bytes starting ${j(s.head)}; the button was disabled while it ran: ${busy}`,
+    };
+  });
+
+  await consoleCheck(d, 'export');
+}
+
+// ---------------------------------------------------------------------------
 // 7. the sample snapshot: junctions and multi-parent objects
 // ---------------------------------------------------------------------------
 
@@ -2741,6 +2871,7 @@ async function runBrowser(name, f) {
     if (SECTIONS.has('search')) await searchChecks(d, f);
     if (SECTIONS.has('checks')) await checksChecks(d, f);
     if (SECTIONS.has('nav')) await navChecks(d, f);
+    if (SECTIONS.has('export')) await exportChecks(d, f);
     if (SECTIONS.has('sample')) await sampleChecks(d);
   } finally {
     await d.close();

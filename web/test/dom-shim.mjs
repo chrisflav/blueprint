@@ -288,8 +288,22 @@ export function setupDom({ ids = [], base = process.cwd(), snapshot = null } = {
   // the main-thread fallback in graph.js gets exercised.
   const workers = { enabled: true, created: [], blobs: new Map(), seq: 0 };
   class Blob2 {
-    constructor(parts) { this.parts = (parts || []).map(String); }
-    get text() { return this.parts.join(''); }
+    // Strings, or bytes (a PDF the page fetched); `text` is what a worker reads.
+    constructor(parts, opts) {
+      this.parts = (parts || []).map((p) => (p instanceof Uint8Array || p instanceof Blob2 ? p : String(p)));
+      this.type = (opts && opts.type) || '';
+    }
+    get bytes() {
+      const chunks = this.parts.map((p) => (p instanceof Blob2 ? p.bytes : typeof p === 'string' ? new TextEncoder().encode(p) : p));
+      const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+      let at = 0;
+      for (const c of chunks) { out.set(c, at); at += c.length; }
+      return out;
+    }
+    get text() { return this.parts.map((p) => (typeof p === 'string' ? p : new TextDecoder().decode(p instanceof Blob2 ? p.bytes : p))).join(''); }
+    get size() { return this.bytes.length; }
+    slice(a, b) { return new Blob2([this.bytes.slice(a, b)], { type: this.type }); }
+    async arrayBuffer() { const b = this.bytes; return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); }
   }
   const NodeURL = globalThis.URL;
   const URLShim = function URLShim(u, b) { return new NodeURL(u, b); };
@@ -347,25 +361,40 @@ export function setupDom({ ids = [], base = process.cwd(), snapshot = null } = {
   global.window = win;
   global.self = win;
 
-  global.fetch = async (url) => {
+  // A response: bytes, with what a page reads off a real one.
+  const respond = (status, body, type = 'application/json') => {
+    const bytes = body instanceof Uint8Array ? body : new TextEncoder().encode(typeof body === 'string' ? body : JSON.stringify(body));
+    const text = new TextDecoder().decode(bytes);
+    return {
+      ok: status >= 200 && status < 300, status, statusText: status === 200 ? 'OK' : status === 404 ? 'Not Found' : 'Error',
+      headers: { get: (k) => (String(k).toLowerCase() === 'content-type' ? type : null) },
+      json: async () => JSON.parse(text),
+      text: async () => text,
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+      blob: async () => new Blob2([bytes], { type }),
+    };
+  };
+  // `fetches` records every request; `routes` lets a test answer one itself:
+  // a function of (url, init) returning [status, body, type], or null to pass.
+  const net = { fetches: [], routes: [] };
+  global.fetch = async (url, init) => {
     const u = String(url).replace(/^https?:\/\/localhost/, '');
+    net.fetches.push({ url: u, init: init || {} });
+    for (const route of net.routes) {
+      const r = route(u, init || {});
+      if (r) return respond(...r);
+    }
     // Only the page's own default data file is served from memory; anything
     // else (the bundled sample, a historical snapshot) still comes off disk.
     if (snapshot && (u === './blueprint.json' || u === '/blueprint.json')) {
-      return { ok: true, status: 200, statusText: 'OK', json: async () => snapshot };
+      return respond(200, JSON.stringify(snapshot));
     }
-    const p = path.resolve(base, u.replace(/^\//, '').replace(/^\.\//, ''));
-    if (!fs.existsSync(p)) {
-      return {
-        ok: false, status: 404, statusText: 'Not Found',
-        json: async () => { throw new Error('404'); },
-      };
-    }
-    const txt = fs.readFileSync(p, 'utf8');
-    return { ok: true, status: 200, statusText: 'OK', json: async () => JSON.parse(txt) };
+    const p = path.resolve(base, u.replace(/^\//, '').replace(/^\.\//, '').replace(/[?#].*$/, ''));
+    if (!fs.existsSync(p) || !fs.statSync(p).isFile()) return respond(404, 'not found', 'text/html');
+    return respond(200, new Uint8Array(fs.readFileSync(p)), p.endsWith('.json') ? 'application/json' : 'application/octet-stream');
   };
 
-  return { document: document2, registry, Element2, observers, workers, window: win };
+  return { document: document2, registry, Element2, observers, workers, window: win, net };
 }
 
 /**

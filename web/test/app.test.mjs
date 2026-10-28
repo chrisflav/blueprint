@@ -44,7 +44,7 @@ const tick = (n = 1) => new Promise((r) => setTimeout(r, n));
 
 const dom = setupDom({
   ids: ['app', 'banner', 'project-title', 'topbar-aside', 'tabs',
-    'gsearch-input', 'gsearch-panel', 'gsearch-results', 'gsearch-foot'],
+    'gsearch-input', 'gsearch-panel', 'gsearch-results', 'gsearch-foot', 'export-pdf'],
   base: webDir,
   snapshot: sample,
 });
@@ -1400,6 +1400,193 @@ if (ELK_PATH && fs.existsSync(ELK_PATH) && fs.existsSync(ELK_WORKER_PATH)) {
   });
 } else {
   console.log('  - skipped the real elk-worker.min.js check (no --elk=<elk.bundled.js>)');
+}
+
+// ---------------------------------------------------------------------------
+// the Export PDF button and its dialog (pdf.js)
+// ---------------------------------------------------------------------------
+
+{
+  const pdf = await import(path.join(webDir, 'pdf.js'));
+  const body = dom.document.body;
+  const dialogEl = () => body.querySelector('.export-dialog');
+  const fire = (node, type, ev = {}) => { for (const fn of (node && node._listeners.get(type)) || []) fn({ target: node, preventDefault() {}, ...ev }); };
+  const until = async (fn, what) => {
+    for (let i = 0; i < 200; i += 1) { const v = fn(); if (v) return v; await tick(5); }
+    throw new Error('timed out waiting for ' + what);
+  };
+  const statusText = () => (body.querySelector('.export-status') || { textContent: '' }).textContent;
+  const routes = dom.net.routes;
+  const hash = await app.snapshotHash;
+  const exportsDir = 'data/exports/' + hash.slice(0, 16) + '/';
+  const fresh = () => { pdf.resetExportState(); routes.length = 0; dom.net.fetches.length = 0; };
+
+  await check('the top bar has a text-labelled Export PDF button, live once the snapshot is in', () => {
+    const html = fs.readFileSync(path.join(webDir, 'index.html'), 'utf8');
+    ok(/<button[^>]*id="export-pdf"[\s\S]*?<span>Export PDF<\/span>[\s\S]*?<\/button>/.test(html), 'a <button> with its words, in the top bar');
+    const b = dom.document.getElementById('export-pdf');
+    eq(b.disabled, false, 'enabled after boot');
+    ok((b._listeners.get('click') || []).length === 1, 'and wired');
+    eq(hash.length, 64, 'the snapshot was fingerprinted');
+  });
+
+  await check('on a document page the dialog offers that part, and the whole blueprint', async () => {
+    fresh();
+    await go('#/document/sec-main');
+    ok(root.querySelector('.doc-controls .export-inline'), 'the page has its own Export PDF button');
+    await pdf.openExport();
+    const d = dialogEl();
+    ok(d, 'the dialog opened');
+    eq(d.getAttribute('role'), 'dialog', 'a dialog');
+    eq(d.getAttribute('aria-modal'), 'true', 'modal');
+    const part = d.querySelector('input[value="part"]');
+    ok(part && part.hasAttribute('checked'), 'this part is chosen');
+    const titles = d.querySelectorAll('.export-part-title').map((x) => x.textContent);
+    eq(titles[0], 'Section 2 ' + M_title('sec-main'), 'named by its number and title, not its id');
+    ok(d.querySelector('input[value="whole"]'), 'the whole blueprint is one choice away');
+    ok(/Section 2 .*all levels: \d+ entries/.test(d.querySelector('.export-summary').textContent), 'it says what the export holds');
+    const depths = d.querySelector('select.export-depth').querySelectorAll('option').map((o) => o.getAttribute('value'));
+    eq(depths[0], 'all', 'all levels first, and chosen');
+    ok(depths.includes('1'), 'and fewer');
+    fire(d.querySelector('input[value="whole"]'), 'change');
+    ok(/The whole blueprint, all levels/.test(dialogEl().querySelector('.export-summary').textContent), 'switching to the whole blueprint says so');
+    pdf.closeExport();
+    eq(dialogEl(), null, 'closed');
+  });
+
+  await check('at the top of the document, and from an object page, the defaults follow the reader', async () => {
+    fresh();
+    await go('#/document');
+    await pdf.openExport();
+    ok(dialogEl().querySelector('input[value="whole"]').hasAttribute('checked'), 'the top of the document: the whole blueprint');
+    eq(dialogEl().querySelector('input[value="part"]'), null, 'with no part to offer');
+    pdf.closeExport();
+    await go('#/object/lem-diagonal');
+    await pdf.openExport();
+    const d = dialogEl();
+    ok(d.querySelector('input[value="part"]').hasAttribute('checked'), 'an object page: a part');
+    ok(/Section 2\.1/.test(d.querySelector('.export-part-title').textContent), 'the part the lemma is read in');
+    ok(/where Lemma 2\.1\.2 is read/.test(d.querySelector('.export-why').textContent), 'and why');
+    pdf.closeExport();
+  });
+
+  const pdfBytes = new TextEncoder().encode('%PDF-1.5\nfake but shaped like one\n%%EOF\n');
+  const entry = (extra = {}) => ({ collapse: 'refines', scope: 'sec-main', depth: 'all', appendices: true, status: 'ok',
+    pdf: 'aaaa.pdf', tex: 'aaaa.tex', fileName: 'compact-2-main', pages: 3, warnings: [], ...extra });
+  const manifest = (entries, sha = hash) => JSON.stringify({ version: 1, generator: 'blueprint-pdf/1', snapshot: { sha256: sha }, exports: entries });
+  const exportTo = async (hashRoute) => {
+    await go(hashRoute);
+    await pdf.openExport();
+    fire(dialogEl().querySelector('.export-go'), 'click');
+    await until(() => body.querySelector('.export-done') || body.querySelector('.export-error'), 'the export to finish');
+  };
+
+  await check('a PDF prepared for this snapshot is fetched, checked and offered with its TeX', async () => {
+    fresh();
+    routes.push((u) => (u.endsWith(exportsDir + 'manifest.json') ? [200, manifest([entry()])] : null));
+    routes.push((u) => (u.endsWith(exportsDir + 'aaaa.pdf') ? [200, pdfBytes, 'application/pdf'] : null));
+    await exportTo('#/document/sec-main');
+    ok(/The PDF is ready: 3 pages/.test(statusText()), statusText());
+    const a = body.querySelector('a.export-download');
+    eq(a.getAttribute('download'), 'compact-2-main.pdf', 'downloaded under its name');
+    ok(/^blob:/.test(a.getAttribute('href')), 'from the bytes that were checked');
+    ok(body.querySelectorAll('.export-links a').some((x) => x.getAttribute('download') === 'compact-2-main.tex'), 'the TeX source next to it');
+    eq(dom.net.fetches.filter((f) => /api\/export/.test(f.url) && f.init.method === 'POST').length, 0, 'nothing was made: a static site has no server to ask');
+    pdf.closeExport();
+  });
+
+  await check('an HTML page where the PDF should be is an error, not a download', async () => {
+    fresh();
+    routes.push((u) => (u.endsWith(exportsDir + 'manifest.json') ? [200, manifest([entry()])] : null));
+    routes.push((u) => (u.endsWith(exportsDir + 'aaaa.pdf') ? [200, '<!doctype html><title>404</title>', 'text/html'] : null));
+    await exportTo('#/document/sec-main');
+    ok(/not a PDF/.test(statusText()), statusText());
+    eq(body.querySelector('a.export-download'), null, 'nothing to download');
+    pdf.closeExport();
+  });
+
+  await check('a manifest of other bytes, another part or no PDF at all: the reader is told, and gets the TeX', async () => {
+    fresh();
+    // Prepared, but for another revision of the snapshot, and for another part.
+    routes.push((u) => (u.endsWith(exportsDir + 'manifest.json') ? [200, manifest([entry()], 'f'.repeat(64))] : null));
+    await exportTo('#/document/sec-main');
+    ok(/No PDFs were prepared for this site/.test(statusText()), 'another snapshot\'s manifest is not used: ' + statusText());
+    pdf.closeExport();
+    fresh();
+    routes.push((u) => (u.endsWith(exportsDir + 'manifest.json') ? [200, manifest([entry({ scope: 'sec-foundations' })])] : null));
+    await exportTo('#/document/sec-main');
+    ok(/No PDF was prepared for this choice/.test(statusText()), statusText());
+    const button = body.querySelectorAll('.export-status button').find((b) => /TeX source/.test(b.textContent));
+    ok(button, 'the TeX source is still offered');
+    const before = dom.workers.blobs.size;
+    fire(button, 'click');
+    await until(() => dom.workers.blobs.size > before, 'the TeX to be written');
+    const tex = [...dom.workers.blobs.values()].pop().text;
+    ok(tex.startsWith('% Generated by the blueprint tool') && tex.includes('\\begin{document}'), 'a whole LaTeX document, written in the page');
+    ok(tex.includes('Section 2: ') && !tex.includes('% object: sec-foundations'), 'of the part that was chosen');
+    pdf.closeExport();
+  });
+
+  await check('a failed build says why and links its log', async () => {
+    fresh();
+    routes.push((u) => (u.endsWith(exportsDir + 'manifest.json')
+      ? [200, manifest([entry({ status: 'failed', pdf: undefined, error: 'LaTeX error in thm-x (line 80): Undefined control sequence.', log: 'aaaa.log' })])] : null));
+    await exportTo('#/document/sec-main');
+    ok(/failed when the site was built: LaTeX error in thm-x/.test(statusText()), statusText());
+    ok(body.querySelectorAll('.export-error a').some((a) => /aaaa\.log$/.test(a.getAttribute('href'))), 'the log is linked');
+    pdf.closeExport();
+  });
+
+  await check('with the local server, the PDF of exactly this snapshot and part is made once', async () => {
+    fresh();
+    const posts = [];
+    routes.push((u, init) => {
+      if (!u.endsWith('api/export')) return null;
+      if (!init.method) return [200, { available: true, reason: null }];
+      posts.push(JSON.parse(init.body));
+      return [200, { ok: true, base: exportsDir, sha256: hash, entry: entry({ pdf: 'bbbb.pdf', fileName: 'made' }) }];
+    });
+    routes.push((u) => (u.endsWith(exportsDir + 'bbbb.pdf') ? [200, pdfBytes, 'application/pdf'] : null));
+    // What a session before left in the store is not used without asking:
+    // the server says whether it is still what the export makes.
+    routes.push((u) => (u.endsWith(exportsDir + 'manifest.json') ? [200, manifest([entry({ pdf: 'old.pdf', fileName: 'old' })])] : null));
+    await go('#/document/sec-main');
+    await pdf.openExport();
+    const goButton = dialogEl().querySelector('.export-go');
+    fire(goButton, 'click');
+    fire(goButton, 'click'); // an impatient second click
+    await until(() => body.querySelector('.export-done') || body.querySelector('.export-error'), 'the export');
+    eq(posts.length, 1, 'one request, however many clicks');
+    same_(posts[0], { snapshot: 'blueprint.json', sha256: hash, collapse: 'refines', scope: 'sec-main', depth: 'all', appendices: true }, 'the request');
+    eq(body.querySelector('a.export-download').getAttribute('download'), 'made.pdf', 'and its PDF offered');
+    pdf.closeExport();
+  });
+
+  await check('a server that cannot make it says why', async () => {
+    fresh();
+    routes.push((u, init) => {
+      if (!u.endsWith('api/export')) return null;
+      if (!init.method) return [200, { available: false, reason: 'TeX (pdflatex) is not installed on the machine serving the site' }];
+      throw new Error('must not be asked to make one');
+    });
+    await exportTo('#/document/sec-main');
+    ok(/local server cannot make one: TeX \(pdflatex\) is not installed/.test(statusText()), statusText());
+    pdf.closeExport();
+    fresh();
+    routes.push((u, init) => {
+      if (!u.endsWith('api/export')) return null;
+      if (!init.method) return [200, { available: true }];
+      return [422, { ok: false, error: 'LaTeX error in thm-x: Undefined control sequence.', entry: entry({ status: 'failed', log: 'cccc.log', pdf: undefined }), base: exportsDir }];
+    });
+    await exportTo('#/document/sec-main');
+    ok(/LaTeX error in thm-x/.test(statusText()), statusText());
+    ok(body.querySelectorAll('.export-error a').some((a) => /cccc\.log$/.test(a.getAttribute('href'))), 'with the log');
+    pdf.closeExport();
+    fresh();
+  });
+
+  function M_title(id) { return app.model.byId.get(id).attrs.title || id; }
+  function same_(a, b, what) { eq(JSON.stringify(a), JSON.stringify(b), what); }
 }
 
 // ---------------------------------------------------------------------------

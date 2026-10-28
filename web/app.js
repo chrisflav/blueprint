@@ -11,6 +11,8 @@ import * as documentPage from './document.js';
 import * as progressPage from './progress.js';
 import * as checksPage from './checks.js';
 import { setupPreviews, closePreviews, leanMark } from './preview.js';
+import { setupExport, exportButton, closeExport } from './pdf.js';
+import { sha256 } from './export/sha256.js';
 
 const PAGES = {
   graph: graphPage,
@@ -139,11 +141,10 @@ function setKatexMacros(project) {
 }
 
 const SKIP_TAGS = new Set(['CODE', 'PRE', 'A', 'SCRIPT', 'STYLE', 'TEXTAREA']);
-const SLUG_PATTERN = '\\[([A-Za-z0-9][A-Za-z0-9._~/-]*)\\](?!\\()';
-const SLUG_RE = new RegExp(SLUG_PATTERN, 'g');
+const SLUG_RE = new RegExp(model.SLUG_PATTERN, 'g');
 // A separate non-global copy: `test` on a /g/ regex advances lastIndex and
 // would then miss matches in the next string it is asked about.
-const SLUG_TEST = new RegExp(SLUG_PATTERN);
+const SLUG_TEST = new RegExp(model.SLUG_PATTERN);
 
 /**
  * Render a markdown body into `target`:
@@ -327,54 +328,19 @@ function pageReferences(slug) {
   return ref && { ...ref, href: objectHref(slug) };
 }
 
-function escapeRegExp(s) {
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// The words prose names a reference with, besides the schema's own kind words:
-// a blueprint imported from LaTeX says "Thm [x]" and "Proposition [x]" whatever
-// the kind of `x` turned out to be, and "Thm Theorem 2.3" or "Theorem Section
-// 2.3" is worse than letting the author's word stand, which is what
-// `Theorem~\ref{…}` gave in the paper.
-const REFERENCE_WORDS = [
-  'theorem', 'thm', 'lemma', 'lem', 'proposition', 'prop', 'corollary', 'cor',
-  'definition', 'def', 'defn', 'remark', 'rem', 'example', 'exercise',
-  'construction', 'conjecture', 'claim', 'notation', 'observation',
-  'assumption', 'hypothesis', 'axiom', 'section', 'sec', 'chapter', 'chap',
-  'appendix', 'equation', 'eq',
-];
-
-// One pattern per snapshot: "<word>[s][.] " at the end of the text before the
-// reference, the word whole (`\p{L}`, so "dilemma [x]" does not count).
-let namingFor = null;
-let namingRe = null;
-
-function namesReference(before) {
-  const m = app.model;
-  if (namingFor !== m) {
-    const words = new Set(REFERENCE_WORDS);
-    for (const k of Object.keys((m && m.kinds) || {})) words.add(model.kindWord(k).toLowerCase());
-    const alt = [...words].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|');
-    namingRe = new RegExp('(?:^|[^\\p{L}])(?:' + alt + ')s?\\.?\\s+$', 'iu');
-    namingFor = m;
-  }
-  return namingRe.test(before);
-}
-
 /**
  * Markdown and TeX disagree about `_`, `*`, `\` and blank lines: marked turns
  * `\varpi_E^n` into emphasis and a display formula into two paragraphs
  * before KaTeX ever sees them.  So every maths span is lifted out first and
  * put back, HTML-escaped, after marked has run.  Recognised, in this order:
  * `$$…$$`, `\[…\]`, `\(…\)`, `$…$`; fenced and inline code are left
- * to marked. Inline formulas may wrap across source lines and start with
- * digits (e.g. `$0=[0]$`), just as they may in KaTeX auto-render.
+ * to marked (`model.mathRegExp`, which the PDF export reads maths with too).
+ * Inline formulas may wrap across source lines and start with digits (e.g.
+ * `$0=[0]$`), just as they may in KaTeX auto-render.
  */
-const MATH_RE = /(```[\s\S]*?```|`[^`\n]*`)|(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s)(?:[^$\\]|\\[\s\S])+?\$)/g;
-
 export function shieldMath(src) {
   const spans = [];
-  const text = src.replace(MATH_RE, (whole, code, math) => {
+  const text = src.replace(model.mathRegExp(), (whole, code, math) => {
     if (code !== undefined) return whole;
     spans.push(math);
     // A token marked leaves alone: no markdown characters, no letters it
@@ -489,13 +455,8 @@ export function linkifySlugs(root, known, refs) {
       const slug = m[1];
       const ok = !known || known.has(slug);
       const ref = ok && refs ? refs(slug) : null;
-      let label = slug;
-      if (ref) {
-        // "Lemma [x]" and "Thm [x]" already have their word.
-        const said = new RegExp('(?:^|[^\\p{L}])' + escapeRegExp(ref.word) + '\\s+$', 'iu');
-        const before = text.slice(0, m.index);
-        label = said.test(before) || namesReference(before) ? ref.number : ref.word + ' ' + ref.number;
-      }
+      // "Lemma [x]" and "Thm [x]" already have their word.
+      const label = ref && app.model ? model.referenceLabel(app.model, ref, text.slice(0, m.index)) : slug;
       frag.appendChild(
         el(
           'a',
@@ -638,6 +599,10 @@ const app = {
   referenceFor: pageReferences,
   /** The document's "Lean" mark for an object, or null when it has no Lean names. */
   leanMark: (o) => leanMark(app, o),
+  /** A button that opens the Export PDF dialog, defaulting to the part on screen. */
+  exportButton: (label) => exportButton(app, label),
+  /** SHA-256 of the bytes of the snapshot on screen (a Promise), which its prepared PDFs are filed under. */
+  snapshotHash: null,
 
   /**
    * Navigate to a route.  `replace` swaps the current history entry instead of
@@ -706,11 +671,17 @@ async function fetchJson(url) {
 }
 
 async function loadInto(url, { sha = null, keepBase = false, entry = null } = {}) {
-  const snapshot = await fetchJson(url);
+  // The bytes, not just the JSON: the PDF export finds what was prepared for
+  // this snapshot by their hash.
+  const res = await fetch(url, { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const snapshot = JSON.parse(new TextDecoder('utf-8').decode(bytes));
   if (!snapshot || !Array.isArray(snapshot.objects)) {
     throw new Error(`${url} is not a blueprint snapshot (no "objects" array)`);
   }
   app.snapshot = snapshot;
+  app.snapshotHash = sha256(bytes).catch(() => null);
   app.model = model.buildModel(snapshot);
   setKatexMacros(app.model.project);
   app.dataUrl = url;
@@ -1058,6 +1029,7 @@ function render() {
   app.route = parseHash();
   closeGlobalSearch(); // back, forward, a link: the list is about the page left behind
   closePreviews(); // and so are the cards of the links on it
+  closeExport(); // and the export dialog, which is about the page
   updateTabs(app.route.view);
   const pageKey = app.route.view + ' ' + (app.route.id || '');
   if (pageKey !== lastPageKey) {
@@ -1116,6 +1088,7 @@ async function boot() {
   await loadHistory();
   setupGlobalSearch();
   setupPreviews(app);
+  setupExport(app);
   window.addEventListener('hashchange', () => {
     if (suppressRoute > 0) {
       suppressRoute -= 1;

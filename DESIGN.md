@@ -371,6 +371,7 @@ blueprint view    [--collapse K] [--expand ids] prints the quotient graph
 blueprint site    [-o dir] [--history dir] assemble the static website
 blueprint serve   [--port p] [--site dir]  assemble it and serve it locally
 blueprint history add <snapshot> --dir d   file a snapshot, update the index
+blueprint export  [--scope id] [--depth n]  the document, or a part, as LaTeX and PDF
 blueprint migrate [--facts f]             sketches to statements, proofs out of bodies
 ```
 
@@ -405,6 +406,9 @@ by CI. Separate TypeScript package under `web/`.
   one page per level of the chosen collapse order, with a chosen number of
   levels inlined on each page.
 - Progress dashboard and a time slider that replays snapshots.
+- PDF export of the document or of one part of it, in the document's order
+  and numbering, prepared with the site for the snapshot it was made from
+  (`docs/pdf-export.md`).
 - Later: in-browser editing that commits through the git hosting API.
 
 ## 10. Architecture and phases

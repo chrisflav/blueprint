@@ -8,7 +8,9 @@ import Blueprint.Site
 
 `DESIGN.md` §8.  Phase 1 implements `check`, `build`, `new`, `rename` and
 `view`, phase 2 adds `extract`, phase 4 adds `diff`, `log`, `progress`,
-`history add`, `site` and `serve`.
+`history add`, `site` and `serve`; `export` (and `site --pdf`) writes the
+document, or a part of it, as LaTeX and PDF through the website's own
+`web/export/cli.mjs`.
 -/
 
 namespace Blueprint
@@ -21,7 +23,8 @@ open Lean (Json)
 def valueOptions : Array String :=
   #["--root", "-o", "--output", "--facts", "--view", "--collapse", "--expand", "--dir",
     "--snapshot", "--names", "--descend", "--out", "--limit", "--since", "--history", "--port",
-    "--site", "--sha", "--date", "--toml", "--report", "--macros", "--comments"]
+    "--site", "--sha", "--date", "--toml", "--report", "--macros", "--comments",
+    "--scope", "--depth", "--name", "--timeout", "--label", "--history-limit"]
 
 /-- Positional arguments and options, parsed without any dependencies. -/
 structure Args where
@@ -653,10 +656,94 @@ def assembleSite (root : System.FilePath) (out : System.FilePath) (args : Args) 
         added the current one as {sha.take 8})"
   return if hasErrors a.checks then 1 else 0
 
-/-- `blueprint site [-o dir] [--facts f] [--history dir]` -/
+/-! ## The PDF export
+
+The document is written as LaTeX by `web/export/latex.js`, the module the
+website's Export PDF dialog uses, and compiled by `web/export/cli.mjs`: one
+reading of the snapshot for the site, the dialog and the command line.  Both
+run under node; the commands here find the website, build the snapshot and
+hand over. -/
+
+/-- The export script of a copy of the website. -/
+def exportScript (web : System.FilePath) : System.FilePath := web / "export" / "cli.mjs"
+
+/-- Fail unless `node` is there to run the export with. -/
+def needNode : IO Unit := do
+  unless ← haveExe "node" do
+    throw <| IO.userError "the PDF export runs under node (Node.js 18 or later), which is not on PATH"
+
+/-- `blueprint export [--scope id] [--depth n|all] [--collapse K] [--no-appendices]
+[-o dir] [--name base] [--tex-only] [--snapshot f] [--facts f] [--list] [--json]
+[--timeout s] [--label text]`: the whole blueprint, or the part `--scope`
+names with everything below it, as `<name>.tex` and `<name>.pdf` in `-o`
+(default: the working directory).  The snapshot is built as `build` builds
+it, unless `--snapshot` names a compiled one, and images are read relative
+to their Markdown files under the root.  The exit status is the export's:
+0, 1 when TeX failed, 2 for a bad request, 3 when TeX is not installed; or 1
+when it succeeded but the blueprint has errors. -/
+def cmdExport (root : System.FilePath) (args : Args) : IO UInt32 := do
+  let script := exportScript (← findWebDir root)
+  unless ← script.pathExists do
+    throw <| IO.userError s!"{script}: missing, so this copy of the website has no PDF export"
+  needNode
+  let cmd := if args.has "--list" then "list" else "export"
+  let mut argv : Array String := #[script.toString, cmd, "--snapshot", (args.get? "--snapshot").getD "-"]
+  -- `--x=value`, so that a value starting with a dash stays a value.
+  for o in ["--scope", "--depth", "--collapse", "--name", "--timeout", "--label"] do
+    if let some v := args.get? o then argv := argv.push s!"{o}={v}"
+  if let some o := outOption args then argv := argv.push s!"--out={o}"
+  for f in ["--no-appendices", "--tex-only", "--json"] do
+    if args.has f then argv := argv.push f
+  if cmd == "export" then argv := argv.push s!"--assets-root={root}"
+  let mut errors := false
+  let mut input : Option String := none
+  if (args.get? "--snapshot").isNone then
+    if let some p := args.get? "--facts" then
+      unless ← System.FilePath.pathExists p do
+        throw <| IO.userError s!"{p}: no such file"
+    let facts ← loadFactsIfPresent ((args.get? "--facts").getD (root / "lean-facts.json").toString)
+    let l ← load root
+    let a := analyse l.blueprint l.checks facts none
+    for c in a.checks do
+      if c.level == "error" then IO.eprintln c.render
+    errors := hasErrors a.checks
+    input := some (a.snapshot facts).render
+  let rc ← match input with
+    | none =>
+      let child ← IO.Process.spawn { cmd := "node", args := argv, stdin := .null }
+      child.wait
+    | some text =>
+      let child ← IO.Process.spawn { cmd := "node", args := argv, stdin := .piped }
+      let (stdin, child) ← child.takeStdin
+      stdin.putStr text
+      stdin.flush
+      child.wait
+  if rc == 0 && errors then
+    IO.eprintln "blueprint: the blueprint has errors (see 'blueprint check'); the export was written anyway"
+    return 1
+  return rc
+
+/-- Assemble the site; with `--pdf [--history-limit n]`, also prepare every
+export the website's dialog offers under `<dir>/data/exports`, for the
+current snapshot and the newest history. -/
+def assembleSiteWithPdfs (root out : System.FilePath) (args : Args) : IO UInt32 := do
+  let rc ← assembleSite root out args
+  if !args.has "--pdf" then return rc
+  needNode
+  let mut argv := #[(exportScript out).toString, "site", "--site", out.toString,
+    s!"--assets-root={root}"]
+  if let some n := args.get? "--history-limit" then argv := argv.push s!"--history-limit={n}"
+  (← IO.getStdout).flush
+  let child ← IO.Process.spawn { cmd := "node", args := argv, stdin := .null }
+  let prc ← child.wait
+  if prc != 0 then
+    IO.eprintln s!"blueprint: preparing the PDFs failed (status {prc}); the site is written"
+  return if prc != 0 then prc else rc
+
+/-- `blueprint site [-o dir] [--facts f] [--history dir] [--pdf]` -/
 def cmdSite (root : System.FilePath) (args : Args) : IO UInt32 := do
   let out : System.FilePath := (outOption args).getD (root / "_site").toString
-  assembleSite root out args
+  assembleSiteWithPdfs root out args
 
 /-! ## `blueprint serve` -/
 
@@ -683,14 +770,16 @@ def cmdServe (root : System.FilePath) (args : Args) : IO UInt32 := do
   let port := match (args.get? "--port").bind String.toNat? with
     | some p => p
     | none => 8000
-  let rc ← assembleSite root dir args
+  let rc ← assembleSiteWithPdfs root dir args
   if rc != 0 then
-    IO.eprintln "blueprint: the blueprint has errors; serving it anyway"
+    IO.eprintln "blueprint: the blueprint has errors, or a PDF failed; serving it anyway"
   let script := (← findWebDir root) / commentServerScript
   if (← script.pathExists) && (← haveExe "python3") then
     let comments : System.FilePath := (args.get? "--comments").getD (root / "comments").toString
+    -- The project root, so that a PDF made on demand finds its images.
     let child ← IO.Process.spawn { cmd := "python3", args := #[script.toString,
-      "--port", toString port, "--directory", dir.toString, "--comments", comments.toString] }
+      "--port", toString port, "--directory", dir.toString, "--comments", comments.toString,
+      "--assets-root", root.toString] }
     return ← child.wait
   let candidates := serverCandidates dir port
   for (cmd, cmdArgs) in candidates do
@@ -799,8 +888,14 @@ commands:
   log    <id> [--limit n]                  what every commit did to one object
   progress [--since rev] [--facts f]       status counts by kind, and the
                                            change since a revision
-  site   [-o dir] [--facts f]              assemble the static website
-         [--history dir]
+  site   [-o dir] [--facts f]              assemble the static website; with
+         [--history dir]                   --pdf also prepare every PDF its
+         [--pdf [--history-limit n]]       Export PDF button offers
+  export [--scope id] [--depth n|all]      the document, or one part of it,
+         [--collapse K] [--no-appendices]  as LaTeX and PDF (needs node, and
+         [-o dir] [--name base]            TeX Live unless --tex-only)
+         [--tex-only] [--snapshot f]
+         [--list] [--json] [--timeout s]
   serve  [--port p] [--site dir]           refresh the site and serve it,
          [--comments dir]                  keeping comments in dir
          [--history dir]
@@ -841,8 +936,10 @@ def run (argv : List String) : IO UInt32 := do
       | "diff" => #["--json", "--no-fail"]
       | "log" => #["--limit"]
       | "progress" => #["--since", "--facts"]
-      | "site" => #["-o", "--output", "--facts", "--history"]
-      | "serve" => #["--port", "--site", "--facts", "--history", "--comments"]
+      | "site" => #["-o", "--output", "--facts", "--history", "--pdf", "--history-limit"]
+      | "serve" => #["--port", "--site", "--facts", "--history", "--comments", "--pdf", "--history-limit"]
+      | "export" => #["--scope", "--depth", "--collapse", "--no-appendices", "-o", "--output", "--name",
+                      "--tex-only", "--snapshot", "--facts", "--list", "--json", "--timeout", "--label"]
       | "history" => #["--dir", "--sha", "--date"]
       | "migrate" => #["--facts", "--dry-run"]
       | _ => #[])
@@ -862,6 +959,7 @@ def run (argv : List String) : IO UInt32 := do
     | "progress" => cmdProgress root args
     | "site" => cmdSite root args
     | "serve" => cmdServe root args
+    | "export" => cmdExport root args
     | "history" => cmdHistory root args
     | "migrate" => cmdMigrate root args
     | c => do

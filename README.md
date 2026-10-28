@@ -212,6 +212,26 @@ it in a `history/` directory restored from the `gh-pages` branch, assembles
 `_site`, deploys it to GitHub Pages, and pushes the grown history back to
 `gh-pages` under `data/` so that the next run finds it.
 
+## PDF export
+
+The website's **Export PDF** button, and `blueprint export` on the command
+line, write the document — the whole blueprint, a chapter, a section, or a
+refined statement with what is below it — as LaTeX and as a PDF, in the
+website's reading order and with its numbers, proofs with their statements
+and a lemma shared with another section written out in full.  A static site
+cannot run TeX, so `blueprint site --pdf` (which CI runs) compiles every
+choice the dialog offers in advance and files it under the snapshot it was
+made from; `blueprint serve` also makes any other on demand.
+
+```bash
+lake exe blueprint export --root examples/paper                    # paper-whole.pdf
+lake exe blueprint export --root examples/paper --scope products   # one section
+lake exe blueprint site   --root examples/paper --pdf              # the site, PDFs included
+```
+
+It needs node and TeX Live (pdfLaTeX); `docs/pdf-export.md` is the reference,
+and `examples/paper/export/` holds sample exports.
+
 ## Layout
 
 ```
@@ -231,6 +251,6 @@ Blueprint/Extract.lean   environment walk, lean-facts.json
 Blueprint/Cli.lean       the commands
 Main.lean                the executable
 BlueprintExamples/       the Lean development examples/ talks about
-examples/                three example blueprints
+examples/                the example blueprints
 web/                     frontend (separate package)
 ```
