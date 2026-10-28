@@ -252,7 +252,9 @@ Outline sets `data-sidebar="outline"` on `<html>`, and the document draws the
 whole outline in the sidebar, opened along the way to the page, in place of
 the list of what the page writes out. `?theme=<id>` in the page's URL picks a
 style for a shared link; otherwise the reader's last pick is kept in
-`localStorage` (`blueprint.theme`). The registry is `THEMES` in `app.js`.
+`localStorage` (`blueprint.theme`), and a reader who has not picked one sees
+the project's style, `project.theme` (`[site] theme` in `blueprint.toml`), or
+else the default. The registry is `THEMES` in `app.js`.
 
 ### Cross references
 

@@ -633,6 +633,27 @@ else
   bad "build of the imported blueprint"
 fi
 
+# `[site] theme` reaches the snapshot as `project.theme`, and is left out
+# when the project names none
+cp -r examples/minimal "$TMP/themed"
+printf '\n[site]\ntheme = "outline"\n' >> "$TMP/themed/blueprint.toml"
+if "$BP" build --root "$TMP/themed" -o "$TMP/themed.json" > /dev/null 2>&1 \
+   && grep -q '"theme": "outline"' "$TMP/themed.json" \
+   && "$BP" build --root examples/minimal -o "$TMP/unthemed.json" > /dev/null 2>&1 \
+   && ! grep -q '"theme"' "$TMP/unthemed.json"; then
+  ok "[site] theme reaches the snapshot, and only when given"
+else
+  bad "[site] theme reaches the snapshot, and only when given"
+fi
+cp -r examples/minimal "$TMP/badtheme"
+printf '\n[site]\ntheme = 3\n' >> "$TMP/badtheme/blueprint.toml"
+if ! "$BP" build --root "$TMP/badtheme" -o "$TMP/badtheme.json" > "$TMP/badtheme.out" 2>&1 \
+   && grep -q "'\[site\] theme' must be a string" "$TMP/badtheme.out"; then
+  ok "a [site] theme that is not a string is refused"
+else
+  bad "a [site] theme that is not a string is refused"; cat "$TMP/badtheme.out"
+fi
+
 # unresolved `\uses` must not become an edge, and must be visible in the body
 # it was written in: here the proof, which is a file of its own
 if grep -q 'Unresolved dependencies: lem:nowhere' \

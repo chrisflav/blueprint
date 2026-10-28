@@ -18,7 +18,8 @@ by editing this file first. Version 1.
       "\\Fq": "\\mathbf F_q",
       "\\Spec": "\\operatorname{Spec}",
       "\\poly": "#1[T]"
-    }
+    },
+    "theme": "outline"                           // optional, see below
   },
 
   "schema": {
@@ -96,6 +97,10 @@ Notes
   `blueprint import-latex` fills the table from the `\newcommand`s,
   `\renewcommand`s, `\providecommand`s and `\DeclareMathOperator`s of a
   LaTeX blueprint.
+- `project.theme` is `[site] theme` of `blueprint.toml`: the id of the style
+  the website opens in for a reader who has not picked one.  It is left out
+  when the project names none; a reader defaults it to the website's default
+  style, and so treats an id it does not know.
 - A kind's `graph` is the website's graph alone (`docs/cli.md`): `optional`
   objects are drawn unless the reader hides them, `never` objects are read
   in the document only, and either takes what is below it in a collapse
