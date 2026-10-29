@@ -654,6 +654,62 @@ else
   bad "a [site] theme that is not a string is refused"; cat "$TMP/badtheme.out"
 fi
 
+# `[site.intro]` reaches the snapshot as `project.intro`, its body inline or
+# read from a file, with its duration in milliseconds; `[site] assets` is
+# copied into the site as `assets/`
+cp -r examples/minimal "$TMP/intro"
+mkdir -p "$TMP/intro/pictures/sub"
+printf 'png' > "$TMP/intro/pictures/logo.png"
+printf 'svg' > "$TMP/intro/pictures/sub/mark.svg"
+printf '# Welcome\n\n![logo](assets/logo.png)\n' > "$TMP/intro/intro.md"
+printf '\n[site]\nassets = "pictures"\n\n[site.intro]\nfile = "intro.md"\nduration = 2.5\n' \
+  >> "$TMP/intro/blueprint.toml"
+if "$BP" site --root "$TMP/intro" -o "$TMP/intro.site" > "$TMP/intro.out" 2>&1 \
+   && grep -q '"body": "# Welcome\\n\\n!\[logo\](assets/logo.png)\\n"' "$TMP/intro.site/blueprint.json" \
+   && grep -q '"durationMs": 2500' "$TMP/intro.site/blueprint.json" \
+   && [ "$(cat "$TMP/intro.site/assets/logo.png")" = png ] \
+   && [ "$(cat "$TMP/intro.site/assets/sub/mark.svg")" = svg ] \
+   && [ -f "$TMP/intro.site/intro.js" ] \
+   && ! grep -q '"intro"' "$TMP/unthemed.json"; then
+  ok "[site.intro] reaches the snapshot, and [site] assets the site"
+else
+  bad "[site.intro] reaches the snapshot, and [site] assets the site"
+  cat "$TMP/intro.out"; grep -A2 '"intro"' "$TMP/intro.site/blueprint.json"
+fi
+cp -r examples/minimal "$TMP/introbody"
+printf '\n[site.intro]\nbody = """\nHello $x$\n"""\n' >> "$TMP/introbody/blueprint.toml"
+if "$BP" build --root "$TMP/introbody" -o "$TMP/introbody.json" > /dev/null 2>&1 \
+   && grep -q '"body": "Hello \$x\$\\n"' "$TMP/introbody.json" \
+   && ! grep -q '"durationMs"' "$TMP/introbody.json"; then
+  ok "[site.intro] body is the intro, with the website's default duration"
+else
+  bad "[site.intro] body is the intro, with the website's default duration"
+  grep -A2 '"intro"' "$TMP/introbody.json"
+fi
+for bad_intro in 'file = "nowhere.md"|no .*nowhere.md' \
+                 'body = "x"\nfile = "intro.md"|not both' \
+                 'duration = 3|needs a .body' \
+                 'body = "x"\nduration = 0|must be positive' \
+                 'body = "x"\nduration = "3s"|must be a number of seconds'; do
+  conf="${bad_intro%%|*}"; want="${bad_intro#*|}"
+  rm -rf "$TMP/badintro"; cp -r examples/minimal "$TMP/badintro"
+  printf "\n[site.intro]\n$conf\n" >> "$TMP/badintro/blueprint.toml"
+  if ! "$BP" build --root "$TMP/badintro" -o "$TMP/badintro.json" > "$TMP/badintro.out" 2>&1 \
+     && grep -q "$want" "$TMP/badintro.out"; then
+    ok "a [site.intro] with $(printf "$conf" | tr '\n' ' ') is refused"
+  else
+    bad "a [site.intro] with $(printf "$conf" | tr '\n' ' ') is refused"; cat "$TMP/badintro.out"
+  fi
+done
+rm -rf "$TMP/badassets"; cp -r examples/minimal "$TMP/badassets"
+printf '\n[site]\nassets = "nowhere"\n' >> "$TMP/badassets/blueprint.toml"
+if ! "$BP" site --root "$TMP/badassets" -o "$TMP/badassets.site" > "$TMP/badassets.out" 2>&1 \
+   && grep -q "is not a directory" "$TMP/badassets.out"; then
+  ok "a [site] assets that is not a directory is refused"
+else
+  bad "a [site] assets that is not a directory is refused"; cat "$TMP/badassets.out"
+fi
+
 # unresolved `\uses` must not become an edge, and must be visible in the body
 # it was written in: here the proof, which is a file of its own
 if grep -q 'Unresolved dependencies: lem:nowhere' \

@@ -266,6 +266,26 @@ style for a shared link; otherwise the reader's last pick is kept in
 the project's style, `project.theme` (`[site] theme` in `blueprint.toml`), or
 else the default. The registry is `THEMES` in `app.js`.
 
+### The intro
+
+A project may open its site on an introduction (`[site.intro]` in
+`blueprint.toml`, `project.intro` in the snapshot, see `docs/cli.md`): one
+node in the middle of an empty screen, drawn as the graph draws its nodes,
+with the project's Markdown in it — maths, `[slug]` references, pictures and
+HTML of its own (`intro.js`). The graph is laid out behind it meanwhile. A bar
+along its foot runs down its duration (default 3 s), then it shrinks and fades
+into the graph; a click, Escape, Enter or Space ends it at once, and a link in
+it is still followed. With `prefers-reduced-motion` it only fades.
+
+* It is shown on the way in only: when the site is opened at its landing
+  page, the bare graph (`/`, `#/graph`). A link to anything else, a graph
+  with parameters included, opens straight on it, and `?intro=0` in the
+  page's URL leaves it out anywhere.
+* A relative address in it (`![](assets/logo.png)`, a `<video src>`) is
+  resolved against the directory holding `blueprint.json`, which is where
+  `blueprint site` copies the project's `[site] assets` directory, as
+  `assets/`.
+
 ### Cross references
 
 A `[slug]` in prose reads the way a paper's cross reference does: the lead
@@ -367,6 +387,7 @@ the pages knowing about it.
 | `document.js` | the linear document, one page per entry of the collapse order |
 | `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |
 | `checks.js` | the lint report |
+| `intro.js` | the project's intro, shown over the landing page while the graph is laid out under it |
 | `preview.js` | the card a link to an object opens while the pointer rests on it, and the document's Lean mark and its card |
 | `pdf.js` | the Export PDF button and dialog: the part, the detail, finding or making the PDF, the TeX source |
 | `export/latex.js` | **pure**: a part of the document as a LaTeX document — the request, the plan (order, shared objects, depth), the TeX. Imported by the dialog and by the command line |
@@ -383,7 +404,7 @@ the pages knowing about it.
 | `sample/real/blueprint.json` | a snapshot produced by the Lean tool itself, kept as a second fixture, regenerated with `lake exe blueprint build --root examples/induction --facts examples/induction/lean-facts.json -o web/sample/real/blueprint.json` and checked by `./test.sh` |
 | `test/browser/` | the pre-deploy sweep: the whole site driven in real headless Firefox and Chromium (`test/browser/README.md`) |
 | `test/model.test.mjs` | unit tests for `model.js` |
-| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, the document pages and their lazy rendering, the ELK worker and its fallbacks, the progress filters, the top bar's search, the link previews and the Export PDF dialog |
+| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, the document pages and their lazy rendering, the ELK worker and its fallbacks, the progress filters, the top bar's search, the link previews, the Export PDF dialog and the intro |
 | `test/export.test.mjs` | the PDF export without TeX: selection, order, numbers, depth, shared objects, proofs, text, appendices, references, maths, escaping, images, the store and the command line's errors |
 | `test/export-compile.test.mjs` | the PDF export with TeX (skipped without pdflatex): real PDFs read back, TeX errors, the sandbox, the time limit |
 

@@ -1415,3 +1415,83 @@ details.proof > summary:hover > :is(h1, h2, h3, h4, h5, h6) { color: var(--accen
   min-height: 7.5em;
 }
 .comment-preview[hidden], .comment-field textarea[hidden] { display: none; }
+
+/* ---------------------------------------------------------------- intro */
+
+/* The project's intro (`intro.js`): one node, drawn as the graph draws one,
+   in the middle of an empty screen while the graph is laid out under it.  It
+   fades and shrinks into the graph; the reveal is the layer's opacity. */
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 16px;
+  background: var(--bg);
+  cursor: pointer;
+  transition: opacity .7s ease;
+}
+.intro:focus { outline: none; }
+.intro.leaving { opacity: 0; pointer-events: none; }
+.intro-node {
+  position: relative;
+  box-sizing: border-box;
+  width: min(36rem, 100%);
+  max-height: calc(100vh - 7rem);
+  overflow: auto;
+  padding: 1.4rem 1.6rem 1.6rem;
+  background: var(--graph-node);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--fg);
+  text-align: center;
+  animation: intro-in .5s cubic-bezier(.3, .7, .3, 1) backwards;
+  transition: transform .7s cubic-bezier(.5, 0, .7, .4);
+}
+.intro.leaving .intro-node { transform: scale(.55); }
+.intro-body > :first-child { margin-top: 0; }
+.intro-body > :last-child { margin-bottom: 0; }
+.intro-body :is(img, video, svg, iframe, canvas, object, embed) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: .6rem auto;
+  border-radius: 4px;
+}
+.intro-body iframe { border: 0; }
+/* How much of its time the intro has left, along the node's foot, as the
+   graph's nodes show their progress. */
+.intro-timer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent);
+  transform-origin: left;
+  animation: intro-timer linear both;
+}
+.intro-skip {
+  font-size: .82rem;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: .2rem .9rem;
+  cursor: pointer;
+  animation: intro-in .5s .3s ease backwards;
+}
+.intro-skip:hover { color: var(--fg); border-color: var(--border-strong); }
+@keyframes intro-in { from { opacity: 0; transform: scale(.94); } }
+@keyframes intro-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .intro { transition-duration: .2s; }
+  .intro-node, .intro-skip { animation: none; }
+  .intro.leaving .intro-node { transform: none; }
+  .intro-timer { display: none; }
+}
