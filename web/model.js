@@ -159,6 +159,20 @@ export function statusOf(model, id) {
   return typeof s === 'string' ? s : null;
 }
 
+/**
+ * The status a badge shows: the derived status, except that an object of a
+ * kind that does not count toward progress (a remark, a concept, a section)
+ * shows none for naming no Lean declaration, since it is not expected to.
+ * Once it names one, its status shows as any other's.
+ */
+export function badgeStatusOf(model, id) {
+  const s = statusOf(model, id);
+  if (s !== 'absent') return s;
+  const o = model.byId.get(id);
+  const k = o && model.kinds[o.kind];
+  return k && k.countable ? s : null;
+}
+
 /** {proved, total} for a collapse kind, or null. */
 export function progressOf(model, kind, id) {
   const table = model.progress[kind];

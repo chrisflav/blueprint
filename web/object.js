@@ -22,7 +22,7 @@ export function render(root, app) {
   const page = el('div.page');
   root.appendChild(page);
 
-  const status = M.statusOf(m, o.id);
+  const status = M.badgeStatusOf(m, o.id);
   // A proof is named after what it proves: "Proof of <statement>", or, for
   // one titled "of the detailed form", "Proof of the detailed form: <statement>".
   const of = o.kind === 'proof' ? M.attachedTo(o) : null;
@@ -304,7 +304,7 @@ function kindOf(m, id) {
 }
 
 function statusChip(app, id) {
-  const s = M.statusOf(app.model, id);
+  const s = M.badgeStatusOf(app.model, id);
   return s === null ? null : app.statusBadge(s);
 }
 
