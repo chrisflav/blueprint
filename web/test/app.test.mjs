@@ -608,6 +608,40 @@ await check('a chapter page: breadcrumbs, its entries, its siblings', async () =
   eq(pager.querySelectorAll('a.up')[0].getAttribute('href'), '#/document?collapse=refines', 'up to the top');
 });
 
+await check('the sidebar opens one level at a time and its chain goes back up', async () => {
+  const own = (li) => li.querySelector('a');
+  const ups = () => root.querySelectorAll('nav.toc li.toc-up').map((li) => own(li).getAttribute('data-id'));
+  const items = () => root.querySelectorAll('nav.toc li').filter((li) => !li.classList.contains('toc-up'));
+  const item = (id) => items().map(own).find((a) => a.getAttribute('data-id') === id);
+  await go('#/document/sec-main');
+  eq(ups().join(' | '), 'sec-main', 'the page entry heads its own entries');
+  ok(/^2 /.test(own(root.querySelectorAll('nav.toc li.toc-up')[0]).textContent), 'by its number and title');
+  eq(items().map((li) => own(li).getAttribute('data-id')).join(' '), 'sec-main-induction thm-tychonoff', 'which are listed under it');
+  // An entry on this page: scrolled to, and its own entries opened.
+  let ev = fire(item('sec-main-induction'), 'click');
+  ok(ev.defaultPrevented, 'an entry on the page is scrolled to, not routed to');
+  eq(ups().join(' | '), 'sec-main | sec-main-induction', 'the chain goes down a level');
+  ok(item('lem-finite-subcover'), 'its entries are listed');
+  eq(item('thm-tychonoff'), undefined, 'and its siblings are not');
+  // Below this page: the link goes to the page the entry is read on.
+  ev = fire(item('lem-finite-subcover'), 'click');
+  ok(!ev.defaultPrevented, 'an entry not on the page is followed');
+  eq(item('lem-finite-subcover').getAttribute('href'),
+    '#/document/sec-main-induction?collapse=refines&focus=lem-finite-subcover', 'to the page that writes it out');
+  // A heading of the chain goes back to the level it is one of.
+  fire(own(root.querySelectorAll('nav.toc li.toc-up')[1]), 'click');
+  eq(ups().join(' | '), 'sec-main', 'one level up');
+  ok(item('thm-tychonoff'), 'with the siblings back');
+  fire(own(root.querySelectorAll('nav.toc li.toc-up')[0]), 'click');
+  eq(ups().length, 0, 'and up to the top level');
+  ok(item('sec-foundations') && item('sec-main'), 'which lists the chapters');
+  eq(item('sec-foundations').getAttribute('href'), '#/document/sec-foundations?collapse=refines', 'another chapter opens its page');
+  // A page with no entries of its own opens on its siblings.
+  await go('#/document/thm-tychonoff');
+  eq(ups().join(' | '), 'sec-main', 'a leaf page opens on its level');
+  ok(root.querySelectorAll('nav.toc li.current').length === 1, 'with itself marked');
+});
+
 await check('a nested page has the whole chain in its breadcrumbs', async () => {
   await go('#/document/sec-main-induction');
   ok(hrefs('.doc-crumbs a').includes('#/document/sec-main?collapse=refines'), 'the chapter is in the chain');

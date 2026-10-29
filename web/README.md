@@ -200,10 +200,21 @@ page; nothing is written out there but text at the top level (see below).
 `#/document/<id>` writes out one entry and the levels below it. An entry whose
 children are not on the page links on to its own page, by its number and by a
 *Read 1.2 →* line. Each page has breadcrumbs up its chain, back to the
-contents, its previous and next siblings, and a contents list of what it
-shows. A top-level entry with nothing under it (an introduction, say) is read
-on its own page too, since the contents do not write it out. Query
-parameters:
+contents, its previous and next siblings, and the contents in a sidebar. A
+top-level entry with nothing under it (an introduction, say) is read on its
+own page too, since the contents do not write it out.
+
+The sidebar holds the contents one level at a time (`levelSidebar` in
+`document.js`): the chain down to a level as headings — on a chapter's page,
+"2 Induction" — with that level's entries under them, "2.1", "2.2", … It opens
+on the page's own entries (a page with none opens on its siblings). Clicking
+an entry takes the reader to it, scrolling there when the page writes it out
+and opening the page it is read on otherwise; an entry with entries of its own
+also opens them in the sidebar, under it in the chain, which is the way into
+the levels below. Clicking a heading of the chain goes back up to the level it
+is one of, and scrolls to it when it is on the page: "2.1" brings back 2.1,
+2.2, …, and "2 Induction" the chapters. The Outline style keeps its own
+sidebar, the whole outline opened along the way to the page. Query parameters:
 
 * `collapse=<kind>`: the collapse order to read along (default: the
   snapshot's `defaultCollapse`). The outline, the numbers and the pages are
