@@ -96,14 +96,14 @@ class Exporter:
         self.lock = threading.Lock()
         self.running = {}  # request key -> (event, [result])
 
-    def availability(self):
+    def availability(self, tex=True):
         node = shutil.which("node")
         script = os.path.join(self.site, "export", "cli.mjs")
         if not node:
             return False, "node is not installed on the machine serving the site"
         if not os.path.isfile(script):
             return False, "the site has no export/cli.mjs"
-        if not (shutil.which("pdflatex") or os.environ.get("BLUEPRINT_PDFLATEX")):
+        if tex and not (shutil.which("pdflatex") or os.environ.get("BLUEPRINT_PDFLATEX")):
             return False, "TeX (pdflatex) is not installed on the machine serving the site"
         return True, None
 
@@ -131,7 +131,9 @@ class Exporter:
         return box[0]
 
     def _run(self, req):
-        ok, reason = self.availability()
+        # TeX is not looked for here: the script checks the request first, so
+        # a part that does not exist is a 400 whether TeX is installed or not.
+        ok, reason = self.availability(tex=False)
         if not ok:
             return 503, {"ok": False, "error": reason}
         args = [shutil.which("node"), os.path.join(self.site, "export", "cli.mjs"), "prepare",
@@ -167,6 +169,9 @@ class Exporter:
         if payload is None:
             message = err.splitlines()[-1] if err else f"the export stopped with status {proc.returncode}"
             payload = {"ok": False, "error": message.removeprefix("export: ")}
+        if proc.returncode == 3:
+            # No TeX engine: said as GET api/export says it.
+            payload["error"] = self.availability()[1] or payload.get("error")
         status = {0: 200, 1: 422, 2: 409 if payload.get("stale") else 400, 3: 503}.get(proc.returncode, 500)
         return status, payload
 
