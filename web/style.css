@@ -888,8 +888,16 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 }
 .toc ul { list-style: none; margin: 0; padding: 0; }
 .toc li { margin: .15em 0; }
-.toc li.lvl-1 { padding-left: .9rem; }
-.toc li.lvl-2 { padding-left: 1.8rem; }
+/* The sidebar one level at a time (`levelSidebar` in document.js): the chain
+   down to the level as headings, each the way back up, and the level's
+   entries under them; an entry with entries of its own says so. */
+.toc-levels .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+.toc-levels ul { list-style: none; margin: .15em 0 .3em .3rem; padding-left: .6rem; border-left: 1px solid var(--border); }
+.toc-levels li.toc-up > a { font-weight: 600; }
+.toc-levels li.toc-up > a::before { content: '‹'; color: var(--faint); margin-right: .35em; font-weight: 400; }
+.toc-levels li.has-kids > a::after { content: '›'; color: var(--faint); margin-left: .35em; }
+.toc-levels li.on-path > a { font-weight: 600; }
+.toc-levels li.current > a { color: var(--fg); }
 /* The outline sidebar (`data-sidebar="outline"` on the page): every top-level
    entry, the ones on the way to this page opened, this page marked. */
 .toc-outline ul { list-style: none; margin: 0; padding: 0; }

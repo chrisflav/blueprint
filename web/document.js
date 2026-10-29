@@ -45,9 +45,6 @@ import * as M from './model.js';
 // How much is built before the first paint, and how much per frame afterwards.
 const FIRST_CHUNK = 40;
 const CHUNK = 120;
-// Above this many entries the contents list is restricted to objects that
-// actually contain something; a thousand-line table of contents helps nobody.
-const TOC_STRUCTURE_ONLY = 400;
 // Levels written out below a page when the route does not say.
 const DEFAULT_LEVELS = 1;
 // The choices offered by the depth control, besides "all".
@@ -188,10 +185,6 @@ export function render(root, app) {
     return;
   }
 
-  // -------------------------------------------------------------------- toc
-  const tocList = el('ul');
-  const tocStructureOnly = entries.length > TOC_STRUCTURE_ONLY;
-
   // ------------------------------------------------------------------ body
   //
   // The numbers come with the outline; building the sections is chunked and
@@ -291,18 +284,6 @@ export function render(root, app) {
     }
 
     flow.appendChild(section);
-
-    if (!isHead && rel <= 2 && !entry.duplicate && !(tocStructureOnly && !entry.children.length)) {
-      const item = el('li', { class: 'lvl-' + rel },
-        el('a', {
-          // A real route, so the link survives middle-click and reload; the
-          // click handler just scrolls without a re-render.
-          href: href(pageId, o.id),
-          onclick: scrollTo(anchor),
-        }, el('span.muted', num + ' '), M.titleOf(o)));
-      app.renderMath(item); // titles carry maths too
-      tocList.appendChild(item);
-    }
   };
 
   // --------------------------------------------------------------- contents
@@ -333,7 +314,7 @@ export function render(root, app) {
   const showToc = () => {
     if (tocShown) return;
     // The whole document's outline, opened along the way to this page, when
-    // the site asks for it; else what this page writes out.
+    // the site asks for it; else the contents one level at a time.
     if (sidebarMode() === 'outline') {
       tocShown = true;
       toc.classList.add('toc-outline');
@@ -350,10 +331,8 @@ export function render(root, app) {
       }
       return;
     }
-    if (!tocList.firstChild) return;
     tocShown = true;
-    toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
-    toc.appendChild(tocList);
+    levelSidebar(app, outline, pageEntry, shown, href, toc);
   };
 
   const eager = Math.min(entries.length, FIRST_CHUNK);
@@ -615,6 +594,80 @@ function proofBlock(app, o, outline, known, refs) {
   // An id, so `?focus=` on a proof lands on it.
   block.setAttribute('id', 'doc-' + cssId(o.id));
   return block;
+}
+
+/**
+ * The sidebar, one level of the contents at a time: the chain down to the
+ * level as headings, and the level's entries under them.  It opens on this
+ * page's level: the page's own entries, or its siblings when it has none.
+ *
+ * An entry takes the reader to it, scrolling there when this page writes it
+ * out and going to the page it is read on otherwise; one with entries of its
+ * own opens them in the sidebar too, the way into the levels below.  A
+ * heading of the chain goes back up to the level it is one of, and scrolls to
+ * it when it is on this page.
+ */
+function levelSidebar(app, outline, pageEntry, shown, href, toc) {
+  const { el, clear } = app;
+  const pageId = pageEntry ? pageEntry.id : null;
+  const kids = (e) => (e ? e.children : outline.roots).filter((c) => !c.duplicate && !c.text);
+  const path = new Set();
+  for (let e = pageEntry; e; e = e.parent) path.add(e.id);
+  let level = pageEntry && !kids(pageEntry).length ? pageEntry.parent : pageEntry;
+
+  const target = (e) => (M.documentPageShows(outline, pageId, shown, e.id) ? href(pageId, e.id)
+    : e.children.length ? href(e.id) : href(M.documentPageOf(outline, e.id), e.id));
+  // Scroll to an entry built on this page; false when it is not here (yet).
+  const reach = (e) => {
+    if (!M.documentPageShows(outline, pageId, shown, e.id)) return false;
+    const t = document.getElementById('doc-' + cssId(e.id));
+    if (!t) return false;
+    t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return true;
+  };
+  const open = (next, focusId) => {
+    level = next;
+    draw();
+    toc.scrollTop = 0;
+    const a = focusId && toc.querySelector('a[data-id="' + cssId(focusId) + '"]');
+    if (a && typeof a.focus === 'function') a.focus({ preventScroll: true });
+  };
+  const link = (e, onclick) => el('a', { href: target(e), 'data-id': cssId(e.id), onclick },
+    el('span.num', e.number), ' ', M.titleOf(e.object));
+
+  const draw = () => {
+    clear(toc);
+    toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
+    const chain = [];
+    for (let e = level; e; e = e.parent) chain.unshift(e);
+    const top = el('ul.toc-levels');
+    let into = top;
+    for (const e of chain) {
+      const sub = el('ul');
+      into.appendChild(el('li', { class: 'toc-up' + (e === pageEntry ? ' current' : '') },
+        link(e, (ev) => {
+          ev.preventDefault();
+          reach(e);
+          open(e.parent, e.id);
+        }), sub));
+      into = sub;
+    }
+    for (const e of kids(level)) {
+      const more = kids(e).length > 0;
+      into.appendChild(el('li', {
+        class: (more ? 'has-kids' : '') + (path.has(e.id) ? ' on-path' : '') + (e === pageEntry ? ' current' : ''),
+      }, link(e, (ev) => {
+        // Not written out here: the link goes to the page it is read on,
+        // whose sidebar opens on it.
+        if (!reach(e)) return;
+        ev.preventDefault();
+        if (more) open(e, e.id);
+      })));
+    }
+    app.renderMath(top); // titles carry maths
+    toc.appendChild(top);
+  };
+  draw();
 }
 
 /** Which sidebar the site asks for: `outline` when its page says
