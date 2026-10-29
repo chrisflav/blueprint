@@ -555,17 +555,20 @@ await check('the top page is the contents: a row per top-level entry, nothing wr
   const out = modelMod.documentOutline(app.model, 'refines');
   eq(root.querySelectorAll('.doc-entry').length, 0, 'no entry is written out');
   eq(root.querySelectorAll('.doc-contents li').length, out.roots.length, 'one row per top-level entry');
-  ok(hrefs('.doc-contents a').includes('#/document/sec-main?collapse=refines'), 'a chapter leads to its page');
-  // A top-level entry with nothing under it is read on its own page.
+  // A row leads to its level: the top level written out, scrolled to it.
+  ok(hrefs('.doc-contents a').includes('#/document?collapse=refines&depth=1&focus=sec-main'), 'a chapter leads to its level');
   const leaf = out.roots.find((e) => !e.children.length);
-  ok(hrefs('.doc-contents a').includes('#/document/' + encodeURIComponent(leaf.id) + '?collapse=refines'),
-    'a top-level leaf leads to its own page');
+  ok(hrefs('.doc-contents a').includes('#/document?' + new URLSearchParams({ collapse: 'refines', depth: '1', focus: leaf.id })),
+    'a top-level leaf too');
   eq(root.querySelectorAll('.doc-layout').length, 0, 'no sidebar beside the contents');
   eq(root.querySelectorAll('.proof-toggle').length, 0, 'no proofs to fold');
   eq(root.querySelectorAll('.doc-crumbs').length, 0, 'no breadcrumbs at the top');
   const select = root.querySelectorAll('.doc-controls select')[1];
   eq(select.querySelectorAll('option[selected]')[0].getAttribute('value'), 'contents', 'the depth control says contents');
-  // A row's page is the chapter's own, and its breadcrumbs lead back here.
+  await go('#/document?collapse=refines&depth=1&focus=sec-main');
+  eq(root.querySelectorAll('.doc-entry').length, out.roots.length, 'which writes out the top level');
+  ok(!entryIds().includes('doc-sec-main-induction'), 'and nothing below it');
+  // A chapter's own page leads back here by its breadcrumbs.
   await go('#/document/sec-main');
   ok(hrefs('.doc-crumbs a').includes('#/document?collapse=refines'), 'the chapter page leads back to the contents');
   await go('#/document/' + encodeURIComponent(leaf.id));
@@ -608,7 +611,7 @@ await check('a chapter page: breadcrumbs, its entries, its siblings', async () =
   eq(pager.querySelectorAll('a.up')[0].getAttribute('href'), '#/document?collapse=refines', 'up to the top');
 });
 
-await check('the sidebar opens an entry among its siblings and goes back up its chain', async () => {
+await check('the sidebar lists the level the page writes out, the entry gone to opened', async () => {
   const own = (li) => li.querySelector('a');
   const id = (li) => own(li).getAttribute('data-id');
   const ups = () => root.querySelectorAll('nav.toc li.toc-up').map(id);
@@ -617,45 +620,40 @@ await check('the sidebar opens an entry among its siblings and goes back up its 
     .find((a) => a.getAttribute('data-id') === x);
   const opened = () => entries().filter((li) => li.classList.contains('open')).map(id);
   const out = modelMod.documentOutline(app.model, 'refines');
-  // A chapter's page opens on the top level, as the contents read.
-  await go('#/document/sec-main');
-  eq(ups().length, 0, 'no chain on a chapter page');
-  eq(entries().map(id).join(' '), out.roots.filter((e) => !e.text && !e.duplicate).map((e) => e.id).join(' '), 'the chapters');
-  ok(entries().find((li) => id(li) === 'sec-main').classList.contains('current'), 'this one marked');
-  eq(opened().length, 0, 'none opened');
-  // Opening a chapter keeps the other chapters in view.
-  let ev = fire(link('sec-main'), 'click');
-  ok(ev.defaultPrevented, 'an entry on the page is scrolled to, not routed to');
-  eq(opened().join(' '), 'sec-main', 'the chapter opens');
-  ok(link('sec-main-induction') && link('thm-tychonoff'), 'with its entries under it');
-  ok(link('sec-foundations'), 'and the other chapters still there');
-  // Opening an entry inside it leaves the chapter as a heading.
-  fire(link('sec-main-induction'), 'click');
-  eq(ups().join(' '), 'sec-main', 'the chapter heads the chain');
-  eq(opened().join(' '), 'sec-main-induction', 'the section opens');
-  ok(link('lem-finite-subcover') && link('thm-tychonoff'), 'among its siblings, its entries under it');
-  eq(link('sec-foundations'), undefined, 'the other chapters are gone');
-  // Below this page: the link goes to the page the entry is read on.
-  ev = fire(link('lem-finite-subcover'), 'click');
-  ok(!ev.defaultPrevented, 'an entry not on the page is followed');
-  eq(link('lem-finite-subcover').getAttribute('href'),
-    '#/document/sec-main-induction?collapse=refines&focus=lem-finite-subcover', 'to the page that writes it out');
-  // ... and the sidebar there opens on it.
-  await go('#/document/sec-main-induction?collapse=refines&focus=lem-finite-subcover');
-  eq(ups().join(' '), 'sec-main sec-main-induction', 'opened where the click left it');
-  eq(opened().join(' '), 'lem-finite-subcover', 'on the entry clicked');
-  // A heading of the chain goes to its page, opened there.
-  ev = fire(link('sec-main'), 'click');
-  ok(!ev.defaultPrevented, 'a chapter not written out here is gone to');
-  eq(link('sec-main').getAttribute('href'), '#/document/sec-main?collapse=refines', 'its own page');
-  await go('#/document/sec-main?collapse=refines');
-  eq(ups().length, 0, 'back at the top level');
-  eq(opened().join(' '), 'sec-main', 'with the chapter opened');
-  // A page further down opens on its own level, among its siblings.
+  const chapters = out.roots.filter((e) => !e.text && !e.duplicate).map((e) => e.id).join(' ');
+  // A chapter from the contents: the page is the chapters, the sidebar the
+  // chapters with this one opened on its sections.
+  await go('#/document?collapse=refines&depth=1&focus=sec-main');
+  eq(ups().length, 0, 'no chain at the top level');
+  eq(entries().filter((li) => !li.parentNode.parentNode.classList.contains('open')).map(id).join(' '), chapters, 'the chapters');
+  eq(opened().join(' '), 'sec-main', 'the chapter gone to opened');
+  ok(link('sec-main-induction') && link('thm-tychonoff'), 'on its entries');
+  // Another chapter, on this page: scrolled to and opened, the link saying so.
+  let ev = fire(link('sec-foundations'), 'click');
+  ok(ev.defaultPrevented, 'an entry of this level is scrolled to, not routed to');
+  eq(opened().join(' '), 'sec-foundations', 'and opened instead');
+  ok(/focus=sec-foundations/.test(global.location.hash), 'the link says so');
+  // A section leads to its level: its chapter's page.
+  fire(link('sec-foundations'), 'click');
+  eq(link('sec-main').getAttribute('href'), '#/document?collapse=refines&depth=1&focus=sec-main', 'a chapter leads to the top level');
+  fire(link('sec-main'), 'click');
+  eq(link('sec-main-induction').getAttribute('href'), '#/document/sec-main?collapse=refines&focus=sec-main-induction',
+    'a section leads to its chapter\'s page');
+  ev = fire(link('sec-main-induction'), 'click');
+  ok(!ev.defaultPrevented, 'which is another page: followed');
+  await go('#/document/sec-main?collapse=refines&focus=sec-main-induction');
+  eq(entryIds().join(' '), 'doc-sec-main doc-sec-main-induction doc-thm-tychonoff', 'the page writes out the sections');
+  eq(ups().join(' '), 'sec-main', 'the sidebar: the chapter as a heading');
+  eq(opened().join(' '), 'sec-main-induction', 'over the section gone to, opened');
+  ok(link('lem-finite-subcover') && link('thm-tychonoff'), 'on its entries, among its siblings');
+  eq(link('sec-foundations'), undefined, 'the other chapters gone');
+  // The chain leads back up: the chapter's level is the top level.
+  eq(link('sec-main').getAttribute('href'), '#/document?collapse=refines&depth=1&focus=sec-main', 'the heading leads up a level');
+  // A page reached otherwise lists its own entries under its chain.
   await go('#/document/sec-main-induction');
-  eq(ups().length, 0, 'a section page: the chapters');
-  eq(opened().join(' '), 'sec-main', 'its chapter opened');
-  ok(entries().find((li) => id(li) === 'sec-main-induction').classList.contains('current'), 'the section marked');
+  eq(ups().join(' '), 'sec-main sec-main-induction', 'a section page: its chain');
+  eq(opened().length, 0, 'nothing opened');
+  ok(link('lem-finite-subcover'), 'its entries listed');
 });
 
 await check('a nested page has the whole chain in its breadcrumbs', async () => {

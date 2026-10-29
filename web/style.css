@@ -893,6 +893,8 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
    entry among its siblings with its own entries under it; an entry with
    entries of its own says so, and the opened one points down. */
 .toc-levels .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The whole row is the link, wrapped lines and the gap between them too. */
+.toc-levels li > a { display: block; }
 .toc-levels ul { list-style: none; margin: .15em 0 .3em .3rem; padding-left: .6rem; border-left: 1px solid var(--border); }
 .toc-levels li.toc-up > a { font-weight: 600; }
 .toc-levels li.toc-up > a::before { content: '‹'; color: var(--faint); margin-right: .35em; font-weight: 400; }

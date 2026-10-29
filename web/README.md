@@ -204,17 +204,20 @@ contents, its previous and next siblings, and the contents in a sidebar. A
 top-level entry with nothing under it (an introduction, say) is read on its
 own page too, since the contents do not write it out.
 
-The sidebar holds the contents one level at a time (`levelSidebar` in
-`document.js`). It has one *opened* entry, shown among its siblings with its
-own entries under it, and the chain above it as headings. A page opens it on
-the page's own level: a chapter's page on the chapters, as the contents read,
-a section's page on its chapter's sections, and so on. Clicking an entry —
-in the list or in the chain — goes to it, scrolling there when the page writes
-it out and opening the page it is read on otherwise, and opens it there:
-clicking "2 Induction" opens 2.1, 2.2, … under it with the other chapters
-still in view; clicking 2.1 then leaves "2 Induction" as a heading over 2.1,
-2.2, … with 2.1's entries under it; clicking the "2 Induction" heading goes
-back to its page and level. The Outline style keeps its own sidebar, the
+Every entry of the contents and of the sidebar leads to its *level*: the page
+of its parent, which writes out the entry and its siblings and nothing below
+them, scrolled to it (`?focus=`) — for a chapter, the top level written out
+(`#/document?depth=1&focus=<id>`). The sidebar (`levelSidebar` in
+`document.js`) lists the level the page writes out, under the chain down to
+it as headings, with the entry gone to opened on its own entries. So after a
+click on chapter 1 the page is 1, 2, 3, … and the sidebar is 1 with 1.1, 1.2,
+… under it, then 2, 3, …; after a click on 1.1 the page is 1.1, 1.2, … and
+the sidebar is the heading 1 over 1.1, with 1.1.1, 1.1.2, … under it, then
+1.2, …, and no 2, 3. A heading of the chain leads to its own level the same
+way, so 1 goes back to the chapters. An entry of the level on screen is only
+scrolled to and opened, and the link updated, without rebuilding the page. A
+page reached otherwise — by a *Read* line, the breadcrumbs, a number — lists
+its own entries under its chain. The Outline style keeps its own sidebar, the
 whole outline opened along the way to the page. Query parameters:
 
 * `collapse=<kind>`: the collapse order to read along (default: the
