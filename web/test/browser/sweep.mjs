@@ -1491,6 +1491,7 @@ const PAGE_STATE = `
     crumbs: document.querySelectorAll('.doc-crumbs a').length,
     pagers: document.querySelectorAll('.doc-pager').length,
     opens: document.querySelectorAll('.doc-open a').length,
+    rows: document.querySelectorAll('.doc-contents li').length,
     toc: document.querySelectorAll('nav.toc a').length,
     scrollY: Math.round(window.scrollY),
     errorBox: !!document.querySelector('.error-box')
@@ -1523,12 +1524,30 @@ async function pageChecks(d, f) {
   const out = f.outline;
   const docPath = (id) => '#/document/' + id + '?';
 
+  // The top page with a depth writes the top level out.
   await check(d, 'document/top-page-lists-the-top-level', async () => {
     const s = await d.js(PAGE_STATE);
     const withKids = out.roots.filter((e) => !e.duplicate && e.children.length).length;
     return {
       ok: s.entries === out.roots.length && s.opens === withKids && !s.pageHead && s.crumbs === 0 && s.pagers === 0,
-      evidence: `#/document: ${s.entries} .doc-entry (outline roots ${out.roots.length}), ${s.opens} "Read …" links (roots with children ${withKids}), page head ${j(s.pageHead)}, ${s.crumbs} breadcrumbs, ${s.pagers} pagers`,
+      evidence: `#/document?depth=1: ${s.entries} .doc-entry (outline roots ${out.roots.length}), ${s.opens} "Read …" links (roots with children ${withKids}), page head ${j(s.pageHead)}, ${s.crumbs} breadcrumbs, ${s.pagers} pagers`,
+    };
+  });
+
+  // Without one it is the contents: a row per top-level entry, text alone
+  // written out.
+  const rows = out.roots.filter((e) => !e.text).length;
+  const texts = out.roots.filter((e) => e.text && !e.duplicate).length;
+  await check(d, 'document/top-page-is-the-contents', async () => {
+    await route(d, '#/document');
+    await waitFor(d, `return document.querySelectorAll('.doc-contents li, .doc-entry').length > 0`,
+      { timeout: 30000, label: 'contents' }).catch(() => null);
+    await sleep(500);
+    const s = await d.js(PAGE_STATE);
+    return {
+      ok: s.rows === rows && s.entries === texts && s.toc === 0 && !s.pageHead && s.crumbs === 0 && s.pagers === 0,
+      evidence: `#/document: ${s.rows} contents rows (top-level entries ${rows}), ${s.entries} .doc-entry (top-level text ${texts}), `
+        + `${s.toc} sidebar links, page head ${j(s.pageHead)}, ${s.crumbs} breadcrumbs, ${s.pagers} pagers`,
     };
   });
 
@@ -1537,14 +1556,14 @@ async function pageChecks(d, f) {
     const entry = out.byId.get(f.chapter);
     await d.js('window.scrollTo(0, 0); return 0;');
     const box = await d.js(`
-      var a = Array.prototype.slice.call(document.querySelectorAll('.doc-open a')).filter(function (x) {
+      var a = Array.prototype.slice.call(document.querySelectorAll('.doc-contents a')).filter(function (x) {
         return x.getAttribute('href').indexOf(${j('#/document/' + encodeURIComponent(f.chapter) + '?')}) === 0; })[0];
       if (!a) return null;
       var r = inView(a);
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: (a.textContent || '').trim() };
       ${IN_VIEW}
     `);
-    if (!box) return { ok: false, evidence: `no "Read" link for ${f.chapter} on the top page` };
+    if (!box) return { ok: false, evidence: `no contents row for ${f.chapter} on the top page` };
     await clickAndWait(d, box, `return !!document.querySelector('.doc-entry.page-head')`, 'chapter page');
     await sleep(400);
     const s = await d.js(PAGE_STATE);
@@ -1577,9 +1596,9 @@ async function pageChecks(d, f) {
     const box = await d.js(elBox('.doc-crumbs a'));
     if (!box) return { ok: false, evidence: 'no breadcrumb link' };
     await clickAndWait(d, box, `return location.hash.indexOf('#/document?') === 0 && !document.querySelector('.doc-entry.page-head')
-      && document.querySelectorAll('.doc-entry').length > 0`, 'top page');
+      && document.querySelectorAll('.doc-contents li').length > 0`, 'top page');
     const s = await d.js(PAGE_STATE);
-    return { ok: s.entries === out.roots.length, evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries` };
+    return { ok: s.rows === rows, evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.rows} contents rows` };
   });
 
   await check(d, 'document/depth-control-inlines-a-level', async () => {
@@ -1657,7 +1676,7 @@ async function pageChecks(d, f) {
 }
 
 async function documentChecks(d, f) {
-  await route(d, '#/document');
+  await route(d, '#/document?depth=1');
   await waitFor(d, `return document.querySelectorAll('.doc-entry').length > 0`, { timeout: 30000, label: 'document entries' });
   await sleep(700);
 

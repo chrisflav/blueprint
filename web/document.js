@@ -16,6 +16,10 @@
 // A page has breadcrumbs up its chain, its previous and next siblings, and a
 // contents list of what it shows.
 //
+// The top of the document is its contents: a row per top-level entry, each
+// leading to that entry's page, and only the text at the top level written
+// out.  A `depth=` on the top page writes the top levels out instead.
+//
 // `?focus=<id>` scrolls to an entry.  A focus the page does not show — every
 // link written before the split, `#/document?focus=x` — is redirected to the
 // page the entry is read on (`documentPageOf`), replacing the history entry so
@@ -72,9 +76,12 @@ export function render(root, app) {
   const pageId = app.route.id || null;
   const focus = app.route.params.get('focus');
   const href = (page, target) => docHref(kind, levels, page, target);
+  // The top page with no `depth=` is the contents, which write out no level.
+  const contents = pageId === null && !app.route.params.has('depth');
+  const shown = contents ? 0 : levels;
 
   // An entry this page does not write out is read somewhere else: go there.
-  if (focus && !M.documentPageShows(outline, pageId, levels, focus)) {
+  if (focus && !M.documentPageShows(outline, pageId, shown, focus)) {
     const home = M.documentPageOf(outline, focus);
     if (home !== undefined) {
       app.go('document', home, docQuery(kind, levels, focus), { replace: true });
@@ -100,7 +107,7 @@ export function render(root, app) {
   resetDeferred();
 
   const known = app.knownIds();
-  const entries = M.documentPageEntries(outline, pageId, levels);
+  const entries = M.documentPageEntries(outline, pageId, shown);
 
   // Cross references in the prose read "Lemma 2.3.1" in this order's numbers,
   // and stay in the paper: they lead to where the entry is written out, on
@@ -110,18 +117,19 @@ export function render(root, app) {
   const refs = (slug) => {
     const ref = M.referenceOf(outline, slug);
     if (!ref) return null;
-    const here = M.documentPageShows(outline, pageId, levels, slug);
+    const here = M.documentPageShows(outline, pageId, shown, slug);
     return { ...ref, href: href(here ? pageId : M.documentPageOf(outline, slug), slug) };
   };
   // Depths on this page count from the first level below the page's own
   // entry, which is set as the page's title.
   const base = pageEntry ? pageEntry.depth + 1 : 0;
 
-  const page = el('div.page.wide');
+  // The contents need no sidebar: they are one.
+  const page = el(contents ? 'div.page' : 'div.page.wide');
   const body = el('div');
   const flow = el('div.doc-flow');
   const toc = el('nav.toc');
-  page.appendChild(el('div.doc-layout', toc, body));
+  page.appendChild(contents ? body : el('div.doc-layout', toc, body));
   root.appendChild(page);
 
   // A reference to an entry already built on this page jumps to it instead of
@@ -130,7 +138,7 @@ export function render(root, app) {
   // and a smooth scroll in Chromium then ends wherever the target used to be.
   flow.addEventListener('click', (ev) => {
     const a = ev.target && ev.target.closest ? ev.target.closest('a.ref[data-ref]') : null;
-    if (!a || !M.documentPageShows(outline, pageId, levels, a.getAttribute('data-ref'))) return;
+    if (!a || !M.documentPageShows(outline, pageId, shown, a.getAttribute('data-ref'))) return;
     const target = document.getElementById('doc-' + cssId(a.getAttribute('data-ref')));
     if (!target) return; // not built yet: let the route build the page to it
     ev.preventDefault();
@@ -154,21 +162,28 @@ export function render(root, app) {
     ' order, showing ',
     el('select', {
       title: 'how many levels below this page are written out on it',
-      onchange: (e) => app.setParams({ depth: e.target.value === String(DEFAULT_LEVELS) ? null : e.target.value }),
+      // On the top page no `depth=` is the contents, so a depth is always
+      // said there; elsewhere the default goes without saying.
+      onchange: (e) => app.setParams({
+        depth: e.target.value === 'contents' ? null
+          : pageId !== null && e.target.value === String(DEFAULT_LEVELS) ? null : e.target.value,
+      }),
     },
+    pageId === null ? el('option', { value: 'contents', selected: contents }, 'contents') : null,
     // A depth typed into the URL is offered too, so the control shows it.
     ...[...new Set([...LEVEL_CHOICES, levels])].filter(Number.isFinite).sort((a, b) => a - b)
-      .map((n) => el('option', { value: String(n), selected: n === levels }, String(n))),
-    el('option', { value: 'all', selected: levels === Infinity }, 'all')),
-    levels === 1 ? ' level.' : ' levels.',
-    ' ', app.proofToggle(),
+      .map((n) => el('option', { value: String(n), selected: !contents && n === levels }, String(n))),
+    el('option', { value: 'all', selected: !contents && levels === Infinity }, 'all')),
+    contents ? ' only.' : levels === 1 ? ' level.' : ' levels.',
+    // The contents set out no proofs to fold.
+    contents ? null : [' ', app.proofToggle()],
     // This page's part, as a PDF: the dialog opens on it.
     app.exportButton ? [' ', app.exportButton('Export PDF')] : null));
   const pagerTop = pager(app, outline, pageEntry, href);
   if (pagerTop) body.appendChild(pagerTop);
   body.appendChild(flow);
 
-  if (!entries.length) {
+  if (!(contents ? outline.roots : entries).length) {
     body.appendChild(el('p.empty', 'Nothing to read: no object carries prose.'));
     return;
   }
@@ -290,6 +305,30 @@ export function render(root, app) {
     }
   };
 
+  // --------------------------------------------------------------- contents
+  //
+  // The top of the document: a row per top-level entry, each leading to its
+  // page, and the text at the top level read where it stands between them.
+  if (contents) {
+    flow.appendChild(el('h2.toc-head', 'Contents'));
+    let list = null;
+    for (const entry of outline.roots) {
+      if (entry.text) {
+        list = null;
+        build(entry);
+        continue;
+      }
+      if (!list) {
+        list = el('ol.doc-contents');
+        flow.appendChild(list);
+      }
+      list.appendChild(contentsRow(app, outline, entry, href));
+    }
+    const target = focus && document.getElementById('doc-' + cssId(focus));
+    if (target) land(target);
+    return;
+  }
+
   let tocShown = false;
   const showToc = () => {
     if (tocShown) return;
@@ -331,9 +370,7 @@ export function render(root, app) {
     const target = document.getElementById('doc-' + cssId(wanted));
     if (!target) return;
     wanted = null;
-    pin(target);
-    flash(target);
-    requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
+    land(target);
   };
   tryScroll();
 
@@ -356,6 +393,40 @@ export function render(root, app) {
   } else {
     finish();
   }
+}
+
+/** Take the reader to the entry a link led to, and hold it there. */
+function land(target) {
+  pin(target);
+  flash(target);
+  requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
+}
+
+/**
+ * One row of the contents: the entry's number and title, its progress (or,
+ * for a statement, its status), all a link to the page it is read on.  That
+ * is its own page, but for an entry repeated at the top level, which is read
+ * where it is written out.
+ */
+function contentsRow(app, outline, entry, href) {
+  const { el } = app;
+  const m = app.model;
+  const o = entry.object;
+  const page = M.documentPageOf(outline, o.id);
+  const isSection = M.isSectionKind(o.kind);
+  const prog = M.progressMixOf(m, outline.kind, o.id);
+  const status = M.badgeStatusOf(m, o.id);
+  const row = el('li', { class: 'kind-' + o.kind + (entry.duplicate ? ' dup' : '') },
+    el('a', { href: href(page, page === o.id ? null : o.id) },
+      el('span.num', entry.number),
+      el('span.doc-contents-title',
+        isSection ? null : el('span.kindword', M.kindWord(o.kind), ' '),
+        M.titleOf(o)),
+      el('span.doc-contents-meta',
+        prog && prog.total > 1 ? app.progressBar(prog)
+          : status === null ? null : app.statusBadge(status))));
+  app.renderMath(row); // titles carry maths too
+  return row;
 }
 
 /** Mark the entry a link led to, briefly. */

@@ -814,11 +814,12 @@ check('the outline follows the collapse order it is asked for', () => {
 check('pages of the split document', () => {
   const out = M.documentOutline(model, 'refines');
   // An entry with children is read on its own page, a leaf on its parent's,
-  // a top-level leaf on the top page, a step wherever its source is.
+  // a top-level leaf on its own too (the top page is the contents), a step
+  // wherever its source is.
+  const leaf = 'commutes/uses~thm-heine-borel~thm-tychonoff/uses~thm-tychonoff~def-compact/uses~thm-heine-borel~def-compact';
   eq(M.documentPageOf(out, 'sec-main'), 'sec-main', 'own page');
   eq(M.documentPageOf(out, 'lem-finite-subcover'), 'sec-main-induction', "parent's page");
-  eq(M.documentPageOf(out, 'commutes/uses~thm-heine-borel~thm-tychonoff/uses~thm-tychonoff~def-compact/uses~thm-heine-borel~def-compact'),
-    null, 'a top-level leaf');
+  eq(M.documentPageOf(out, leaf), leaf, 'a top-level leaf');
   eq(M.documentPageOf(out, 'uses/sec-main/sec-foundations'), 'sec-main', 'a step');
   eq(M.documentPageOf(out, 'refines/def-compact/sec-foundations'), undefined, 'not in the document');
 
@@ -842,6 +843,10 @@ check('pages of the split document', () => {
   eq(M.documentPageShows(out, 'sec-main', 2, 'lem-diagonal'), true, 'with two levels');
   eq(M.documentPageShows(out, 'sec-foundations', 3, 'lem-diagonal'), false, 'another branch');
   eq(M.documentPageShows(out, 'sec-main', 1, 'uses/sec-main/sec-foundations'), true, 'a step with its source');
+  // The contents (the top page at no level) write nothing out but text.
+  eq(ids(null, 0).length, 0, 'the contents write out no entry');
+  eq(M.documentPageShows(out, null, 0, 'sec-main'), false, 'not even a chapter');
+  eq(M.documentPageShows(out, null, 1, leaf), true, 'a top-level leaf is on the top page written out');
   // Every entry's page shows it, at the default depth.
   for (const e of out.entries) {
     if (e.duplicate) continue;
@@ -1315,6 +1320,13 @@ check('the graph never draws a hidden object, or what touches it', () => {
   eq(outline.byId.get('thm').text, false, 'a statement is not text');
   eq(M.referenceOf(outline, 'intro'), null, 'nothing to refer to it by');
   eq(M.documentPageOf(outline, 'intro'), 'main', 'read on its section\'s page');
+  // Text at the top level is read on the top page, contents and all.
+  const snap = appendixSnapshot();
+  snap.objects = snap.objects.filter((o) => o.id !== 'refines/intro/main');
+  const top = M.documentOutline(M.buildModel(snap), 'refines');
+  eq(top.byId.get('intro').depth, 0, 'text at the top level');
+  eq(M.documentPageOf(top, 'intro'), null, 'is read on the top page');
+  eq(M.documentPageShows(top, null, 0, 'intro'), true, 'which the contents write out');
 });
 
 check('hiding the appendix takes its contents and their relations along', () => {
