@@ -205,7 +205,7 @@ export function render(root, app) {
     const anchor = entry.duplicate ? null : 'doc-' + cssId(o.id);
     const hLevel = isHead ? 1 : Math.min(5, 2 + rel);
     const status = M.statusOf(m, o.id);
-    const prog = M.progressMixOf(m, kind, o.id);
+    const prog = app.showProgress ? M.progressMixOf(m, kind, o.id) : null;
 
     // Sections are headings; everything else is a numbered statement in the
     // way a paper sets one: "Definition 1.2.14 (Title)." with the kind as the

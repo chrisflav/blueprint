@@ -266,6 +266,18 @@ style for a shared link; otherwise the reader's last pick is kept in
 the project's style, `project.theme` (`[site] theme` in `blueprint.toml`), or
 else the default. The registry is `THEMES` in `app.js`.
 
+### Hiding the progress
+
+*Hide progress* in the top bar takes away everything that says how far the
+formalization has got, for a reader who wants the mathematics alone: the
+status badges (and whether a Lean declaration exists), the progress bars, the
+top bar's percentage, the Progress tab, and in the graph the status colours
+of the nodes, the status filter and the fills of the key. A status filter in
+a graph link waits until the progress is shown again. *Show progress* brings
+it all back. The choice is the reader's, kept in `localStorage`
+(`blueprint.progress`); while it is hidden `<html>` carries
+`data-progress="hidden"`, and `app.showProgress` is false for the pages.
+
 ### Cross references
 
 A `[slug]` in prose reads the way a paper's cross reference does: the lead

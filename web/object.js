@@ -94,7 +94,7 @@ export function render(root, app) {
   for (const kind of m.collapseKinds) page.appendChild(collapsePanel(app, o, kind));
 
   // ------------------------------------------------------------- progress
-  const progs = m.collapseKinds
+  const progs = !app.showProgress ? [] : m.collapseKinds
     .map((k) => [k, M.progressMixOf(m, k, o.id)])
     .filter(([, p]) => p);
   if (progs.length) {
@@ -359,6 +359,8 @@ function leanPanel(app, o, facts) {
     const head = docgen
       ? el('a', { href: M.docgenUrl(docgen, name), target: '_blank', rel: 'noopener' }, el('code', name))
       : el('code', name);
+    // Whether the declaration is there at all is progress too, hidden with it.
+    if ((!fact || fact.exists === false) && !app.showProgress) return el('div.lean-decl', head);
     if (!fact) {
       return el('div.lean-decl', head, ' ', el('span.badge.status-absent', el('span.dot'), 'no facts'));
     }

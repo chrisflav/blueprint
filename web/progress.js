@@ -14,6 +14,14 @@ export function render(root, app) {
 
   page.appendChild(el('h1', 'Progress'));
 
+  // The reader hid the progress (the top bar's button), and the tab with it;
+  // a link may still lead here.
+  if (!app.showProgress) {
+    page.appendChild(el('p.muted', 'The formalization progress is hidden.'));
+    page.appendChild(el('button', { type: 'button', onclick: () => app.setShowProgress(true) }, 'Show progress'));
+    return;
+  }
+
   // ------------------------------------------------------------- overall
   const { counts, total } = M.statusCounts(m);
   page.appendChild(el('p.muted',
