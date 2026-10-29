@@ -608,38 +608,54 @@ await check('a chapter page: breadcrumbs, its entries, its siblings', async () =
   eq(pager.querySelectorAll('a.up')[0].getAttribute('href'), '#/document?collapse=refines', 'up to the top');
 });
 
-await check('the sidebar opens one level at a time and its chain goes back up', async () => {
+await check('the sidebar opens an entry among its siblings and goes back up its chain', async () => {
   const own = (li) => li.querySelector('a');
-  const ups = () => root.querySelectorAll('nav.toc li.toc-up').map((li) => own(li).getAttribute('data-id'));
-  const items = () => root.querySelectorAll('nav.toc li').filter((li) => !li.classList.contains('toc-up'));
-  const item = (id) => items().map(own).find((a) => a.getAttribute('data-id') === id);
+  const id = (li) => own(li).getAttribute('data-id');
+  const ups = () => root.querySelectorAll('nav.toc li.toc-up').map(id);
+  const entries = () => root.querySelectorAll('nav.toc li.toc-entry');
+  const link = (x) => entries().concat(root.querySelectorAll('nav.toc li.toc-up')).map(own)
+    .find((a) => a.getAttribute('data-id') === x);
+  const opened = () => entries().filter((li) => li.classList.contains('open')).map(id);
+  const out = modelMod.documentOutline(app.model, 'refines');
+  // A chapter's page opens on the top level, as the contents read.
   await go('#/document/sec-main');
-  eq(ups().join(' | '), 'sec-main', 'the page entry heads its own entries');
-  ok(/^2 /.test(own(root.querySelectorAll('nav.toc li.toc-up')[0]).textContent), 'by its number and title');
-  eq(items().map((li) => own(li).getAttribute('data-id')).join(' '), 'sec-main-induction thm-tychonoff', 'which are listed under it');
-  // An entry on this page: scrolled to, and its own entries opened.
-  let ev = fire(item('sec-main-induction'), 'click');
+  eq(ups().length, 0, 'no chain on a chapter page');
+  eq(entries().map(id).join(' '), out.roots.filter((e) => !e.text && !e.duplicate).map((e) => e.id).join(' '), 'the chapters');
+  ok(entries().find((li) => id(li) === 'sec-main').classList.contains('current'), 'this one marked');
+  eq(opened().length, 0, 'none opened');
+  // Opening a chapter keeps the other chapters in view.
+  let ev = fire(link('sec-main'), 'click');
   ok(ev.defaultPrevented, 'an entry on the page is scrolled to, not routed to');
-  eq(ups().join(' | '), 'sec-main | sec-main-induction', 'the chain goes down a level');
-  ok(item('lem-finite-subcover'), 'its entries are listed');
-  eq(item('thm-tychonoff'), undefined, 'and its siblings are not');
+  eq(opened().join(' '), 'sec-main', 'the chapter opens');
+  ok(link('sec-main-induction') && link('thm-tychonoff'), 'with its entries under it');
+  ok(link('sec-foundations'), 'and the other chapters still there');
+  // Opening an entry inside it leaves the chapter as a heading.
+  fire(link('sec-main-induction'), 'click');
+  eq(ups().join(' '), 'sec-main', 'the chapter heads the chain');
+  eq(opened().join(' '), 'sec-main-induction', 'the section opens');
+  ok(link('lem-finite-subcover') && link('thm-tychonoff'), 'among its siblings, its entries under it');
+  eq(link('sec-foundations'), undefined, 'the other chapters are gone');
   // Below this page: the link goes to the page the entry is read on.
-  ev = fire(item('lem-finite-subcover'), 'click');
+  ev = fire(link('lem-finite-subcover'), 'click');
   ok(!ev.defaultPrevented, 'an entry not on the page is followed');
-  eq(item('lem-finite-subcover').getAttribute('href'),
+  eq(link('lem-finite-subcover').getAttribute('href'),
     '#/document/sec-main-induction?collapse=refines&focus=lem-finite-subcover', 'to the page that writes it out');
-  // A heading of the chain goes back to the level it is one of.
-  fire(own(root.querySelectorAll('nav.toc li.toc-up')[1]), 'click');
-  eq(ups().join(' | '), 'sec-main', 'one level up');
-  ok(item('thm-tychonoff'), 'with the siblings back');
-  fire(own(root.querySelectorAll('nav.toc li.toc-up')[0]), 'click');
-  eq(ups().length, 0, 'and up to the top level');
-  ok(item('sec-foundations') && item('sec-main'), 'which lists the chapters');
-  eq(item('sec-foundations').getAttribute('href'), '#/document/sec-foundations?collapse=refines', 'another chapter opens its page');
-  // A page with no entries of its own opens on its siblings.
-  await go('#/document/thm-tychonoff');
-  eq(ups().join(' | '), 'sec-main', 'a leaf page opens on its level');
-  ok(root.querySelectorAll('nav.toc li.current').length === 1, 'with itself marked');
+  // ... and the sidebar there opens on it.
+  await go('#/document/sec-main-induction?collapse=refines&focus=lem-finite-subcover');
+  eq(ups().join(' '), 'sec-main sec-main-induction', 'opened where the click left it');
+  eq(opened().join(' '), 'lem-finite-subcover', 'on the entry clicked');
+  // A heading of the chain goes to its page, opened there.
+  ev = fire(link('sec-main'), 'click');
+  ok(!ev.defaultPrevented, 'a chapter not written out here is gone to');
+  eq(link('sec-main').getAttribute('href'), '#/document/sec-main?collapse=refines', 'its own page');
+  await go('#/document/sec-main?collapse=refines');
+  eq(ups().length, 0, 'back at the top level');
+  eq(opened().join(' '), 'sec-main', 'with the chapter opened');
+  // A page further down opens on its own level, among its siblings.
+  await go('#/document/sec-main-induction');
+  eq(ups().length, 0, 'a section page: the chapters');
+  eq(opened().join(' '), 'sec-main', 'its chapter opened');
+  ok(entries().find((li) => id(li) === 'sec-main-induction').classList.contains('current'), 'the section marked');
 });
 
 await check('a nested page has the whole chain in its breadcrumbs', async () => {

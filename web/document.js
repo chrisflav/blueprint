@@ -601,16 +601,23 @@ function proofBlock(app, o, outline, known, refs) {
   return block;
 }
 
+// The entry a sidebar click opened, carried to the page the click went to so
+// that page's sidebar opens on it too: {kind, page, id}.
+let carried = null;
+
 /**
- * The sidebar, one level of the contents at a time: the chain down to the
- * level as headings, and the level's entries under them.  It opens on this
- * page's level: the page's own entries, or its siblings when it has none.
+ * The sidebar, the contents one level at a time.  It holds one *opened*
+ * entry: the entry among its siblings, with its own entries open under it,
+ * and the chain above it as headings — so opening a chapter keeps the other
+ * chapters in view, and opening an entry inside it leaves the chapter as a
+ * heading over its sections.  With nothing opened it is the top level.  A
+ * page opens it on the page's own level: the page among its siblings, which
+ * for a chapter is the top level, as the contents read.
  *
- * An entry takes the reader to it, scrolling there when this page writes it
- * out and going to the page it is read on otherwise; one with entries of its
- * own opens them in the sidebar too, the way into the levels below.  A
- * heading of the chain goes back up to the level it is one of, and scrolls to
- * it when it is on this page.
+ * Clicking an entry, in the list or in the chain, goes to it — scrolling
+ * there when this page writes it out, opening the page it is read on
+ * otherwise — and opens it, which is how the reader goes down a level and,
+ * from a heading, back up one.
  */
 function levelSidebar(app, outline, pageEntry, shown, href, toc) {
   const { el, clear } = app;
@@ -618,56 +625,57 @@ function levelSidebar(app, outline, pageEntry, shown, href, toc) {
   const kids = (e) => (e ? e.children : outline.roots).filter((c) => !c.duplicate && !c.text);
   const path = new Set();
   for (let e = pageEntry; e; e = e.parent) path.add(e.id);
-  let level = pageEntry && !kids(pageEntry).length ? pageEntry.parent : pageEntry;
+  const wanted = carried && carried.kind === outline.kind && carried.page === pageId
+    ? outline.byId.get(carried.id) : undefined;
+  carried = null;
+  let opened = wanted || (pageEntry ? pageEntry.parent : null);
 
-  const target = (e) => (M.documentPageShows(outline, pageId, shown, e.id) ? href(pageId, e.id)
-    : e.children.length ? href(e.id) : href(M.documentPageOf(outline, e.id), e.id));
-  // Scroll to an entry built on this page; false when it is not here (yet).
-  const reach = (e) => {
-    if (!M.documentPageShows(outline, pageId, shown, e.id)) return false;
-    const t = document.getElementById('doc-' + cssId(e.id));
-    if (!t) return false;
-    t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    return true;
-  };
-  const open = (next, focusId) => {
-    level = next;
+  const here = (e) => M.documentPageShows(outline, pageId, shown, e.id);
+  // An entry with entries of its own is read on its own page.
+  const pageOf = (e) => (e.children.length ? e.id : M.documentPageOf(outline, e.id));
+  const target = (e) => (here(e) ? href(pageId, e.id) : pageOf(e) === e.id ? href(e.id) : href(pageOf(e), e.id));
+  const open = (next) => {
+    opened = next;
     draw();
-    toc.scrollTop = 0;
-    const a = focusId && toc.querySelector('a[data-id="' + cssId(focusId) + '"]');
+    const a = toc.querySelector('a[data-id="' + next.id + '"]');
     if (a && typeof a.focus === 'function') a.focus({ preventScroll: true });
   };
-  const link = (e, onclick) => el('a', { href: target(e), 'data-id': cssId(e.id), onclick },
-    el('span.num', e.number), ' ', M.titleOf(e.object));
+  const go = (e) => (ev) => {
+    if (ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return; // a new tab or window
+    const t = here(e) && document.getElementById('doc-' + cssId(e.id));
+    if (t) {
+      ev.preventDefault();
+      t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      open(e);
+      return;
+    }
+    // Not built here: the link goes to the page that writes it out, and the
+    // sidebar there opens on it.
+    carried = { kind: outline.kind, page: here(e) ? pageId : pageOf(e), id: e.id };
+  };
+  const item = (e, cls) => el('li', {
+    class: cls + (kids(e).length ? ' has-kids' : '') + (path.has(e.id) ? ' on-path' : '') +
+      (e === pageEntry ? ' current' : '') + (e === opened ? ' open' : ''),
+  }, el('a', { href: target(e), 'data-id': e.id, onclick: go(e) },
+    el('span.num', e.number), ' ', M.titleOf(e.object)));
 
   const draw = () => {
     clear(toc);
     toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
-    const chain = [];
-    for (let e = level; e; e = e.parent) chain.unshift(e);
     const top = el('ul.toc-levels');
     let into = top;
+    const chain = [];
+    for (let e = opened ? opened.parent : null; e; e = e.parent) chain.unshift(e);
     for (const e of chain) {
-      const sub = el('ul');
-      into.appendChild(el('li', { class: 'toc-up' + (e === pageEntry ? ' current' : '') },
-        link(e, (ev) => {
-          ev.preventDefault();
-          reach(e);
-          open(e.parent, e.id);
-        }), sub));
-      into = sub;
+      const li = into.appendChild(item(e, 'toc-up'));
+      into = li.appendChild(el('ul'));
     }
-    for (const e of kids(level)) {
-      const more = kids(e).length > 0;
-      into.appendChild(el('li', {
-        class: (more ? 'has-kids' : '') + (path.has(e.id) ? ' on-path' : '') + (e === pageEntry ? ' current' : ''),
-      }, link(e, (ev) => {
-        // Not written out here: the link goes to the page it is read on,
-        // whose sidebar opens on it.
-        if (!reach(e)) return;
-        ev.preventDefault();
-        if (more) open(e, e.id);
-      })));
+    for (const e of kids(opened ? opened.parent : null)) {
+      const li = into.appendChild(item(e, 'toc-entry'));
+      if (e === opened && kids(e).length) {
+        const sub = li.appendChild(el('ul'));
+        for (const c of kids(e)) sub.appendChild(item(c, 'toc-entry'));
+      }
     }
     app.renderMath(top); // titles carry maths
     toc.appendChild(top);

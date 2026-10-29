@@ -205,16 +205,17 @@ top-level entry with nothing under it (an introduction, say) is read on its
 own page too, since the contents do not write it out.
 
 The sidebar holds the contents one level at a time (`levelSidebar` in
-`document.js`): the chain down to a level as headings — on a chapter's page,
-"2 Induction" — with that level's entries under them, "2.1", "2.2", … It opens
-on the page's own entries (a page with none opens on its siblings). Clicking
-an entry takes the reader to it, scrolling there when the page writes it out
-and opening the page it is read on otherwise; an entry with entries of its own
-also opens them in the sidebar, under it in the chain, which is the way into
-the levels below. Clicking a heading of the chain goes back up to the level it
-is one of, and scrolls to it when it is on the page: "2.1" brings back 2.1,
-2.2, …, and "2 Induction" the chapters. The Outline style keeps its own
-sidebar, the whole outline opened along the way to the page. Query parameters:
+`document.js`). It has one *opened* entry, shown among its siblings with its
+own entries under it, and the chain above it as headings. A page opens it on
+the page's own level: a chapter's page on the chapters, as the contents read,
+a section's page on its chapter's sections, and so on. Clicking an entry —
+in the list or in the chain — goes to it, scrolling there when the page writes
+it out and opening the page it is read on otherwise, and opens it there:
+clicking "2 Induction" opens 2.1, 2.2, … under it with the other chapters
+still in view; clicking 2.1 then leaves "2 Induction" as a heading over 2.1,
+2.2, … with 2.1's entries under it; clicking the "2 Induction" heading goes
+back to its page and level. The Outline style keeps its own sidebar, the
+whole outline opened along the way to the page. Query parameters:
 
 * `collapse=<kind>`: the collapse order to read along (default: the
   snapshot's `defaultCollapse`). The outline, the numbers and the pages are
