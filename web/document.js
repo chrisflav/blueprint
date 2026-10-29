@@ -271,10 +271,8 @@ export function render(root, app) {
     }
 
     if (leadsOn) {
-      const n = entry.children.length;
       section.appendChild(el('p.doc-open',
-        el('a', { href: href(o.id) }, 'Read ', num, ' →'),
-        el('span.muted.small', ` ${n} ${n === 1 ? 'entry' : 'entries'}`)));
+        el('a', { href: href(o.id) }, 'Read ', num, ' →')));
     }
 
     flow.appendChild(section);
