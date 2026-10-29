@@ -354,7 +354,10 @@ async function loadFixtures(origin) {
       const entry = { id: o.id, target: t, page, label: r.word + ' ' + r.number, number: r.number };
       if (!ref) ref = entry;
       if (!refFar && !M.documentPageShows(outline, page, 1, t)) refFar = entry;
-      if (!refNear && t !== o.id && M.documentPageShows(outline, page, 1, t)) refNear = entry;
+      // Near: on the same page, and not an entry with a page of its own, to
+      // which a reference leads wherever it is written out.
+      if (!refNear && t !== o.id && M.documentPageShows(outline, page, 1, t)
+        && (M.documentPageOf(outline, t) !== t || t === page)) refNear = entry;
     }
     if (ref && refFar && refNear) break;
   }
@@ -1429,6 +1432,20 @@ async function objectChecks(d, f) {
     if (!a) return { ok: false, evidence: `no a.objlink for [${f.slug.target}] inside ${j(f.slug.id)}` };
     await d.click(a.x, a.y);
     await sleep(600);
+    // A reference the document numbers leads to its level there, the page it
+    // is read on (or its own); anything else to its object page.
+    const page = M.referenceOf(f.outline, f.slug.target) ? M.documentPageOf(f.outline, f.slug.target) : undefined;
+    if (page !== undefined) {
+      const want = '#/document' + (page ? '/' + encodeURIComponent(page) : '') + '?'
+        + new URLSearchParams({ collapse: f.kind, focus: f.slug.target }).toString();
+      const r = await waitFor(d, `return location.hash === ${j(want)} && !!document.getElementById(${j(anchorOf(f.slug.target))})`,
+        { timeout: 15000, label: 'its level in the document' }).catch(() => null);
+      const hash = await d.js('return location.hash');
+      return {
+        ok: !!r,
+        evidence: `clicked [${f.slug.target}] (href=${j(a.href)}) in ${j(f.slug.id)}: at ${j(decodeURIComponent(hash))}, want ${j(decodeURIComponent(want))}`,
+      };
+    }
     const s = await d.js(OBJECT_STATE);
     return {
       ok: !!s && s.objId === f.slug.target && !s.errorBox,
@@ -1860,13 +1877,16 @@ async function steadyLink(d, body) {
 
 async function referenceChecks(d, f) {
   const labelOk = (got, want) => got === want.label || got === want.number;
+  const docPage = (page, focus) => '#/document' + (page ? '/' + encodeURIComponent(page) : '')
+    + '?' + new URLSearchParams({ collapse: f.kind, focus }).toString();
 
   await check(d, 'references/object-page-reads-the-number', async () => {
     if (!f.ref) return { skip: true, evidence: 'no [slug] naming a numbered object' };
     await openObject(d, f.ref.id);
     const a = await waitFor(d, REF_LINK('.body-prose', f.ref.target), { timeout: 15000, label: 'reference link' }).catch(() => null);
     if (!a) return { ok: false, evidence: `no link for [${f.ref.target}] in ${j(f.ref.id)}` };
-    const want = '#/object/' + encodeURIComponent(f.ref.target);
+    // Its level in the document: its own page, or the page it is read on.
+    const want = docPage(M.documentPageOf(f.outline, f.ref.target), f.ref.target);
     return {
       ok: labelOk(a.text, f.ref) && a.href === want && a.title === f.ref.target && a.ref,
       evidence: `[${f.ref.target}] in ${j(f.ref.id)} reads ${j(a.text)} (want ${j(f.ref.label)}), href=${j(a.href)}, tooltip=${j(a.title)}`,
@@ -1893,14 +1913,18 @@ async function referenceChecks(d, f) {
     await gotoGraph(d, new URLSearchParams({ collapse: f.kind, expand: expand.join(','), sel: f.ref.id }).toString());
     const a = await waitFor(d, REF_LINK('aside.side', f.ref.target), { timeout: 20000, label: 'side panel reference' }).catch(() => null);
     if (!a) return { ok: false, evidence: `no link for [${f.ref.target}] in the side panel of ${j(f.ref.id)}` };
+    // Its level in the graph: the sections above it open, it too if it has
+    // contents, and it selected.
+    const wantExpand = [...M.expandableAncestorsOf(f.order, f.ref.target)];
+    if (f.order.expandable.has(f.ref.target)) wantExpand.push(f.ref.target);
+    const q = new URLSearchParams(a.href.split('?')[1] || '');
+    const ok = a.href.indexOf('#/graph?') === 0 && (q.get('expand') || '') === wantExpand.join(',')
+      && q.get('sel') === f.ref.target;
     return {
-      ok: labelOk(a.text, f.ref) && a.href === '#/object/' + encodeURIComponent(f.ref.target),
-      evidence: `side panel of ${j(f.ref.id)}: [${f.ref.target}] reads ${j(a.text)}, href=${j(a.href)}`,
+      ok: labelOk(a.text, f.ref) && ok,
+      evidence: `side panel of ${j(f.ref.id)}: [${f.ref.target}] reads ${j(a.text)}, href=${j(a.href)} (want expand=${j(wantExpand.join(','))}, sel=${j(f.ref.target)})`,
     };
   });
-
-  const docPage = (page, focus) => '#/document' + (page ? '/' + encodeURIComponent(page) : '')
-    + '?' + new URLSearchParams({ collapse: f.kind, focus }).toString();
 
   await check(d, 'references/document-reference-opens-the-page-it-is-read-on', async () => {
     if (!f.refFar) return { skip: true, evidence: 'no reference to an entry on another page' };
@@ -2067,7 +2091,7 @@ async function referenceChecks(d, f) {
     }
     return null;
   })();
-  const LEAN_MARK = (id) => `var b = document.querySelector('#' + CSS.escape(${j(anchorOf(id))}) + ' > .head button.lean-mark');
+  const LEAN_MARK = (id) => `var b = document.querySelector('#' + CSS.escape(${j(anchorOf(id))}) + ' > .head a.lean-mark');
     if (!b) return null; var r = inView(b);
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, top: r.top, bottom: r.bottom, text: b.textContent };
     ${IN_VIEW}`;
@@ -2101,23 +2125,22 @@ async function referenceChecks(d, f) {
     };
   });
 
-  await check(d, 'references/lean-mark-opens-on-a-click', async () => {
+  await check(d, 'references/lean-mark-leads-to-the-object-page', async () => {
     if (!leanFixture) return { skip: true, evidence: 'no object with Lean names in the document' };
     const { id, page } = leanFixture;
     await route(d, docPage(page, id));
     const b = await steadyLink(d, LEAN_MARK(id));
     if (!b) return { ok: false, evidence: `no Lean mark for ${j(id)}` };
-    // A click opens it at once, as a tap must where there is no hover.
+    const want = '#/object/' + encodeURIComponent(id);
     await d.click(b.x, b.y);
-    await sleep(100);
-    const opened = await d.js(LEAN_CARD);
-    // A click elsewhere on the page closes it.
-    await d.click(away.x, away.y);
-    await sleep(200);
-    const closed = !(await d.js(LEAN_CARD));
+    const there = await waitFor(d, `return location.hash === ${j(want)} && !!document.querySelector('.obj-head')`,
+      { timeout: 15000, label: 'object page' }).catch(() => null);
+    await sleep(300);
+    const card = await d.js(LEAN_CARD);
+    const hash = await d.js('return location.hash');
     return {
-      ok: !!opened && opened.id === id && closed,
-      evidence: `clicked the mark of ${j(id)}: ${opened ? 'card open after 100 ms' : 'no card'}; clicked elsewhere: ${closed ? 'closed' : 'still open'}`,
+      ok: !!there && !card,
+      evidence: `clicked the mark of ${j(id)}: at ${j(hash)} (want ${j(want)}), card ${card ? 'still open' : 'closed'}`,
     };
   });
 
