@@ -543,7 +543,12 @@ descend = ["MyProject", "MyLib"]    # optional: where the dependency walk goes
 "\\poly" = "#1[T]"
 
 [site]
-theme = "outline"                   # the style the website opens in
+theme  = "outline"                  # the style the website opens in
+assets = "site-assets"              # copied into the site as assets/
+
+[site.intro]                        # shown as the website opens, then the graph
+file     = "intro.md"               # Markdown; or body = """…""" inline
+duration = 4                        # seconds, default 3
 
 [kinds.theorem]                     # extends the built-in `theorem`
 attrs = ["title", "lean", "review", "tags", "order", "aliases", "owner"]
@@ -605,6 +610,23 @@ is optional and defaults to the website's default style; the menu keeps
 every style.  `blueprint build` copies it into the snapshot as
 `project.theme`, and the website reads an id it does not know as its
 default.
+
+`[site.intro]` is what the website shows in the middle of the screen when
+it is opened at its landing page, drawn as a single graph node, before it
+fades and leaves the graph laid out underneath.  `file` names a Markdown file,
+relative to the root, which `blueprint build` reads; `body` gives the
+Markdown inline instead (exactly one of the two is required).  It is rendered
+as an object's prose is, so it may hold maths, `[slug]` references, pictures
+(`![](assets/logo.png)`) and HTML of its own, such as a `<video>` or an
+`<svg>`.  `duration` is how long it stays, in seconds (an integer or a
+float, default 3); a click, Escape, Enter or Space skips it.  It reaches the
+snapshot as `project.intro`.  A link to any other page of the site opens
+straight on that page, and `?intro=0` in the page's URL leaves the intro out.
+
+`[site] assets` names a directory, relative to the root, that `blueprint
+site` copies into the site as `assets/`: the place for the intro's pictures.
+It is not part of the snapshot.  A relative address in the intro is resolved
+against the directory holding `blueprint.json`, which is the site's root.
 
 ### The default schema
 
@@ -809,7 +831,7 @@ merge.  `Topology.coverChoice` is a custom axiom (`proved_with_axioms`),
 * **`project.katexMacros` is left out of the snapshot when it is empty**, so
   that a project without `[katex.macros]` gets exactly the `project` object
   it got before the field existed.  So is `project.theme` when `[site] theme`
-  is not given.
+  is not given, and `project.intro` when there is no `[site.intro]`.
 * **`blueprint read`** is an extra command, see above.
 * **The `attrMap` is merged into the object mapping (§5).**
   `docs/snapshot-format.md` records `attrMap` but says only that the names

@@ -13,6 +13,7 @@ import * as checksPage from './checks.js';
 import { setupPreviews, closePreviews, leanMark } from './preview.js';
 import { setupExport, exportButton, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
+import { wantsIntro, showIntro } from './intro.js';
 
 const PAGES = {
   graph: graphPage,
@@ -1085,6 +1086,8 @@ async function boot() {
     applyTheme(theme);
     updateChrome();
   }
+  // The project's intro, over the page while the graph is laid out under it.
+  if (wantsIntro(app.model.project, parseHash(), location.search)) showIntro(app);
   await loadHistory();
   setupGlobalSearch();
   setupPreviews(app);

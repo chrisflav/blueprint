@@ -19,7 +19,11 @@ by editing this file first. Version 1.
       "\\Spec": "\\operatorname{Spec}",
       "\\poly": "#1[T]"
     },
-    "theme": "outline"                           // optional, see below
+    "theme": "outline",                          // optional, see below
+    "intro": {                                   // optional, see below
+      "body": "![](assets/logo.png)\n\n## Welcome …",
+      "durationMs": 4000                         // optional
+    }
   },
 
   "schema": {
@@ -101,6 +105,13 @@ Notes
   the website opens in for a reader who has not picked one.  It is left out
   when the project names none; a reader defaults it to the website's default
   style, and so treats an id it does not know.
+- `project.intro` is `[site.intro]` of `blueprint.toml`: what the website
+  shows in the middle of the screen as it opens, before the graph.  `body`
+  is Markdown, rendered as an object's prose is (maths, `[slug]`
+  references, pictures, HTML); a relative address in it is resolved against
+  the directory holding the snapshot.  `durationMs` is how long it is shown,
+  in milliseconds; a reader defaults it to 3000.  The key is left out when
+  the project has no intro, and a reader treats an empty body as none.
 - A kind's `graph` is the website's graph alone (`docs/cli.md`): `optional`
   objects are drawn unless the reader hides them, `never` objects are read
   in the document only, and either takes what is below it in a collapse
