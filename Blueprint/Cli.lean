@@ -625,6 +625,15 @@ def assembleSite (root : System.FilePath) (out : System.FilePath) (args : Args) 
   IO.FS.writeFile (out / "blueprint.json") snap.render
   IO.println s!"site: {out} ({copied} file(s) from {web}, \
     {snap.objects.size} objects; {summarise a.checks})"
+  -- The project's own files, such as the pictures of its intro, which
+  -- refers to them as `assets/…`.
+  let assets := l.blueprint.project.assets
+  unless assets.isEmpty do
+    let src := root / assets
+    unless ← src.isDir do
+      throw <| IO.userError s!"'[site] assets' is {assets}, but {src} is not a directory"
+    let n ← copyDir src (out / "assets")
+    IO.println s!"assets: {out / "assets"} ({n} file(s) from {src})"
   if let some h := args.get? "--history" then
     let data := out / "data"
     let n ← copyDir h data

@@ -1632,6 +1632,91 @@ if (ELK_PATH && fs.existsSync(ELK_PATH) && fs.existsSync(ELK_WORKER_PATH)) {
 }
 
 // ---------------------------------------------------------------------------
+// the project's intro
+// ---------------------------------------------------------------------------
+
+const intro = await import(path.join(webDir, 'intro.js'));
+
+await check('a project has an intro only with a body, and a duration by default', () => {
+  eq(intro.introOf({}), null, 'no intro');
+  eq(intro.introOf({ intro: { body: '  \n' } }), null, 'an empty body is none');
+  eq(intro.introOf({ intro: 'Welcome' }), null, 'a bare string is not the shape');
+  const d = intro.introOf({ intro: { body: 'Welcome' } });
+  eq(d.body, 'Welcome', 'the body');
+  eq(d.durationMs, intro.DEFAULT_MS, 'the default duration');
+  eq(intro.introOf({ intro: { body: 'x', durationMs: 4500 } }).durationMs, 4500, 'its own duration');
+  eq(intro.introOf({ intro: { body: 'x', durationMs: -1 } }).durationMs, intro.DEFAULT_MS, 'a nonsense one is the default');
+});
+
+await check('the intro is shown on the landing page only, and ?intro=0 leaves it out', () => {
+  const p = { intro: { body: 'Welcome' } };
+  const at = (raw) => ({ view: raw.startsWith('/graph') ? 'graph' : raw.slice(1).split('/')[0], raw });
+  ok(intro.wantsIntro(p, at('/graph'), ''), 'the bare graph is the landing page');
+  ok(!intro.wantsIntro(p, at('/graph?sel=thm-tychonoff'), ''), 'a link into the graph opens on it');
+  ok(!intro.wantsIntro(p, at('/object/def-compact'), ''), 'a link to an object opens on it');
+  ok(!intro.wantsIntro(p, at('/document'), ''), 'and so does one to the document');
+  ok(!intro.wantsIntro(p, at('/graph'), '?intro=0'), '?intro=0');
+  ok(intro.wantsIntro(p, at('/graph'), '?theme=outline'), 'another parameter keeps it');
+  ok(!intro.wantsIntro({}, at('/graph'), ''), 'a project without one');
+});
+
+await check('a relative address in the intro is resolved against the snapshot', () => {
+  const base = 'https://example.org/site/data/';
+  eq(intro.resolveUrl('assets/logo.png', base), 'https://example.org/site/data/assets/logo.png', 'relative');
+  eq(intro.resolveUrl('./a.mp4', base), 'https://example.org/site/data/a.mp4', 'dot relative');
+  for (const done of ['https://x.org/a.png', 'data:image/png;base64,AAAA', '/root.png',
+    '//cdn.org/a.png', '#/object/def-compact', 'mailto:a@b.c']) {
+    eq(intro.resolveUrl(done, base), done, `${done} is complete`);
+  }
+  eq(intro.resolveUrl('a.png', null), 'a.png', 'no base');
+});
+
+await check('the intro is drawn over the page, and goes by itself', async () => {
+  const host = dom.document.createElement('div');
+  const project = app.model.project;
+  app.model.project = { ...project, intro: { body: 'Welcome to the **blueprint**.', durationMs: 10 } };
+  try {
+    const shown = intro.showIntro(app, { host });
+    ok(shown, 'nothing shown');
+    const layer = host.querySelector('.intro');
+    ok(layer, 'no layer');
+    eq(layer.getAttribute('role'), 'dialog', 'it is a dialog');
+    ok(layer.querySelector('.intro-node .intro-body').textContent.includes('Welcome'), 'the body is rendered');
+    ok(layer.querySelector('button.intro-skip'), 'a skip button');
+    eq(layer.querySelector('.intro-timer').style.animationDuration, '10ms', 'the timer runs its duration');
+    await tick(30);
+    ok(layer.classList.contains('leaving'), 'it did not start to leave');
+    ok(host.querySelector('.intro'), 'it is still there while it fades');
+    await tick(intro.FADE_MS + 50);
+    eq(host.querySelector('.intro'), null, 'it is gone after the fade');
+  } finally {
+    app.model.project = project;
+  }
+});
+
+await check('a click or a key ends the intro at once', async () => {
+  const host = dom.document.createElement('div');
+  const project = app.model.project;
+  app.model.project = { ...project, intro: { body: 'Welcome', durationMs: 60000 } };
+  try {
+    const a = intro.showIntro(app, { host });
+    fire(a.layer, 'click');
+    ok(a.layer.classList.contains('leaving'), 'a click');
+    const b = intro.showIntro(app, { host });
+    global.window.dispatch('keydown', { key: 'a' });
+    ok(!b.layer.classList.contains('leaving'), 'any other key is the page\'s');
+    let prevented = false;
+    global.window.dispatch('keydown', { key: 'Escape', preventDefault() { prevented = true; }, stopPropagation() {} });
+    ok(b.layer.classList.contains('leaving'), 'Escape');
+    ok(prevented, 'Escape is taken from the page');
+    app.model.project = { ...project };
+    eq(intro.showIntro(app, { host }), null, 'no intro, nothing shown');
+  } finally {
+    app.model.project = project;
+  }
+});
+
+// ---------------------------------------------------------------------------
 
 if (failures.length) {
   console.error(`\n${failures.length} FAILED, ${passed} passed\n`);

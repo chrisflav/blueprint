@@ -226,13 +226,44 @@ def decodeConfig (t : TValue) (defaultName : String) :
         | none => throw s!"'[katex.macros] {k}' must be a string, got a {v.typeName}"
       pure (ms.qsort (fun a b => a.1 < b.1))
     | some v => throw s!"'[katex.macros]' must be a table, got a {v.typeName}"
-  let theme ← match (t.get? "site").bind (·.get? "theme") with
+  let site := t.get? "site"
+  let siteStr (k : String) : Except String String :=
+    match site.bind (·.get? k) with
     | none => pure ""
     | some v => match v.asString? with
       | some s => pure s
-      | none => throw s!"'[site] theme' must be a string, got a {v.typeName}"
+      | none => throw s!"'[site] {k}' must be a string, got a {v.typeName}"
+  let theme ← siteStr "theme"
+  let assets ← siteStr "assets"
+  let (intro, introFile, introMs) ← match site.bind (·.get? "intro") with
+    | none => pure ("", "", none)
+    | some it@(.table _) => do
+      let str (k : String) : Except String String :=
+        match it.get? k with
+        | none => pure ""
+        | some v => match v.asString? with
+          | some s => pure s
+          | none => throw s!"'[site.intro] {k}' must be a string, got a {v.typeName}"
+      let body ← str "body"
+      let file ← str "file"
+      if !body.isEmpty && !file.isEmpty then
+        throw "'[site.intro]' takes a 'body' or a 'file', not both"
+      if body.isEmpty && file.isEmpty then
+        throw "'[site.intro]' needs a 'body' (Markdown) or a 'file' to read it from"
+      let ms ← match it.get? "duration" with
+        | none => pure none
+        | some (.int n) =>
+          if n > 0 then pure (some (n.toNat * 1000))
+          else throw s!"'[site.intro] duration' must be positive, got {n}"
+        | some (.float f) =>
+          if f > 0 then pure (some (f * 1000).round.toUInt64.toNat)
+          else throw s!"'[site.intro] duration' must be positive, got {f}"
+        | some v => throw s!"'[site.intro] duration' must be a number of seconds, got a {v.typeName}"
+      pure (body, file, ms)
+    | some v => throw s!"'[site] intro' must be a table, got a {v.typeName}"
   let project : Project :=
-    { name, title, dir, leanModules, leanDescend, katexMacros, theme }
+    { name, title, dir, leanModules, leanDescend, katexMacros, theme,
+      intro, introFile, introMs, assets }
   let mut schema := defaultSchema
   if let some v := lookup "defaultCollapse" then
     match v.asString? with
@@ -268,6 +299,12 @@ def loadConfig (root : System.FilePath) : IO (Project × Schema) := do
   | .ok t =>
     match decodeConfig t defaultName with
     | .error e => throw <| IO.userError s!"{file}: {e}"
-    | .ok r => return r
+    | .ok (project, schema) =>
+      if project.introFile.isEmpty then return (project, schema)
+      let intro := root / project.introFile
+      unless ← intro.pathExists do
+        throw <| IO.userError
+          s!"{file}: '[site.intro] file' is {project.introFile}, but there is no {intro}"
+      return ({ project with intro := ← IO.FS.readFile intro }, schema)
 
 end Blueprint

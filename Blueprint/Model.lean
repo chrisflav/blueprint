@@ -283,6 +283,22 @@ structure Project where
   `[site] theme` in `blueprint.toml`: the id of one of the website's themes,
   empty for its default.  Handed to the website as `project.theme`. -/
   theme : String := ""
+  /-- What the website shows in the middle of the screen as it opens, before
+  the graph: `[site.intro]` in `blueprint.toml`, Markdown with maths, pictures
+  and HTML, read from its `file` or given as its `body`.  Empty for none.
+  Handed to the website as `project.intro.body`. -/
+  intro : String := ""
+  /-- `[site.intro] file`: where `intro` is read from, relative to the root.
+  `loadConfig` reads it; empty when the body was given inline. -/
+  introFile : String := ""
+  /-- How long the website shows `intro`, in milliseconds, `[site.intro]
+  duration` (given in seconds); `none` for the website's default.  Handed to
+  the website as `project.intro.durationMs`. -/
+  introMs : Option Nat := none
+  /-- `[site] assets`: a directory, relative to the root, of files the website
+  serves, such as the pictures of the intro.  `blueprint site` copies it into
+  the site as `assets/`.  Empty for none; not part of the snapshot. -/
+  assets : String := ""
   deriving Inhabited, BEq
 
 /-- A check produced by `blueprint check`. -/

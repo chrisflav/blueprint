@@ -117,9 +117,9 @@ def Analysis.snapshot (a : Analysis) (facts : Option Facts := none) : Snapshot :
 def Snapshot.toJson (s : Snapshot) : Json :=
   Json.mkObj [
     ("version", Json.num (JsonNumber.fromInt s.version)),
-    -- `katexMacros` and `theme` are left out when the project declares none,
-    -- so that a blueprint without them has exactly the `project` it had
-    -- before the fields existed.
+    -- `katexMacros`, `theme` and `intro` are left out when the project
+    -- declares none, so that a blueprint without them has exactly the
+    -- `project` it had before the fields existed.
     ("project", Json.mkObj ([("name", Json.str s.project.name),
                              ("title", Json.str s.project.title),
                              ("dir", Json.str s.project.dir)] ++
@@ -127,7 +127,12 @@ def Snapshot.toJson (s : Snapshot) : Json :=
         [("katexMacros",
           objOf (s.project.katexMacros.map fun (n, d) => (n, Json.str d)))]) ++
       (if s.project.theme.isEmpty then [] else
-        [("theme", Json.str s.project.theme)]))),
+        [("theme", Json.str s.project.theme)]) ++
+      (if s.project.intro.isEmpty then [] else
+        [("intro", Json.mkObj ([("body", Json.str s.project.intro)] ++
+          match s.project.introMs with
+          | some ms => [("durationMs", Json.num (JsonNumber.fromNat ms))]
+          | none => []))]))),
     ("schema", s.schema.toJson),
     ("objects", Json.arr (s.objects.map Object.toJson)),
     ("facts", s.facts.getD Json.null),
@@ -271,7 +276,10 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
       title := fieldStrD p "title" ""
       dir := fieldStrD p "dir" "blueprint"
       katexMacros
-      theme := fieldStrD p "theme" "" }
+      theme := fieldStrD p "theme" ""
+      intro := fieldStrD ((field? p "intro").getD Json.null) "body" ""
+      introMs := (field? p "intro").bind fun i =>
+        (field? i "durationMs").bind (·.getNat?.toOption) }
   let schema := Schema.ofJson ((field? j "schema").getD Json.null)
   let objects ← match field? j "objects" with
     | some (.arr xs) => xs.mapM Object.ofJson
