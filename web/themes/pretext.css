@@ -130,8 +130,8 @@ button, select, input[type="text"], input[type="search"] { border-radius: 0; }
 .doc-entry.is-statement .head .badge.kind { display: none; }
 .doc-entry.is-statement:has(> .head .status-proved) { border-left-color: var(--fg); }
 
-/* Proofs: "Proof." in italics, as PreTeXt sets it. */
-a.proof-word { font-family: var(--sans); font-style: italic; font-weight: 400; }
+/* Proofs: "Proof." in italics, as PreTeXt sets it, and bold, as it folds. */
+a.proof-word { font-family: var(--sans); font-style: italic; font-weight: 700; }
 
 .step { border-left-color: var(--ptx-rule); background: var(--bg); }
 .doc-pager { border-color: var(--ptx-rule); }

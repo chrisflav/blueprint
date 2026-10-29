@@ -827,7 +827,7 @@ ul.objlist .role {
    and an end mark at the right (`proofDisclosure` in app.js, which also
    makes it fold; see "Proofs fold" below). */
 .proof { margin: .6rem 0 1rem; }
-a.proof-word { font-style: italic; font-weight: 400; color: inherit; }
+a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .proof-prose > p:first-child { margin-top: 0; }
 .proof-body > :last-child { margin-bottom: .3em; }
 .proof-end { text-align: right; line-height: 1; color: var(--muted); }
@@ -1389,6 +1389,9 @@ details.proof > summary::before {
 }
 details.proof[open] > summary::before { transform: rotate(90deg); }
 details.proof > summary > :is(h1, h2, h3, h4, h5, h6) { margin: .9em 0 .25em; }
+/* "Proof." is bold in every style, a `## Proof` heading as much as a proof
+   object's lead: it is what a reader clicks to fold or unfold the proof. */
+details.proof > summary.proof-head > :is(h1, h2, h3, h4, h5, h6) { font-weight: 700; }
 details.proof:not([open]) > summary::after {
   content: "(folded: click to show)";
   color: var(--faint);
