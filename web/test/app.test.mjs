@@ -138,7 +138,7 @@ await check('every failure mode is off and both delimiter styles are on', () => 
 
 await check('the same options reach the document view', async () => {
   katex.reset();
-  await go('#/document');
+  await go('#/document?depth=1');
   // The prose is rendered when it comes into view; in the shim nothing scrolls,
   // so say so explicitly.
   dom.observers.flush();
@@ -528,8 +528,30 @@ await check('without an IntersectionObserver everything renders at once', async 
 const entryIds = () => [...root.querySelectorAll('.doc-entry')].map((s) => s.id);
 const hrefs = (sel) => [...root.querySelectorAll(sel)].map((a) => a.getAttribute('href'));
 
-await check('the top page lists the top level, one level deep', async () => {
+await check('the top page is the contents: a row per top-level entry, nothing written out', async () => {
   await go('#/document');
+  const out = modelMod.documentOutline(app.model, 'refines');
+  eq(root.querySelectorAll('.doc-entry').length, 0, 'no entry is written out');
+  eq(root.querySelectorAll('.doc-contents li').length, out.roots.length, 'one row per top-level entry');
+  ok(hrefs('.doc-contents a').includes('#/document/sec-main?collapse=refines'), 'a chapter leads to its page');
+  // A top-level entry with nothing under it is read on its own page.
+  const leaf = out.roots.find((e) => !e.children.length);
+  ok(hrefs('.doc-contents a').includes('#/document/' + encodeURIComponent(leaf.id) + '?collapse=refines'),
+    'a top-level leaf leads to its own page');
+  eq(root.querySelectorAll('.doc-layout').length, 0, 'no sidebar beside the contents');
+  eq(root.querySelectorAll('.proof-toggle').length, 0, 'no proofs to fold');
+  eq(root.querySelectorAll('.doc-crumbs').length, 0, 'no breadcrumbs at the top');
+  const select = root.querySelectorAll('.doc-controls select')[1];
+  eq(select.querySelectorAll('option[selected]')[0].getAttribute('value'), 'contents', 'the depth control says contents');
+  // A row's page is the chapter's own, and its breadcrumbs lead back here.
+  await go('#/document/sec-main');
+  ok(hrefs('.doc-crumbs a').includes('#/document?collapse=refines'), 'the chapter page leads back to the contents');
+  await go('#/document/' + encodeURIComponent(leaf.id));
+  eq(root.querySelectorAll('.doc-entry.page-head').length, 1, 'the leaf has a page of its own');
+});
+
+await check('depth=1 on the top page writes out the top level, one level deep', async () => {
+  await go('#/document?depth=1');
   const out = modelMod.documentOutline(app.model, 'refines');
   eq(root.querySelectorAll('.doc-entry').length, out.roots.length, 'one entry per top-level object');
   ok(entryIds().includes('doc-sec-main'), 'a chapter is on it');
@@ -578,9 +600,11 @@ await check('an old ?focus= link opens the page the entry is read on', async () 
   eq(global.location.hash, '#/document/sec-main-induction?collapse=refines&focus=lem-finite-subcover', 'the URL says so');
   ok(dom.document.getElementById('doc-lem-finite-subcover'), 'and the entry is on it');
   // A focus the page does show is scrolled to where it is: a chapter is on
-  // the top page.
+  // the top page written out, and on its own page from the contents.
+  await go('#/document?collapse=refines&depth=1&focus=sec-main');
+  eq(app.route.id, null, 'a chapter is on the top page written out');
   await go('#/document?collapse=refines&focus=sec-main');
-  eq(app.route.id, null, 'a chapter is on the top page');
+  eq(app.route.id, 'sec-main', 'the contents send it to its own page');
   // A focus the current page does show stays where it is.
   await go('#/document/sec-main?depth=2&focus=lem-diagonal');
   eq(app.route.id, 'sec-main', 'no redirect when the page shows it');

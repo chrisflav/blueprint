@@ -895,6 +895,27 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .doc-entry .head a.num:hover { text-decoration: underline; }
 .doc-open { margin: .5rem 0 0; font-size: .9rem; }
 
+/* The top of the document: its contents, a row per top-level entry, each a
+   link to the entry's page. */
+.doc-contents { list-style: none; margin: .4rem 0 1.6rem; padding: 0; border-top: 1px solid var(--border); }
+.doc-contents > li { border-bottom: 1px solid var(--border); }
+.doc-contents > li > a {
+  display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) minmax(0, 14rem);
+  gap: .9rem; align-items: baseline; padding: .65rem .5rem; color: var(--fg);
+}
+.doc-contents > li > a:hover { background: var(--panel-2); text-decoration: none; }
+.doc-contents .num { color: var(--faint); font-family: var(--mono); font-size: .85em; text-align: right; }
+.doc-contents-title { font-size: 1.08rem; color: var(--accent); }
+.doc-contents-title .kindword { font-weight: 700; }
+.doc-contents-meta { justify-self: end; width: 100%; display: flex; justify-content: flex-end; }
+.doc-contents-meta .bar-row { width: 100%; }
+.doc-contents-meta:empty { display: none; }
+.doc-contents > li.dup { opacity: .75; }
+@media (max-width: 640px) {
+  .doc-contents > li > a { grid-template-columns: 2.2rem minmax(0, 1fr); }
+  .doc-contents-meta { grid-column: 2; justify-content: flex-start; }
+}
+
 /* -------------------------------------------------------- progress page */
 
 .stat-row {

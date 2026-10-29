@@ -69,7 +69,7 @@ All state lives in the URL hash, so every view is a shareable link.
 |-------|------|
 | `#/graph` | the quotient graph |
 | `#/object/<id>` | one object (the id is percent-encoded) |
-| `#/document` | the top of the linear document |
+| `#/document` | the contents of the linear document |
 | `#/document/<id>` | the page of one entry of the document |
 | `#/progress` | dashboard and time slider |
 | `#/checks` | `derived.checks` |
@@ -185,23 +185,29 @@ server makes PDFs on demand for the Export PDF dialog (`POST api/export`,
 
 The document is the reading order of DESIGN.md §6, numbered as a paper is
 ("Definition 1.2.14"), and split into pages along the collapse order.
-`#/document` writes out the top level — usually the chapters, each with its
-own prose — and `#/document/<id>` writes out one entry and the levels below
-it. An entry whose children are not on the page links on to its own page, by
-its number and by a *Read 1.2 →* line. Each page has breadcrumbs up its chain,
-its previous and next siblings, and a contents list of what it shows. Query
+`#/document` is the contents: a row per top-level entry — usually the
+chapters — with its number, title and progress, each a link to that entry's
+page; nothing is written out there but text at the top level (see below).
+`#/document/<id>` writes out one entry and the levels below it. An entry whose
+children are not on the page links on to its own page, by its number and by a
+*Read 1.2 →* line. Each page has breadcrumbs up its chain, back to the
+contents, its previous and next siblings, and a contents list of what it
+shows. A top-level entry with nothing under it (an introduction, say) is read
+on its own page too, since the contents do not write it out. Query
 parameters:
 
 * `collapse=<kind>`: the collapse order to read along (default: the
   snapshot's `defaultCollapse`). The outline, the numbers and the pages are
   all of that order;
 * `depth=<n>|all`: how many levels below the page are written out on it
-  (default 1). `depth=2` on the top page is the chapters with their sections;
-  `depth=all` is the whole document on one page;
+  (default 1). On the top page there is no default: without `depth=` it is the
+  contents, and the depth control offers *contents* besides the numbers.
+  `depth=1` there writes out the chapters, `depth=2` the chapters with their
+  sections, and `depth=all` is the whole document on one page;
 * `focus=<id>`: scroll to that entry. If the page does not show it, the route
   is replaced by the page that does: an entry with children is read on its own
-  page, any other on its parent's, a step wherever its source is
-  (`documentPageOf` in `model.js`). That is what keeps every link written
+  page, any other on its parent's (or its own, at the top level), a step
+  wherever its source is (`documentPageOf` in `model.js`). That is what keeps every link written
   before the split, `#/document?focus=<id>`, working.
 
 What is in the document, the numbers and the pages are pure functions of the
@@ -216,7 +222,8 @@ A `hidden` object with nothing under it is *text*, as the Stacks project has
 it: the lines that open a section, or a paragraph between two lemmas, that
 belong to no statement. It is set where its `order` puts it, as bare prose with
 no heading, no kind word and no number, and takes no number from its
-siblings, so the lemma after the lines that open section 2 is still 2.1. It is
+siblings, so the lemma after the lines that open section 2 is still 2.1.
+Text at the top level is written out on the contents, between the rows. It is
 not in the contents, the pager or the outline sidebar, and a `[slug]` link to
 it keeps its title rather than reading "Section 2.1".
 
