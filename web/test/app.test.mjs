@@ -1091,6 +1091,48 @@ await check('"hide appendix" is offered only when there is an appendix to hide',
   ok(!labels.includes('hide appendix'), 'offered on a snapshot without an appendix');
 });
 
+await check('Hide progress takes the statuses, bars and Progress tab away; Show brings them back', async () => {
+  const aside = dom.document.getElementById('topbar-aside');
+  const toggle = () => aside.querySelector('button.progress-toggle');
+  const html = dom.document.documentElement;
+  const badges = () => root.querySelectorAll('span.badge').filter((b) => /\bstatus-/.test(b.className));
+  await go('#/object/thm-tychonoff');
+  eq(toggle().textContent, 'Hide progress', 'the button offers to hide');
+  ok(aside.querySelector('a.row'), 'the top bar shows the progress figure');
+  ok(badges().length > 0, 'an object page shows its status');
+  ok(root.querySelectorAll('.bar').length > 0, 'and its progress');
+  await go('#/document?collapse=refines');
+  ok(root.querySelectorAll('.doc-progress').length > 0, 'the document shows progress bars');
+
+  fire(toggle(), 'click');
+  await tick(5);
+  try {
+    eq(app.showProgress, false, 'the progress is hidden');
+    eq(html.getAttribute('data-progress'), 'hidden', 'for the stylesheet too, which drops the tab');
+    eq(toggle().textContent, 'Show progress', 'the button offers to show');
+    eq(aside.querySelector('a.row'), null, 'no progress figure in the top bar');
+    eq(root.querySelectorAll('.doc-progress').length, 0, 'no progress bars in the document');
+    await go('#/object/thm-tychonoff');
+    eq(badges().length, 0, 'no status on an object page');
+    eq(root.querySelectorAll('.bar').length, 0, 'nor progress');
+    await go('#/graph?collapse=refines&status=proved');
+    const lbls = root.querySelectorAll('.toolbar span.lbl').map((l) => l.textContent);
+    ok(lbls.includes('edges') && !lbls.includes('status'), 'the graph offers no status filter');
+    ok(!root.querySelector('.legend').textContent.includes('no Lean ref'), 'and its key no fills');
+    await go('#/progress');
+    ok(root.querySelector('button'), 'the Progress page offers to show the progress');
+    eq(root.querySelectorAll('table').length, 0, 'and shows none');
+  } finally {
+    fire(toggle(), 'click');
+    await tick(5);
+  }
+  eq(app.showProgress, true, 'shown again');
+  eq(html.getAttribute('data-progress'), null, 'the tab is back');
+  ok(root.querySelectorAll('table').length > 0, 'the Progress page is drawn again');
+  await go('#/graph?collapse=refines');
+  ok(root.querySelector('.legend').textContent.includes('no Lean ref'), 'the graph key has its fills again');
+});
+
 await check('a hidden appendix leaves the ELK graph with its contents and arcs; a hidden object always does', () => {
   const node = (id, kind) => ({ id, kind, boundary: [], attrs: {}, body: '', depth: 0 });
   const edge = (kind, src, tgt) => ({ id: `${kind}/${src}/${tgt}`, kind, attrs: {}, body: '', depth: 1,

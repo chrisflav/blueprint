@@ -70,7 +70,10 @@ function readState(app) {
     collapse,
     expand: split('expand'),
     ekinds: p.has('ekinds') ? split('ekinds') : null, // null = all
-    status: p.has('status') ? split('status') : null, // null = all
+    // The statuses and progress bars, unless the reader hid the progress; a
+    // status filter in the link then waits until they show it again.
+    progress: app.showProgress,
+    status: app.showProgress && p.has('status') ? split('status') : null, // null = all
     q: p.get('q') || '',
     sel: p.get('sel') || null,
     // Hide arcs implied by a longer path of their kind: on unless turned off,
@@ -133,6 +136,12 @@ export function render(root, app) {
   if (!ui || !root.contains(ui.page)) mount(root, app);
   ui.app = app;
   ui.state = st;
+  if (ui.legendProgress !== st.progress) {
+    const fresh = legend(app, st.progress);
+    ui.stage.replaceChild(fresh, ui.legend);
+    ui.legend = fresh;
+    ui.legendProgress = st.progress;
+  }
 
   renderToolbar(app, st);
   ui.stage.classList.toggle('inner-arcs', st.inner);
@@ -160,7 +169,8 @@ function mount(root, app) {
   svg.appendChild(layer);
   stage.appendChild(svg);
   stage.appendChild(el('div.graph-status', { id: 'graph-status' }));
-  stage.appendChild(legend(app));
+  const key = legend(app, app.showProgress);
+  stage.appendChild(key);
   // The way back up from the section the reader is in (`applyLevel`).
   const back = el('button.graph-back', {
     type: 'button', hidden: true,
@@ -171,7 +181,7 @@ function mount(root, app) {
 
   // `folded`: the side panel's listings the reader has opened (see `fold`).
   ui = { page, toolbar, stage, svg, layer, side, back, transform: { x: 40, y: 40, k: 1 }, fitted: false,
-    folded: new Set(), entered: null };
+    folded: new Set(), entered: null, legend: key, legendProgress: app.showProgress };
   installPanZoom(app);
   prevPos = new Map();
   lastSignature = null;
@@ -193,7 +203,8 @@ function defs(app) {
     marker('bp-arrow-focus', false), marker('bp-arrow-hollow-focus', true));
 }
 
-function legend(app) {
+/** The key to the drawing; the fills say the statuses, so without the progress there are none. */
+function legend(app, progress) {
   const { el, svgEl } = app;
   const sample = (...children) => {
     const s = svgEl('svg', { width: 24, height: 10, viewBox: '0 0 24 10', class: 'lgsvg' });
@@ -223,13 +234,15 @@ function legend(app) {
     el('div.row', sample(line('hollow'), head(true)), 'declared, unwitnessed'),
     // Only the contents of collapsed objects draw these (`arcs of contents`).
     el('div.row.lg-derived', sample(line('dashed'), head(false)), 'derived, undeclared'),
-    el('b', { style: { marginTop: '.3em' } }, 'fill'),
-    swatch('proved', 'proved'),
-    swatch('proved_with_axioms', 'extra axioms'),
-    swatch('stated', 'stated'),
-    swatch('missing', 'missing'),
-    swatch('absent', 'absent'),
-    swatch('none', 'no Lean ref'));
+    progress ? [
+      el('b', { style: { marginTop: '.3em' } }, 'fill'),
+      swatch('proved', 'proved'),
+      swatch('proved_with_axioms', 'extra axioms'),
+      swatch('stated', 'stated'),
+      swatch('missing', 'missing'),
+      swatch('absent', 'absent'),
+      swatch('none', 'no Lean ref'),
+    ] : null);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,20 +329,21 @@ function renderToolbar(app, st) {
         }), 'hide appendix')
       : null));
 
-  filters.appendChild(el('div.sep'));
-
   // status filter
-  const sOn = st.status ? new Set(st.status) : new Set(M.STATUSES);
-  filters.appendChild(el('div.group', el('span.lbl', 'status'),
-    ...M.STATUSES.map((s) => el('label.chk', { class: 'st-chip status-' + s, title: M.STATUS_LABEL[s] },
-      el('input', {
-        type: 'checkbox', checked: sOn.has(s),
-        onchange: (e) => {
-          const next = new Set(sOn);
-          if (e.target.checked) next.add(s); else next.delete(s);
-          writeState(app, { status: filterValue(next, M.STATUSES) });
-        },
-      }), s.replace('proved_with_axioms', 'axioms')))));
+  if (st.progress) {
+    filters.appendChild(el('div.sep'));
+    const sOn = st.status ? new Set(st.status) : new Set(M.STATUSES);
+    filters.appendChild(el('div.group', el('span.lbl', 'status'),
+      ...M.STATUSES.map((s) => el('label.chk', { class: 'st-chip status-' + s, title: M.STATUS_LABEL[s] },
+        el('input', {
+          type: 'checkbox', checked: sOn.has(s),
+          onchange: (e) => {
+            const next = new Set(sOn);
+            if (e.target.checked) next.add(s); else next.delete(s);
+            writeState(app, { status: filterValue(next, M.STATUSES) });
+          },
+        }), s.replace('proved_with_axioms', 'axioms')))));
+  }
 
   bar.appendChild(el('div.spacer'));
 
@@ -706,7 +720,7 @@ export function buildElk(app, st, view, quot) {
     const o = m.byId.get(id);
     const compound = view.isExpanded(id);
     const title = M.titleOf(o);
-    const prog = M.progressMixOf(app.model, st.collapse, id);
+    const prog = st.progress ? M.progressMixOf(app.model, st.collapse, id) : null;
     const node = {
       id,
       bp: {
@@ -931,7 +945,7 @@ export function plainGraph(graph) {
 
 function signatureOf(st) {
   return JSON.stringify([st.collapse, [...st.expand].sort(), st.ekinds, st.status, st.reduce, st.inner,
-    st.appendix]);
+    st.appendix, st.progress]);
 }
 
 async function scheduleLayout(app, st, view, quot) {
@@ -1375,7 +1389,7 @@ function drawNode(app, box, meta, st, view) {
   const { svgEl } = app;
   const m = app.model;
   const o = meta.object;
-  const status = M.statusOf(m, o.id);
+  const status = st.progress ? M.statusOf(m, o.id) : null;
   const type = M.nodeType(m, o);
   const g = svgEl('g', {
     class: 'gnode' + (meta.compound ? ' compound' : '') + ' kind-' + o.kind +
@@ -2069,7 +2083,7 @@ function renderSide(app, st, view, quot) {
   side.appendChild(el('div.meta', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status)));
   side.appendChild(el('div.obj-id', id));
 
-  const prog = M.progressMixOf(app.model, st.collapse, id);
+  const prog = st.progress ? M.progressMixOf(app.model, st.collapse, id) : null;
   if (prog) {
     side.appendChild(el('section', el('h3', 'Progress (' + st.collapse + ')'), app.progressBar(prog)));
   }

@@ -208,6 +208,15 @@ label.chk input { margin: 0; }
 .topbar-aside .theme-select { font-size: .8rem; padding: .15em .3em; max-width: 7.5rem; }
 .topbar-aside { display: flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--muted); }
 
+/* Each item keeps its one line ("46%" under its bar read as a second row),
+   and the search box and the title give way instead; on a phone the items
+   wrap as wholes (below). */
+.topbar-aside, .topbar-aside > * { flex: none; white-space: nowrap; }
+
+/* Hide progress / Show progress (app.js): with the progress hidden, so is its tab. */
+.topbar-aside .progress-toggle { font-size: .8rem; padding: .15em .45em; }
+:root[data-progress="hidden"] .tabs a[data-view="progress"] { display: none; }
+
 /* Export PDF: the one filled button of the top bar, so it is found without
    looking for it (pdf.js).  Text and icon, never the icon alone. */
 .export-pdf {
@@ -1174,6 +1183,7 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
      there; anchored right it ran off the left of a phone screen. */
   .gsearch { flex: 1 1 12rem; margin-left: 0; }
   .gsearch-panel { left: 0; right: auto; }
+  .topbar-aside { flex: 0 1 auto; flex-wrap: wrap; row-gap: .3rem; }
   :root { --topbar-h: 86px; }
   .legend { display: none; }
 }
