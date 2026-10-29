@@ -1196,6 +1196,35 @@ check('the document files a proof under its statement', () => {
   eq(M.documentPageOf(outline, PROOF), M.documentPageOf(outline, 'thm-heine-borel'), 'on its statement\'s page');
 });
 
+check('a proof with details of its own is read after its statement, not at the top', () => {
+  const node = (id, kind, body = 'text') => ({ id, kind, boundary: [], attrs: {}, body, depth: 0 });
+  const edge = (kind, src, tgt) => ({ id: `${kind}/${src}/${tgt}`, kind, attrs: {}, body: '', depth: 1,
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }] });
+  const binary = { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } } };
+  const proof = (id, of) => ({ id, kind: 'proof', attrs: {}, body: 'by the lemmas', depth: 1, boundary: [{ role: 'of', id: of }] });
+  const m = M.buildModel({
+    version: 1,
+    schema: { defaultCollapse: 'refines', kinds: {
+      section: { boundary: {} }, theorem: { boundary: {} }, lemma: { boundary: {} },
+      refines: { ...binary, collapse: true }, proof: { boundary: { of: { min: 1, max: 1 } } } } },
+    objects: [
+      node('sec', 'section'), node('thm', 'theorem'), node('detail', 'lemma'), node('aux', 'lemma'),
+      proof('proof/thm', 'thm'), edge('refines', 'thm', 'sec'), edge('refines', 'aux', 'thm'),
+      edge('refines', 'detail', 'proof/thm'),
+      // A proof whose statement is one of its own details keeps its place.
+      node('odd', 'lemma'), proof('proof/odd', 'odd'), edge('refines', 'odd', 'proof/odd'),
+    ],
+  });
+  const outline = M.documentOutline(m, 'refines');
+  const flow = outline.entries.map((e) => e.id);
+  eq(flow.join(' '), 'proof/odd odd sec thm proof/thm detail aux', 'reading order');
+  eq(outline.byId.get('proof/thm').parent.id, 'thm', 'under its statement');
+  eq(outline.byId.get('proof/thm').number, '2.1.1', 'its first entry');
+  eq(outline.byId.get('aux').number, '2.1.2', 'before what refines the statement');
+  eq(outline.byId.get('detail').number, '2.1.1.1', 'its details below it');
+  eq(outline.byId.get('proof/odd').parent, null, 'the odd one stays a root, so both are still read');
+});
+
 // --- appendices and hidden objects -------------------------------------------
 //
 // `graph = "optional"` (an appendix) is drawn unless the reader hides it,

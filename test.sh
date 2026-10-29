@@ -978,10 +978,136 @@ else
   diff "$TMP/real.json" web/sample/real/blueprint.json | head -10
 fi
 
+"$BP" build --root examples/paper -o "$TMP/paper.json" > /dev/null 2>&1
+if cmp -s "$TMP/paper.json" web/sample/paper/blueprint.json; then
+  ok "web/sample/paper/blueprint.json is what 'build --root examples/paper' produces"
+else
+  bad "web/sample/paper/blueprint.json is what 'build --root examples/paper' produces"
+  diff "$TMP/paper.json" web/sample/paper/blueprint.json | head -10
+fi
+
+# ------------------------------------------------------------- PDF export
+head_ "blueprint export"
+if command -v node > /dev/null 2>&1; then
+  # The committed samples are what the command writes: the whole blueprint, a
+  # section with a lemma it shares with another, and a refined theorem.
+  rm -rf "$TMP/export"
+  for scope in "" products thm-fip; do
+    "$BP" export --root examples/paper ${scope:+--scope "$scope"} --tex-only -o "$TMP/export" \
+      > "$TMP/export.log" 2>&1 || { bad "export --tex-only ${scope:-(whole)}"; cat "$TMP/export.log"; }
+  done
+  for f in examples/paper/export/*.tex; do
+    if cmp -s "$f" "$TMP/export/$(basename "$f")"; then
+      ok "$f is what 'blueprint export' writes"
+    else
+      bad "$f is what 'blueprint export' writes"
+      diff "$f" "$TMP/export/$(basename "$f")" | head -10
+    fi
+  done
+  if cmp -s examples/paper/export/assets/*-cover.png examples/paper/blueprint/appendix/cover.png \
+     && [ -s "$TMP/export/paper-whole-source.zip" ]; then
+    ok "export packages the image a body names with the TeX"
+  else
+    bad "export packages the image a body names with the TeX"
+  fi
+  "$BP" export --root examples/paper --scope no-such-part --tex-only -o "$TMP/export" > "$TMP/export.bad" 2>&1
+  status=$?
+  if [ "$status" -eq 2 ] && grep -q "there is no object 'no-such-part'" "$TMP/export.bad"; then
+    ok "export refuses a part that does not exist (exit 2)"
+  else
+    bad "export refuses a part that does not exist (exit $status)"; cat "$TMP/export.bad"
+  fi
+  "$BP" export --root examples/paper --scope proof/lem-tube --tex-only -o "$TMP/export" > "$TMP/export.bad" 2>&1
+  status=$?
+  if [ "$status" -eq 2 ] && grep -q "is read as part of 'lem-tube'" "$TMP/export.bad"; then
+    ok "export says a proof is read with its statement (exit 2)"
+  else
+    bad "export says a proof is read with its statement (exit $status)"; cat "$TMP/export.bad"
+  fi
+  if "$BP" export --root examples/paper --list > "$TMP/export.list" 2>&1 \
+     && grep -q "^refines	thm-fip	2.2.2	Compactness by closed sets	2 level(s)" "$TMP/export.list"; then
+    ok "export --list lists the parts with their levels"
+  else
+    bad "export --list lists the parts with their levels"; cat "$TMP/export.list"
+  fi
+  env PATH="$(dirname "$(command -v node)")" "$BP" export --root examples/paper --scope products \
+    -o "$TMP/export.notex" > "$TMP/export.notex.log" 2>&1
+  status=$?
+  if [ "$status" -eq 3 ] && grep -q 'no TeX engine' "$TMP/export.notex.log" \
+     && [ -s "$TMP/export.notex/paper-3-products.tex" ] && [ ! -e "$TMP/export.notex/paper-3-products.pdf" ]; then
+    ok "export without TeX writes the .tex, no PDF, and exits 3"
+  else
+    bad "export without TeX writes the .tex, no PDF, and exits 3 (exit $status)"; cat "$TMP/export.notex.log"
+  fi
+
+  if command -v pdflatex > /dev/null 2>&1; then
+    rm -rf "$TMP/site.pdf"
+    if "$BP" site --root examples/paper -o "$TMP/site.pdf" --pdf > "$TMP/site.pdf.log" 2>&1 \
+       && grep -q 'exports: 25 made, 0 already there, 0 failed' "$TMP/site.pdf.log"; then
+      ok "site --pdf prepares every export the dialog offers"
+    else
+      bad "site --pdf prepares every export the dialog offers"; cat "$TMP/site.pdf.log"
+    fi
+    if "$BP" site --root examples/paper -o "$TMP/site.pdf" --pdf > "$TMP/site.pdf.log" 2>&1 \
+       && grep -q 'exports: 0 made, 25 already there, 0 failed' "$TMP/site.pdf.log"; then
+      ok "site --pdf again reuses what is prepared for the same snapshot"
+    else
+      bad "site --pdf again reuses what is prepared for the same snapshot"; cat "$TMP/site.pdf.log"
+    fi
+  else
+    echo "  skip site --pdf (no pdflatex on PATH; nix-shell -p texliveMedium runs it)"
+  fi
+
+  # The local server's export API checks what it is asked before it runs
+  # anything.  Without TeX on its PATH it says so; with it, it makes the PDF.
+  if command -v python3 > /dev/null 2>&1; then
+    rm -rf "$TMP/site.api"
+    "$BP" site --root examples/paper -o "$TMP/site.api" > /dev/null 2>&1
+    port=$((20000 + RANDOM % 20000))
+    python3 web/comments-server.py --port "$port" --directory "$TMP/site.api" \
+      --comments "$TMP/comments.api" --assets-root examples/paper > "$TMP/api.log" 2>&1 &
+    api=$!
+    for _ in $(seq 1 50); do curl -s "http://127.0.0.1:$port/api/export" > /dev/null 2>&1 && break; sleep 0.1; done
+    post () { curl -s -o "$TMP/api.out" -w '%{http_code}' -H 'Content-Type: application/json' \
+      --data "$1" "http://127.0.0.1:$port/api/export"; }
+    if [ "$(post '{"snapshot":"../../etc/passwd","depth":"all"}')" = 400 ] \
+       && [ "$(post '{"snapshot":"blueprint.json","depth":"; rm -rf /"}')" = 400 ] \
+       && [ "$(post '{"snapshot":"blueprint.json","scope":"no-such"}')" = 400 ] \
+       && [ "$(curl -s -o /dev/null -w '%{http_code}' --data 'x' "http://127.0.0.1:$port/api/export")" = 415 ]; then
+      ok "the export API refuses a bad request before running anything"
+    else
+      bad "the export API refuses a bad request before running anything"; cat "$TMP/api.out"; tail "$TMP/api.log"
+    fi
+    if command -v pdflatex > /dev/null 2>&1; then
+      code=$(post '{"snapshot":"blueprint.json","scope":"products","depth":"all","appendices":true}')
+      pdf=$(sed -n 's/.*"pdf": *"\([^"]*\)".*/\1/p' "$TMP/api.out")
+      base=$(sed -n 's/.*"base": *"\([^"]*\)".*/\1/p' "$TMP/api.out")
+      if [ "$code" = 200 ] && [ -n "$pdf" ] \
+         && [ "$(curl -s "http://127.0.0.1:$port/$base$pdf" | head -c 5)" = '%PDF-' ]; then
+        ok "the export API makes the PDF and the site serves it"
+      else
+        bad "the export API makes the PDF and the site serves it ($code)"; cat "$TMP/api.out"
+      fi
+    else
+      code=$(post '{"snapshot":"blueprint.json","scope":"products"}')
+      if [ "$code" = 503 ] && grep -q 'not installed' "$TMP/api.out"; then
+        ok "the export API says when TeX is not installed (503)"
+      else
+        bad "the export API says when TeX is not installed ($code)"; cat "$TMP/api.out"
+      fi
+    fi
+    kill "$api" 2> /dev/null
+    wait "$api" 2> /dev/null
+  fi
+else
+  echo "  skip blueprint export (no node on PATH)"
+fi
+
 # The website's own tests, when node is available (it is on GitHub's runners; on
 # a NixOS host without it, `nix-shell -p nodejs_22 --run ./test.sh` runs them).
+# export-compile.test.mjs needs pdflatex as well, and says so when it is not there.
 if command -v node > /dev/null 2>&1; then
-  for t in web/test/model.test.mjs web/test/app.test.mjs; do
+  for t in web/test/model.test.mjs web/test/app.test.mjs web/test/export.test.mjs web/test/export-compile.test.mjs; do
     if node "$t" > "$TMP/$(basename "$t").txt" 2>&1; then
       ok "$t: $(tail -1 "$TMP/$(basename "$t").txt")"
     else

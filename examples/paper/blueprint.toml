@@ -1,0 +1,12 @@
+name  = "paper"
+title = "Compactness through finite intersections"
+dir   = "blueprint"
+
+defaultCollapse = "refines"
+
+# Handed to the website as KaTeX macros, and to the PDF export as LaTeX ones.
+[katex.macros]
+"\\cl"    = "\\overline{#1}"
+"\\Opens" = "\\mathcal{O}(#1)"
+"\\Top"   = "\\mathbf{Top}"
+"\\fam"   = "\\mathcal{#1}"

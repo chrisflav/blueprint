@@ -302,6 +302,8 @@ export async function chromium({ width = 1400, height = 900, port = 9222, launch
 
   const d = {
     name: 'chromium',
+    // The DevTools protocol itself, for what has no portable form (downloads).
+    cdp: send,
     async open(url) {
       await send('Page.navigate', { url });
       // Page.loadEventFired is not worth a listener here: the suite polls for
