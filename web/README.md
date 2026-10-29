@@ -126,6 +126,15 @@ The reduction (`transitiveReduction` in `model.js`) works
 Hiding everything it says loses no reachability. The status line counts the
 arcs it hid.
 
+Expanding a section enters it: the level it was opened from — every node,
+title and arc drawn outside it — is blurred, faded and out of reach (no
+clicks, no Tab) until the reader goes back up, with *↑ Back to …* at the top
+left of the stage or the section's own −. Going down another level does the
+same again, one level at a time. The section entered is the innermost of the
+open ones when they nest one inside the next (`enteredSection` in
+`graph.js`); with sections open side by side, as after *Expand all*, there is
+no one level to be in and nothing is blurred.
+
 The progress route carries the "All countable objects" listing's search and
 filters, so a filtered listing is a link too: `q=<search>`, `kind=<kind>`,
 `status=<derived status, or none, or unproved>`, `under=<id>` (objects that id
@@ -272,6 +281,18 @@ style for a shared link; otherwise the reader's last pick is kept in
 `localStorage` (`blueprint.theme`), and a reader who has not picked one sees
 the project's style, `project.theme` (`[site] theme` in `blueprint.toml`), or
 else the default. The registry is `THEMES` in `app.js`.
+
+### Hiding the progress
+
+*Hide progress* in the top bar takes away everything that says how far the
+formalization has got, for a reader who wants the mathematics alone: the
+status badges (and whether a Lean declaration exists), the progress bars, the
+top bar's percentage, the Progress tab, and in the graph the status colours
+of the nodes, the status filter and the fills of the key. A status filter in
+a graph link waits until the progress is shown again. *Show progress* brings
+it all back. The choice is the reader's, kept in `localStorage`
+(`blueprint.progress`); while it is hidden `<html>` carries
+`data-progress="hidden"`, and `app.showProgress` is false for the pages.
 
 ### The intro
 

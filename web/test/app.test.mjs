@@ -1115,6 +1115,48 @@ await check('"hide appendix" is offered only when there is an appendix to hide',
   ok(!labels.includes('hide appendix'), 'offered on a snapshot without an appendix');
 });
 
+await check('Hide progress takes the statuses, bars and Progress tab away; Show brings them back', async () => {
+  const aside = dom.document.getElementById('topbar-aside');
+  const toggle = () => aside.querySelector('button.progress-toggle');
+  const html = dom.document.documentElement;
+  const badges = () => root.querySelectorAll('span.badge').filter((b) => /\bstatus-/.test(b.className));
+  await go('#/object/thm-tychonoff');
+  eq(toggle().textContent, 'Hide progress', 'the button offers to hide');
+  ok(aside.querySelector('a.row'), 'the top bar shows the progress figure');
+  ok(badges().length > 0, 'an object page shows its status');
+  ok(root.querySelectorAll('.bar').length > 0, 'and its progress');
+  await go('#/document?collapse=refines');
+  ok(root.querySelectorAll('.doc-progress').length > 0, 'the document shows progress bars');
+
+  fire(toggle(), 'click');
+  await tick(5);
+  try {
+    eq(app.showProgress, false, 'the progress is hidden');
+    eq(html.getAttribute('data-progress'), 'hidden', 'for the stylesheet too, which drops the tab');
+    eq(toggle().textContent, 'Show progress', 'the button offers to show');
+    eq(aside.querySelector('a.row'), null, 'no progress figure in the top bar');
+    eq(root.querySelectorAll('.doc-progress').length, 0, 'no progress bars in the document');
+    await go('#/object/thm-tychonoff');
+    eq(badges().length, 0, 'no status on an object page');
+    eq(root.querySelectorAll('.bar').length, 0, 'nor progress');
+    await go('#/graph?collapse=refines&status=proved');
+    const lbls = root.querySelectorAll('.toolbar span.lbl').map((l) => l.textContent);
+    ok(lbls.includes('edges') && !lbls.includes('status'), 'the graph offers no status filter');
+    ok(!root.querySelector('.legend').textContent.includes('no Lean ref'), 'and its key no fills');
+    await go('#/progress');
+    ok(root.querySelector('button'), 'the Progress page offers to show the progress');
+    eq(root.querySelectorAll('table').length, 0, 'and shows none');
+  } finally {
+    fire(toggle(), 'click');
+    await tick(5);
+  }
+  eq(app.showProgress, true, 'shown again');
+  eq(html.getAttribute('data-progress'), null, 'the tab is back');
+  ok(root.querySelectorAll('table').length > 0, 'the Progress page is drawn again');
+  await go('#/graph?collapse=refines');
+  ok(root.querySelector('.legend').textContent.includes('no Lean ref'), 'the graph key has its fills again');
+});
+
 await check('a hidden appendix leaves the ELK graph with its contents and arcs; a hidden object always does', () => {
   const node = (id, kind) => ({ id, kind, boundary: [], attrs: {}, body: '', depth: 0 });
   const edge = (kind, src, tgt) => ({ id: `${kind}/${src}/${tgt}`, kind, attrs: {}, body: '', depth: 1,
@@ -1240,6 +1282,59 @@ await check('clicking a node brings its edges and their far ends forward and fad
   ok(edges.every((e) => !e.classList.contains('focus')), 'an edge is still lit');
   const back = e0.querySelector('path').getAttribute('marker-end');
   ok(!back || !back.endsWith('-focus)'), `the edge kept the accent head ${back}`);
+});
+
+await check('the section entered is the innermost of a nest of open ones, and none when they sit side by side', () => {
+  const view = (expand) => M.makeView(app.model, 'refines', expand);
+  eq(graphMod.enteredSection(view([])), null, 'nothing open');
+  eq(graphMod.enteredSection(view(['sec-main'])), 'sec-main', 'one open');
+  eq(graphMod.enteredSection(view(['sec-main', 'sec-main-induction'])), 'sec-main-induction', 'the innermost');
+  eq(graphMod.enteredSection(view(['sec-main', 'sec-foundations'])), null, 'two side by side');
+});
+
+await check('inside a section the level it was opened from is unreadable until the reader goes back up', async () => {
+  const w = dom.workers.created[dom.workers.created.length - 1];
+  const layout = async (hash) => {
+    await go(hash);
+    const req = lastLayoutMessage(w);
+    w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await tick(5);
+  };
+  const layer = root.querySelector('g.glayer');
+  const back = root.querySelector('button.graph-back');
+  const nodeAt = (nid) => root.querySelectorAll('.gnode').find((n) => n.dataset.nid === nid);
+  const outside = (sel) => root.querySelectorAll(sel).filter((g) => g.classList.contains('outside'));
+
+  await layout('#/graph?collapse=refines&expand=sec-main');
+  ok(layer.classList.contains('entered'), 'the layer is not marked as entered');
+  ok(!nodeAt('sec-main').classList.contains('outside'), 'the section itself is unreadable');
+  ok(!nodeAt('thm-tychonoff').classList.contains('outside'), 'what is inside it is unreadable');
+  ok(nodeAt('sec-foundations').classList.contains('outside'), 'the level it was opened from is readable');
+  eq(nodeAt('sec-foundations').getAttribute('tabindex'), '-1', 'and still reached with Tab');
+  for (const e of root.querySelectorAll('.gedge')) {
+    const inside = (nid) => nid === 'sec-main' || nid === 'thm-tychonoff' || nid === 'sec-main-induction';
+    eq(e.classList.contains('outside'), !(inside(e.dataset.src) && inside(e.dataset.tgt)),
+      `${e.dataset.src} -> ${e.dataset.tgt}`);
+  }
+  eq(back.hidden, false, 'no way back');
+  eq(back.textContent, '↑ Back to the top level', 'the way back');
+
+  await layout('#/graph?collapse=refines&expand=sec-main,sec-main-induction');
+  ok(nodeAt('sec-main').classList.contains('outside'), 'one level down, the section above is unreadable');
+  ok(!nodeAt('lem-finite-subcover').classList.contains('outside'), 'and the new level readable');
+  ok(back.textContent.endsWith('Back to ' + M.titleOf(app.model.byId.get('sec-main'))), back.textContent);
+
+  fire(back, 'click');
+  const req = lastLayoutMessage(w);
+  w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+  await tick(5);
+  eq(new URLSearchParams(app.route.params).get('expand'), 'sec-main', 'Back closes the section');
+  ok(!nodeAt('sec-main').classList.contains('outside'), 'the level above is readable again');
+
+  await layout('#/graph?collapse=refines');
+  ok(!layer.classList.contains('entered'), 'at the top nothing is entered');
+  eq(outside('.gnode').length + outside('.gtitle').length + outside('.gedge').length, 0, 'and nothing unreadable');
+  eq(back.hidden, true, 'nor a way back');
 });
 
 await check('a blocked worker falls back to laying out on the main thread', async () => {

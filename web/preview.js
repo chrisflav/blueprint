@@ -139,7 +139,7 @@ export function leanCard(ctx, id) {
       : el('code', name),
     fact && fact.kind ? el('span.chip', fact.kind) : null,
     // Without any facts there is nothing to say of one name in particular.
-    !m.facts ? null
+    !m.facts || !ctx.showProgress ? null
       : !fact ? el('span.badge.status-absent', el('span.dot'), 'no facts')
         : fact.exists === false ? el('span.badge.status-missing', el('span.dot'), 'does not exist')
           : fact.status ? ctx.statusBadge(fact.status) : null));

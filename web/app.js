@@ -493,6 +493,7 @@ export function objLink(m, id, extra) {
 }
 
 export function statusBadge(status, opts = {}) {
+  if (!app.showProgress) return null;
   const s = status || 'none';
   const label = status ? model.STATUS_LABEL[status] || status : opts.noneLabel || 'no Lean ref';
   return el('span', { class: 'badge status-' + s, title: 'derived status: ' + label },
@@ -508,6 +509,7 @@ export function levelBadge(level) {
 }
 
 export function progressBar(p, opts = {}) {
+  if (!app.showProgress) return null;
   if (!p || !p.total) return el('span.muted.small', '—');
   const pct = Math.round((100 * p.proved) / p.total);
   if (p.mix) {
@@ -575,6 +577,7 @@ const app = {
   baseUrl: null,
   history: null, // {snapshots:[...]} from data/index.json, or null
   viewingSha: null, // non-null while a historical snapshot is displayed
+  showProgress: true, // false while the reader hides the formalization progress
 
   // routing
   route: null,
@@ -654,6 +657,9 @@ const app = {
     }
     render();
   },
+
+  /** Show or hide the formalization progress, remembered for the reader. */
+  setShowProgress: (shown) => setShowProgress(shown),
 
   /** Known object ids, for `[slug]` link resolution. */
   knownIds() {
@@ -789,6 +795,54 @@ function setTheme(id) {
   render();
 }
 
+// ---------------------------------------------------------------------------
+// formalization progress, shown or hidden
+// ---------------------------------------------------------------------------
+
+// A reader who wants the mathematics alone can hide everything that says how
+// far the formalization has got: the statuses and their badges, the colours
+// of the graph's nodes, the progress bars and the Progress tab.  The choice
+// is the reader's, kept in localStorage; `data-progress="hidden"` on <html>
+// is for the stylesheet.
+const PROGRESS_KEY = 'blueprint.progress';
+
+/** Whether the page shows the progress: yes, unless the reader hid it. */
+export function currentShowProgress() {
+  try {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(PROGRESS_KEY) : null;
+    return saved !== 'hidden';
+  } catch (e) { /* private mode */ }
+  return true;
+}
+
+/** Show or hide the progress on the pages drawn from now on. */
+export function applyShowProgress(shown) {
+  app.showProgress = !!shown;
+  const root = document.documentElement;
+  if (app.showProgress) root.removeAttribute('data-progress');
+  else root.setAttribute('data-progress', 'hidden');
+}
+
+/** The reader's choice: remember it and draw the top bar and the page again. */
+function setShowProgress(shown) {
+  try { localStorage.setItem(PROGRESS_KEY, shown ? 'shown' : 'hidden'); } catch (e) { /* private mode */ }
+  applyShowProgress(shown);
+  updateChrome();
+  render();
+}
+
+function progressToggle() {
+  const shown = app.showProgress;
+  return el('button.progress-toggle', {
+    type: 'button',
+    'aria-pressed': shown ? 'false' : 'true',
+    title: shown
+      ? 'Hide the formalization progress: statuses, progress bars and the Progress tab'
+      : 'Show the formalization progress again',
+    onclick: () => setShowProgress(!shown),
+  }, shown ? 'Hide progress' : 'Show progress');
+}
+
 function themeMenu() {
   return el('select.theme-select', {
     title: 'The style of the site (experimental: to try the candidates)',
@@ -809,13 +863,16 @@ function updateChrome() {
   const aside = document.getElementById('topbar-aside');
   clear(aside);
   aside.appendChild(themeMenu());
-  if (app.model) {
+  aside.appendChild(progressToggle());
+  if (app.model && app.showProgress) {
     const { counts, total } = model.statusCounts(app.model);
     const pct = total ? Math.round((100 * counts.proved) / total) : 0;
     aside.appendChild(
       el('a.row', { href: '#/progress', title: `${counts.proved} of ${total} countable objects proved` },
         el('span.bar', { style: { width: '70px' } }, el('span', { style: { width: pct + '%' } })),
         el('span.small', `${pct}%`)));
+  }
+  if (app.model) {
     const errs = app.model.checks.filter((c) => c.level === 'error').length;
     if (errs) {
       aside.appendChild(el('a', { href: '#/checks?level=error' }, levelBadge('error'), ' ' + errs));
@@ -1071,6 +1128,7 @@ function showLoadError(err, url) {
 
 async function boot() {
   applyTheme(currentTheme()); // before anything is drawn, so nothing flashes
+  applyShowProgress(currentShowProgress());
   const url = dataUrlFromQuery();
   app.dataUrlOriginal = url;
   try {
