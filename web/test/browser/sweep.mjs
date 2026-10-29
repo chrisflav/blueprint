@@ -2887,7 +2887,30 @@ async function runBrowser(name, f) {
     // Past index.html's own "Loading blueprint…" placeholder: a large
     // snapshot takes long enough to arrive that the boot check otherwise ran
     // before the data, and the deferred CDN scripts, were there.
-    await waitFor(d, `var a = document.querySelector('#app'); return !!a.firstElementChild && !a.querySelector('.loading');`, { timeout: 60000, label: 'first paint' });
+    const firstPaint = () => waitFor(d, `var a = document.querySelector('#app'); return !!a.firstElementChild && !a.querySelector('.loading');`, { timeout: 60000, label: 'first paint' });
+    await firstPaint();
+    // The progress starts hidden for a reader who has not chosen (app.js).
+    // The profile may remember an earlier run's choice: forget it first.
+    await d.js(`try { localStorage.removeItem('blueprint.progress'); } catch (e) {} return true;`);
+    await d.reload();
+    await firstPaint();
+    if (SECTIONS.has('boot')) await check(d, 'boot/progress-starts-hidden', async () => {
+      const s = await d.js(`
+        var b = document.querySelector('#topbar-aside .progress-toggle');
+        var tab = document.querySelector('#tabs a[data-view=progress]');
+        return { attr: document.documentElement.getAttribute('data-progress'), button: b && b.textContent,
+                 tab: tab ? getComputedStyle(tab).display : null,
+                 badges: document.querySelectorAll('#app .badge[class*="status-"]').length };
+      `);
+      return {
+        ok: s.attr === 'hidden' && s.button === 'Show progress' && s.tab === 'none',
+        evidence: `data-progress=${j(s.attr)}, button=${j(s.button)}, Progress tab display=${j(s.tab)}, status badges=${s.badges}`,
+      };
+    });
+    // Everything after covers the progress too: show it, as a reader would.
+    await d.js(`localStorage.setItem('blueprint.progress', 'shown'); return true;`);
+    await d.reload();
+    await firstPaint();
     const hooked = await d.installHooks();
     if (SECTIONS.has('boot')) await check(d, 'boot/loads-the-snapshot', async () => {
       const s = await d.js(`

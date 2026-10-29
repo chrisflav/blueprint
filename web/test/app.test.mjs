@@ -63,7 +63,7 @@ const app = (await import(path.join(webDir, 'app.js'))).default;
 await tick(20);
 
 const root = dom.document.getElementById('app');
-const { shieldMath, THEMES, applyTheme, currentTheme } = await import(path.join(webDir, 'app.js'));
+const { shieldMath, THEMES, applyTheme, currentTheme, currentShowProgress } = await import(path.join(webDir, 'app.js'));
 
 await check('math shielding preserves wrapped formulas and numeric starts', () => {
   for (const formula of [
@@ -98,6 +98,28 @@ await check('the app loaded the snapshot', () => {
   ok(app.model, 'no model');
   eq(app.model.objects.length, 55, 'object count');
 });
+
+await check('the progress starts hidden until the reader shows it', () => {
+  eq(app.showProgress, false, 'shown to a reader who has not asked for it');
+  eq(dom.document.documentElement.getAttribute('data-progress'), 'hidden', 'the Progress tab is not hidden');
+  const toggle = dom.document.getElementById('topbar-aside').querySelector('button.progress-toggle');
+  eq(toggle && toggle.textContent, 'Show progress', 'the top bar offers to show it');
+  const store = new Map();
+  global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => { store.set(k, String(v)); } };
+  try {
+    eq(currentShowProgress(), false, 'no choice: hidden');
+    store.set('blueprint.progress', 'shown');
+    eq(currentShowProgress(), true, 'the reader showed it');
+    store.set('blueprint.progress', 'hidden');
+    eq(currentShowProgress(), false, 'the reader hid it');
+  } finally {
+    delete global.localStorage;
+  }
+});
+
+// The rest of the suite covers the progress too: show it.
+app.setShowProgress(true);
+await tick(5);
 
 await check('every route renders without falling over', async () => {
   for (const hash of ['#/graph', '#/document', '#/progress', '#/checks',
