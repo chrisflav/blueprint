@@ -620,6 +620,7 @@ function proofBlock(app, o, outline, known, refs) {
  * Every entry, in the list or in the chain, leads to its level that way
  * (`levelHref`): the page of its parent, scrolled to it, and opened.  When
  * that is this page the sidebar only scrolls the page there and opens it.
+ * The opened entry, clicked again, folds its entries away.
  */
 function levelSidebar(app, outline, pageEntry, focus, levelHref, toc) {
   const { el, clear } = app;
@@ -645,8 +646,22 @@ function levelSidebar(app, outline, pageEntry, focus, levelHref, toc) {
     opened = pageEntry;
   }
 
+  const redraw = (e, focusId) => {
+    draw();
+    // The link says so too, for a reload or a copy of it.
+    app.setParams({ focus: focusId }, { silent: true });
+    const a = toc.querySelector('a[data-id="' + e.id + '"]');
+    if (a && typeof a.focus === 'function') a.focus({ preventScroll: true });
+  };
   const go = (e) => (ev) => {
     if (ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return; // a new tab or window
+    if (e === opened && kids(e).length) {
+      // Clicked again: fold it, and leave the page where it is.
+      ev.preventDefault();
+      opened = null;
+      redraw(e, null);
+      return;
+    }
     // Its level is this page: scroll there and open it, without a rebuild.
     const t = (e.parent ? e.parent.id : null) === pageId && document.getElementById('doc-' + cssId(e.id));
     if (!t) return; // the link goes to its level
@@ -654,11 +669,7 @@ function levelSidebar(app, outline, pageEntry, focus, levelHref, toc) {
     t.scrollIntoView({ behavior: 'smooth', block: 'start' });
     level = e.parent;
     opened = e;
-    draw();
-    // The link says so too, for a reload or a copy of it.
-    app.setParams({ focus: e.id }, { silent: true });
-    const a = toc.querySelector('a[data-id="' + e.id + '"]');
-    if (a && typeof a.focus === 'function') a.focus({ preventScroll: true });
+    redraw(e, e.id);
   };
   const item = (e, cls) => el('li', {
     class: cls + (kids(e).length ? ' has-kids' : '') + (e === pageEntry ? ' current' : '') +

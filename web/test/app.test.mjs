@@ -633,6 +633,16 @@ await check('the sidebar lists the level the page writes out, the entry gone to 
   ok(ev.defaultPrevented, 'an entry of this level is scrolled to, not routed to');
   eq(opened().join(' '), 'sec-foundations', 'and opened instead');
   ok(/focus=sec-foundations/.test(global.location.hash), 'the link says so');
+  // Clicked again, it folds, and the page stays.
+  const unfolded = entries().length;
+  ev = fire(link('sec-foundations'), 'click');
+  ok(ev.defaultPrevented, 'folding does not route');
+  eq(opened().length, 0, 'nothing opened');
+  ok(entries().length < unfolded, 'its entries folded away');
+  ok(!/focus=/.test(global.location.hash), 'nor in the link');
+  fire(link('sec-foundations'), 'click');
+  eq(opened().join(' '), 'sec-foundations', 'and a third click opens it again');
+  eq(entries().length, unfolded, 'with its entries back');
   // A section leads to its level: its chapter's page.
   fire(link('sec-foundations'), 'click');
   eq(link('sec-main').getAttribute('href'), '#/document?collapse=refines&depth=1&focus=sec-main', 'a chapter leads to the top level');
