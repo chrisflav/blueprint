@@ -70,7 +70,7 @@ export function previewCard(ctx, id) {
   const own = o.attrs && typeof o.attrs.title === 'string' && o.attrs.title ? o.attrs.title : null;
   const lead = of ? 'Proof' : ref ? ref.word + ' ' + ref.number : M.kindWord(o.kind);
   const title = of ? 'of ' + M.titleOf(m.byId.get(of)) + (own ? ' (' + own + ')' : '') : own;
-  const status = M.statusOf(m, id);
+  const status = M.badgeStatusOf(m, id);
   const head = el('div.preview-head',
     el('span.preview-lead', lead),
     title ? el('span.preview-title', title) : null,
@@ -128,7 +128,7 @@ export function leanCard(ctx, id) {
   const ref = ctx.referenceFor(id);
   const facts = M.leanFactsFor(m, o);
   const docgen = m.project && m.project.docgen;
-  const status = M.statusOf(m, id);
+  const status = M.badgeStatusOf(m, id);
   const head = el('div.preview-head',
     el('span.preview-lead', facts.length === 1 ? 'Lean declaration' : `Lean declarations (${facts.length})`),
     el('span.preview-title', 'of ' + (ref ? ref.word + ' ' + ref.number : M.titleOf(o))),

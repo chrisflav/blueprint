@@ -2010,7 +2010,7 @@ function renderSide(app, st, view, quot) {
       onclick: () => select(app, null),
     }, '\u2715')));
 
-  const status = M.statusOf(m, id);
+  const status = M.badgeStatusOf(m, id);
   const heading = side.appendChild(el('h2', M.titleOf(o)));
   side.appendChild(el('div.meta', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status)));
   side.appendChild(el('div.obj-id', id));

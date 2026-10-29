@@ -530,6 +530,23 @@ check('status lookup covers every value of the enum', () => {
   sameSet(seen, M.STATUSES, 'the sample exercises every status');
 });
 
+check('a remark that names no Lean declaration shows no status badge', () => {
+  const m = {
+    status: { rem: 'absent', 'rem-lean': 'proved', thm: 'absent' },
+    byId: new Map([
+      ['rem', { id: 'rem', kind: 'remark' }],
+      ['rem-lean', { id: 'rem-lean', kind: 'remark' }],
+      ['thm', { id: 'thm', kind: 'theorem' }],
+    ]),
+    kinds: { remark: { countable: false }, theorem: { countable: true } },
+  };
+  eq(M.badgeStatusOf(m, 'rem'), null, 'remark without Lean');
+  eq(M.badgeStatusOf(m, 'rem-lean'), 'proved', 'remark with Lean');
+  eq(M.badgeStatusOf(m, 'thm'), 'absent', 'theorem without Lean');
+  eq(M.badgeStatusOf(model, 'def-metric'), 'absent', 'a definition still shows absent');
+  eq(M.badgeStatusOf(model, 'sec-main'), null, 'a section still shows none');
+});
+
 check('progress lookup', () => {
   const p = M.progressOf(model, 'refines', 'sec-foundations');
   eq(p.proved, 3, 'proved');

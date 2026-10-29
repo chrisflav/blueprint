@@ -204,7 +204,7 @@ export function render(root, app) {
 
     const anchor = entry.duplicate ? null : 'doc-' + cssId(o.id);
     const hLevel = isHead ? 1 : Math.min(5, 2 + rel);
-    const status = M.statusOf(m, o.id);
+    const status = M.badgeStatusOf(m, o.id);
     const prog = M.progressMixOf(m, kind, o.id);
 
     // Sections are headings; everything else is a numbered statement in the
@@ -501,7 +501,7 @@ function stepBlock(app, o, outline, known, refs, seen = new Set()) {
   const { el } = app;
   const m = app.model;
   const tgt = M.boundaryEntry(o, 'tgt');
-  const status = M.statusOf(m, o.id);
+  const status = M.badgeStatusOf(m, o.id);
   // An id, so `?focus=` on a step lands on it.
   const block = el('div.step', { id: 'doc-' + cssId(o.id) },
     el('div.step-head',
