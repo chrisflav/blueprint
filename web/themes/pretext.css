@@ -104,6 +104,8 @@ button, select, input[type="text"], input[type="search"] { border-radius: 0; }
   border-bottom: 1px solid var(--ptx-rule);
 }
 .toc-levels li:not(.toc-up) > a:hover { background: var(--accent-soft); text-decoration: none; }
+.toc-levels li.open > a { font-weight: 600; }
+.toc-levels li.open > ul > li > a { padding-left: 2.4em; }
 
 /* ------------------------------------------------------- the text */
 

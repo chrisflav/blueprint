@@ -1568,28 +1568,63 @@ async function pageChecks(d, f) {
     };
   });
 
+  // A contents row leads to its level: the top level written out, scrolled
+  // to the chapter, which the sidebar shows opened on its entries.
+  const SIDEBAR = `
+    var own = function (li) { return li.querySelector('a').getAttribute('data-id'); };
+    return { ups: Array.prototype.map.call(document.querySelectorAll('nav.toc li.toc-up'), own),
+             opened: Array.prototype.map.call(document.querySelectorAll('nav.toc li.open'), own),
+             links: Array.prototype.map.call(document.querySelectorAll('nav.toc a'), function (a) { return a.getAttribute('data-id'); }) };
+  `;
   await check(d, 'document/click-into-a-chapter', async () => {
     if (!f.chapter) return { skip: true, evidence: 'no top-level entry with children and a next sibling' };
     const entry = out.byId.get(f.chapter);
     await d.js('window.scrollTo(0, 0); return 0;');
     const box = await d.js(`
       var a = Array.prototype.slice.call(document.querySelectorAll('.doc-contents a')).filter(function (x) {
-        return x.getAttribute('href').indexOf(${j('#/document/' + encodeURIComponent(f.chapter) + '?')}) === 0; })[0];
+        return decodeURIComponent(x.getAttribute('href')).indexOf(${j('focus=' + f.chapter)}) >= 0; })[0];
       if (!a) return null;
       var r = inView(a);
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: (a.textContent || '').trim() };
       ${IN_VIEW}
     `);
     if (!box) return { ok: false, evidence: `no contents row for ${f.chapter} on the top page` };
-    await clickAndWait(d, box, `return !!document.querySelector('.doc-entry.page-head')`, 'chapter page');
-    await sleep(400);
+    await clickAndWait(d, box, `return document.querySelectorAll('.doc-entry').length > 0 && !!document.querySelector('nav.toc li.open')`, 'the top level');
+    await sleep(900);
     const s = await d.js(PAGE_STATE);
+    const side = await d.js(SIDEBAR);
+    const r = await d.js(ENTRY_IN_VIEW(f.chapter));
+    const kids = entry.children.filter((c) => !c.duplicate && !c.text).map((c) => c.id);
+    return {
+      ok: s.hash.startsWith('#/document?') && /depth=1/.test(s.hash) && s.entries === out.roots.length && !s.pageHead
+        && side.ups.length === 0 && side.opened.join() === f.chapter && kids.every((k) => side.links.includes(k)) && r.inView,
+      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (top level ${out.roots.length}), ${entry.number} in view=${r.inView}; `
+        + `sidebar chain ${j(side.ups)}, opened ${j(side.opened)}, its ${kids.length} entries listed=${kids.every((k) => side.links.includes(k))}`,
+    };
+  });
+
+  // An entry of the opened chapter leads to its level: the chapter's page.
+  await check(d, 'document/sidebar-goes-down-a-level', async () => {
+    if (!f.chapter) return { skip: true, evidence: 'no chapter fixture' };
+    const entry = out.byId.get(f.chapter);
+    const child = entry.children.find((c) => !c.duplicate && !c.text);
+    const box = await d.js(`
+      var a = document.querySelector('nav.toc a[data-id="${child.id}"]');
+      if (!a) return null; a.scrollIntoView({ block: 'nearest' });
+      var r = a.getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2, text: (a.textContent || '').trim() };
+    `);
+    if (!box) return { ok: false, evidence: `no sidebar link to ${child.id}` };
+    await clickAndWait(d, box, `return decodeURIComponent(location.hash).indexOf(${j(docPath(f.chapter))}) === 0
+      && !!document.querySelector('.doc-entry.page-head')`, 'chapter page');
+    await sleep(900);
+    const s = await d.js(PAGE_STATE);
+    const side = await d.js(SIDEBAR);
     const want = M.documentPageEntries(out, f.chapter, 1).length;
     return {
-      ok: s.hash.startsWith(docPath(f.chapter)) && s.entries === want && s.crumbs >= 1 && s.pagers >= 1
-        && s.scrollY === 0 && s.ids[0] === anchorOf(f.chapter),
-      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, page head ${j(s.pageHead)} (${entry.number}), ${s.entries} entries (want ${want}), `
-        + `${s.crumbs} breadcrumb links, ${s.pagers} pagers, scrollY=${s.scrollY}`,
+      ok: s.entries === want && s.crumbs >= 1 && s.pagers >= 1 && side.ups.join() === f.chapter && side.opened.join() === child.id
+        && !side.links.includes(out.roots.find((e) => e !== entry && !e.text && !e.duplicate).id),
+      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (want ${want}), ${s.crumbs} breadcrumb links, `
+        + `${s.pagers} pagers; sidebar chain ${j(side.ups)}, opened ${j(side.opened)}`,
     };
   });
 
