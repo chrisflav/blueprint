@@ -577,7 +577,7 @@ const app = {
   baseUrl: null,
   history: null, // {snapshots:[...]} from data/index.json, or null
   viewingSha: null, // non-null while a historical snapshot is displayed
-  showProgress: true, // false while the reader hides the formalization progress
+  showProgress: false, // true once the reader shows the formalization progress
 
   // routing
   route: null,
@@ -799,20 +799,21 @@ function setTheme(id) {
 // formalization progress, shown or hidden
 // ---------------------------------------------------------------------------
 
-// A reader who wants the mathematics alone can hide everything that says how
-// far the formalization has got: the statuses and their badges, the colours
-// of the graph's nodes, the progress bars and the Progress tab.  The choice
-// is the reader's, kept in localStorage; `data-progress="hidden"` on <html>
-// is for the stylesheet.
+// Everything that says how far the formalization has got — the statuses and
+// their badges, the colours of the graph's nodes, the progress bars and the
+// Progress tab — starts hidden, so the site opens on the mathematics alone; a
+// reader who wants it shows it with the top bar's button.  The choice is the
+// reader's, kept in localStorage; `data-progress="hidden"` on <html> is for
+// the stylesheet.
 const PROGRESS_KEY = 'blueprint.progress';
 
-/** Whether the page shows the progress: yes, unless the reader hid it. */
+/** Whether the page shows the progress: no, unless the reader asked for it. */
 export function currentShowProgress() {
   try {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(PROGRESS_KEY) : null;
-    return saved !== 'hidden';
+    return saved === 'shown';
   } catch (e) { /* private mode */ }
-  return true;
+  return false;
 }
 
 /** Show or hide the progress on the pages drawn from now on. */
