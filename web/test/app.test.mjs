@@ -1126,6 +1126,8 @@ await check('Hide progress takes the statuses, bars and Progress tab away; Show 
   ok(badges().length > 0, 'an object page shows its status');
   ok(root.querySelectorAll('.bar').length > 0, 'and its progress');
   await go('#/document?collapse=refines');
+  ok(root.querySelectorAll('.doc-contents .bar').length > 0, 'the contents show progress bars');
+  await go('#/document?collapse=refines&depth=1');
   ok(root.querySelectorAll('.doc-progress').length > 0, 'the document shows progress bars');
 
   fire(toggle(), 'click');
@@ -1136,6 +1138,8 @@ await check('Hide progress takes the statuses, bars and Progress tab away; Show 
     eq(toggle().textContent, 'Show progress', 'the button offers to show');
     eq(aside.querySelector('a.row'), null, 'no progress figure in the top bar');
     eq(root.querySelectorAll('.doc-progress').length, 0, 'no progress bars in the document');
+    await go('#/document?collapse=refines');
+    eq(root.querySelectorAll('.doc-contents .bar').length, 0, 'nor in the contents');
     await go('#/object/thm-tychonoff');
     eq(badges().length, 0, 'no status on an object page');
     eq(root.querySelectorAll('.bar').length, 0, 'nor progress');
