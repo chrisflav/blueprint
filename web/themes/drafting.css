@@ -258,11 +258,11 @@ table.grid th {
   font-weight: 700;
 }
 
-.doc-entry .head a:not(.num) {
+.doc-entry .head a:not(.num):not(.lean-mark) {
   color: var(--fg);
 }
 
-.doc-entry .head a:not(.num):hover {
+.doc-entry .head a:not(.num):not(.lean-mark):hover {
   color: var(--accent);
 }
 

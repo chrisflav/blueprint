@@ -5,7 +5,8 @@
 // in a listing) previews what it leads to: the reference ("Lemma 2.3") and
 // title, the status, the prose with its maths, a link on to the object page.
 // The document's "Lean" mark beside a heading (`leanMark`) opens a card of the
-// same kind with the object's Lean declarations; a tap opens that one too.  The pointer can move into the card, to scroll it, open a
+// same kind with the object's Lean declarations; like a link, a click or a tap
+// on it goes to the object page.  The pointer can move into the card, to scroll it, open a
 // folded proof or follow a link, and a link in the card opens a card of its
 // own beside it, so a chain of references can be read without leaving the
 // page.  Moving off the link and its cards closes them after a moment; so do
@@ -103,23 +104,24 @@ export function previewCard(ctx, id) {
 
 /**
  * The mark the document sets beside the heading of an object with Lean
- * declarations; resting on it, focusing it or tapping it opens `leanCard`.
+ * declarations; resting on it or focusing it opens `leanCard`, and it is a
+ * link to the object page, where the declarations are set out in full.
  * null for an object with none.
  */
 export function leanMark(ctx, o) {
   const n = M.leanNamesOf(o).length;
   if (!n) return null;
-  return ctx.el('button.lean-mark', {
-    type: 'button', 'data-lean': o.id,
+  return ctx.el('a.lean-mark', {
+    href: ctx.objectHref(o.id), 'data-lean': o.id,
     'aria-label': n === 1 ? 'Its Lean declaration' : `Its ${n} Lean declarations`,
   }, 'Lean', n > 1 ? ctx.el('span.lean-count', String(n)) : null);
 }
 
 /**
- * The card of an object's Lean declarations: each name, linked to its
- * documentation when the snapshot says where that is (`project.docgen`), with
- * its kind and status from the Lean facts.  The signatures are on the object
- * page, one click on.
+ * The card of an object's Lean declarations: each name, linked to the object
+ * page, where its signature is, with its kind and status from the Lean facts
+ * and a link to its documentation when the snapshot says where that is
+ * (`project.docgen`).
  */
 export function leanCard(ctx, id) {
   const { el } = ctx;
@@ -134,15 +136,16 @@ export function leanCard(ctx, id) {
     el('span.preview-title', 'of ' + (ref ? ref.word + ' ' + ref.number : M.titleOf(o))),
     status === null ? null : ctx.statusBadge(status));
   const rows = facts.map(({ name, fact }) => el('li',
-    docgen
-      ? el('a', { href: M.docgenUrl(docgen, name), target: '_blank', rel: 'noopener' }, el('code', name))
-      : el('code', name),
+    el('a.lean-name', { href: ctx.objectHref(id) }, el('code', name)),
     fact && fact.kind ? el('span.chip', fact.kind) : null,
     // Without any facts there is nothing to say of one name in particular.
     !m.facts || !ctx.showProgress ? null
       : !fact ? el('span.badge.status-absent', el('span.dot'), 'no facts')
         : fact.exists === false ? el('span.badge.status-missing', el('span.dot'), 'does not exist')
-          : fact.status ? ctx.statusBadge(fact.status) : null));
+          : fact.status ? ctx.statusBadge(fact.status) : null,
+    docgen
+      ? el('a.lean-docs', { href: M.docgenUrl(docgen, name), target: '_blank', rel: 'noopener' }, 'docs \u2197')
+      : null));
   const card = el('div.preview.lean-card', {
     role: 'dialog', 'aria-label': `Lean declarations of ${M.titleOf(o)}`, 'data-preview': id,
   },
@@ -188,13 +191,8 @@ export function setupPreviews(ctx) {
   on('pointerdown', (ev) => { if (levelOf(ev.target) < 0) closePreviews(); }, true);
   on('click', (ev) => {
     const t = triggerOf(ev.target);
-    if (isLeanMark(t)) {
-      // A tap has no hover to open the card, and a click is the plainest ask.
-      const c = cardOf(t);
-      if (!c) return;
-      cancelPending();
-      open({ anchor: t, ...c, level: levelOf(t) + 1, keyboard: false });
-    } else if (t && levelOf(t) >= 0) {
+    // The Lean mark is a link like any other: a click follows it.
+    if (t && levelOf(t) >= 0) {
       setTimeout(closePreviews, 0);
     }
   });

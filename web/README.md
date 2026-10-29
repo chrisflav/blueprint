@@ -323,12 +323,16 @@ capitalised, for every kind alike). The numbers are those of the active
 collapse order: the document's `collapse=`, the graph's `collapse=`, and the
 default order on the object page. The slug stays the link's tooltip.
 
-* In the document the reference stays in the paper: it links to where the
-  object is written out, on the same page (a click scrolls there) or on the
-  page it is read on, scrolled to it. The object page is one click further,
-  on the entry's title.
-* Everywhere else (object pages, the graph's side panel) it links to the
-  object page, as before; only the text changed.
+* A click jumps to the level of what it names. In the document, and from
+  object pages, the intro and preview cards, that is the document's page for
+  it: its own page when it has entries below it (a section, or a statement
+  with refinements), and otherwise the page it is read on, scrolled to it,
+  which is the same page when it is written out there (a click scrolls). The
+  object page is one click further, on the entry's title.
+* In the graph's side panel and its cards it is the level of the graph the
+  object is drawn at: the sections above it opened, the object itself too
+  when it has contents (so the reader is in it), and the object selected; the
+  rest of the view (filters, collapse order) is kept.
 * When the prose already says the word, "by Lemma [lem-x]", only the number
   is added, so it does not read "Lemma Lemma 2.3".
 * An object the document gives no number keeps its slug as the text: one
@@ -393,11 +397,12 @@ statement, the way a hover preview works on a wiki (`preview.js`):
 
 In the document, the heading of every object with Lean declarations carries a
 small **Lean** mark after its title, with their number when there are
-several ("Lean 2"). Resting on it, focusing it, or clicking or tapping it
-(so it works on a phone too) opens a card of the same kind listing the
-declarations: each name, linked to its doc-gen4 page when the snapshot has a
-`project.docgen`, with its kind and status from the Lean facts. The
-signatures are on the object page, which the card's *Signatures →* opens.
+several ("Lean 2"). It is a link to the object page, where the declarations
+are set out with their signatures; a click or a tap goes there. Resting on
+it or focusing it opens a card of the same kind listing the declarations:
+each name, a link to the object page too, with its kind and status from the
+Lean facts and, when the snapshot has a `project.docgen`, *docs ↗* to its
+doc-gen4 page.
 
 It is one set of listeners on the document, so it covers every page without
 the pages knowing about it.

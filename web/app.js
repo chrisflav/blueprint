@@ -311,11 +311,10 @@ export function proofToggle() {
 
 /**
  * Cross references outside the document view — object pages, the graph's side
- * panel — read as the document numbers them, along the collapse order the
- * route has chosen (the graph's `collapse=`) or else the default one, so the
- * number a reader sees is the one they will find in the document.  They still
- * lead to the object page: that is the page these views link objects to, and
- * the document is one click further on from there.
+ * panel, the intro, the cards — read as the document numbers them, along the
+ * collapse order the route has chosen (the graph's `collapse=`) or else the
+ * default one, so the number a reader sees is the one they will find in the
+ * document.  They lead to the level of what they name (`levelHref`).
  */
 function pageReferences(slug) {
   const m = app.model;
@@ -325,8 +324,32 @@ function pageReferences(slug) {
     ? wanted
     : m.defaultCollapse || m.collapseKinds[0];
   if (!kind) return null;
-  const ref = model.referenceOf(model.documentOutline(m, kind), slug);
-  return ref && { ...ref, href: objectHref(slug) };
+  const outline = model.documentOutline(m, kind);
+  const ref = model.referenceOf(outline, slug);
+  return ref && { ...ref, href: levelHref(outline, kind, slug) };
+}
+
+/**
+ * Where a reference to `id` leads: to its level.  In the graph, the level it
+ * is drawn at: every section above it opened, and it too when it has
+ * contents, so the reader is in it, with it selected.  Anywhere else, its
+ * level in the document: its own page when it has entries below it, otherwise
+ * the page it is read on, scrolled to it.
+ */
+function levelHref(outline, kind, id) {
+  if (app.route && app.route.view === 'graph') {
+    const order = model.collapseOrder(app.model, kind);
+    const expand = [...model.expandableAncestorsOf(order, id)];
+    if (order.expandable.has(id)) expand.push(id);
+    const params = new URLSearchParams(app.route.params);
+    params.set('collapse', kind);
+    if (expand.length) params.set('expand', expand.join(',')); else params.delete('expand');
+    params.set('sel', id);
+    return buildHash('graph', null, params);
+  }
+  const page = model.documentPageOf(outline, id);
+  if (page === undefined) return objectHref(id);
+  return buildHash('document', page, new URLSearchParams({ collapse: kind, focus: id }));
 }
 
 /**

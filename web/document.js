@@ -110,15 +110,20 @@ export function render(root, app) {
   const entries = M.documentPageEntries(outline, pageId, shown);
 
   // Cross references in the prose read "Lemma 2.3.1" in this order's numbers,
-  // and stay in the paper: they lead to where the entry is written out, on
-  // this page if it is here and on its own page otherwise.  A reader who wants
+  // and stay in the paper: they lead to the level of the entry, its own page
+  // when it has entries below it, and otherwise where it is written out, on
+  // this page if it is here.  A reader who wants
   // the object page has the entry's title for that.  Objects the document
   // does not number keep their slug and their object-page link.
+  const refPage = (slug) => {
+    const own = M.documentPageOf(outline, slug);
+    if (own === slug) return own;
+    return M.documentPageShows(outline, pageId, shown, slug) ? pageId : own;
+  };
   const refs = (slug) => {
     const ref = M.referenceOf(outline, slug);
     if (!ref) return null;
-    const here = M.documentPageShows(outline, pageId, shown, slug);
-    return { ...ref, href: href(here ? pageId : M.documentPageOf(outline, slug), slug) };
+    return { ...ref, href: href(refPage(slug), slug) };
   };
   // Depths on this page count from the first level below the page's own
   // entry, which is set as the page's title.
@@ -138,7 +143,7 @@ export function render(root, app) {
   // and a smooth scroll in Chromium then ends wherever the target used to be.
   flow.addEventListener('click', (ev) => {
     const a = ev.target && ev.target.closest ? ev.target.closest('a.ref[data-ref]') : null;
-    if (!a || !M.documentPageShows(outline, pageId, shown, a.getAttribute('data-ref'))) return;
+    if (!a || refPage(a.getAttribute('data-ref')) !== pageId) return;
     const target = document.getElementById('doc-' + cssId(a.getAttribute('data-ref')));
     if (!target) return; // not built yet: let the route build the page to it
     ev.preventDefault();

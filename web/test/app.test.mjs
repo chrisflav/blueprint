@@ -642,12 +642,19 @@ const refLinks = () => [...root.querySelectorAll('.body-prose a.objlink')].map((
 }));
 const refTo = (slug) => refLinks().find((r) => r.title === slug);
 
-await check('on an object page a reference reads "Definition 1.2" and opens the object', async () => {
+await check('on an object page a reference reads "Definition 1.2" and leads to its level in the document', async () => {
   await go('#/object/def-compact');
   const r = refTo('def-filter');
   ok(r, `no link for [def-filter]: ${JSON.stringify(refLinks())}`);
   eq(r.text, 'Definition 1.2', 'the document number');
-  eq(r.href, '#/object/def-filter', 'the link target is unchanged');
+  eq(r.href, '#/document/sec-foundations?collapse=refines&focus=def-filter', 'the page it is read on, scrolled to it');
+  const div = dom.document.createElement('div');
+  app.renderBody(div, '[sec-main-induction] and [refines/def-compact/sec-foundations]', app.knownIds());
+  const [sec, edge] = div.querySelectorAll('a.objlink');
+  eq(sec.getAttribute('href'), '#/document/sec-main-induction?collapse=refines&focus=sec-main-induction',
+    'a section: its own page');
+  eq(edge.getAttribute('href'), '#/object/' + encodeURIComponent('refines/def-compact/sec-foundations'),
+    'what the document does not number: its object page');
   // An unknown slug is a broken link exactly as before.
   await go('#/object/thm-stone-cech');
   const b = refLinks().find((x) => x.broken);
@@ -690,7 +697,20 @@ await check('the graph numbers along its own collapse order', async () => {
   eq(div.querySelectorAll('a')[0].textContent, 'Theorem 3.1', 'the default order');
 });
 
-await check('in the document a reference leads to where the entry is written out', async () => {
+await check('in the graph a reference enters the level of what it names and selects it', async () => {
+  await go('#/graph?collapse=refines&reduce=0&sel=def-compact');
+  const div = dom.document.createElement('div');
+  app.renderBody(div, '[thm-tychonoff] and [sec-main-induction]', app.knownIds());
+  const [thm, sec] = div.querySelectorAll('a.objlink').map((a) => new URLSearchParams(a.getAttribute('href').split('?')[1]));
+  eq(div.querySelectorAll('a.objlink')[0].getAttribute('href').split('?')[0], '#/graph', 'stays in the graph');
+  eq(thm.get('expand'), 'sec-main', 'a statement: the sections above it opened');
+  eq(thm.get('sel'), 'thm-tychonoff', 'and it selected');
+  eq(thm.get('reduce'), '0', 'the rest of the view kept');
+  eq(sec.get('expand'), 'sec-main,sec-main-induction', 'a section: opened too, so the reader is in it');
+  await go('#/document');
+});
+
+await check('in the document a reference leads to the level of the entry', async () => {
   await go('#/document/sec-foundations');
   dom.observers.flush();
   // def-compact refers to def-filter, on the same page.
@@ -706,7 +726,8 @@ await check('in the document a reference leads to where the entry is written out
   dom.observers.flush();
   const sec = refTo('sec-main-induction');
   eq(sec.text, 'Section 2.1', 'a section');
-  eq(sec.href, '#/document/sec-main?collapse=refines&depth=2&focus=sec-main-induction', 'on this page at depth 2');
+  eq(sec.href, '#/document/sec-main-induction?collapse=refines&depth=2&focus=sec-main-induction',
+    'its own page, even where this page writes it out');
   // Along the other order the numbers and pages are that order's.
   await go('#/document?collapse=instance_of&depth=all');
   dom.observers.flush();
@@ -850,7 +871,7 @@ await check('a card says what an edge joins, and leaves the Lean names out', asy
 });
 
 /** The Lean marks in the document's headings, by the object they are of. */
-const leanMarks = () => new Map(root.querySelectorAll('.doc-entry .head button.lean-mark')
+const leanMarks = () => new Map(root.querySelectorAll('.doc-entry .head a.lean-mark')
   .map((b) => [b.getAttribute('data-lean'), b]));
 
 await check('the document marks each heading with Lean names, and only those', async () => {
@@ -866,9 +887,10 @@ await check('the document marks each heading with Lean names, and only those', a
   for (const h of root.querySelectorAll('.doc-entry .head')) {
     const a = h.querySelector('a.objlink');
     const id = a && decodeURIComponent(a.getAttribute('href').replace('#/object/', ''));
-    if (id && M.leanNamesOf(app.model.byId.get(id)).length) ok(h.querySelector('button.lean-mark'), `no mark on ${id}`);
+    if (id && M.leanNamesOf(app.model.byId.get(id)).length) ok(h.querySelector('a.lean-mark'), `no mark on ${id}`);
   }
   eq(marks.get('def-filter').textContent, 'Lean2', 'two names');
+  eq(marks.get('def-filter').getAttribute('href'), '#/object/def-filter', 'a link to the object page');
 });
 
 await check('resting on the Lean mark opens a card of its Lean declarations', async () => {
@@ -882,8 +904,9 @@ await check('resting on the Lean mark opens a card of its Lean declarations', as
   const names = card.querySelectorAll('ul.lean-names li');
   eq(names.length, 2, 'one row per name');
   eq(names.map((li) => li.querySelector('code').textContent).join(' '), 'Compact.Filter Compact.Ultrafilter', 'the names');
-  eq(names[0].querySelector('a').getAttribute('href'),
-    'https://example.github.io/compact/docs/Compact.html#Compact.Filter', 'linked to the documentation');
+  eq(names[0].querySelector('a.lean-name').getAttribute('href'), '#/object/def-filter', 'each name leads to the object page');
+  eq(names[0].querySelector('a.lean-docs').getAttribute('href'),
+    'https://example.github.io/compact/docs/Compact.html#Compact.Filter', 'and to its documentation');
   eq(card.querySelector('.preview-lead').textContent, 'Lean declarations (2)', 'the head counts them');
   preview.hover(root);
   await tick(GONE);
