@@ -1218,6 +1218,59 @@ await check('clicking a node brings its edges and their far ends forward and fad
   ok(!back || !back.endsWith('-focus)'), `the edge kept the accent head ${back}`);
 });
 
+await check('the section entered is the innermost of a nest of open ones, and none when they sit side by side', () => {
+  const view = (expand) => M.makeView(app.model, 'refines', expand);
+  eq(graphMod.enteredSection(view([])), null, 'nothing open');
+  eq(graphMod.enteredSection(view(['sec-main'])), 'sec-main', 'one open');
+  eq(graphMod.enteredSection(view(['sec-main', 'sec-main-induction'])), 'sec-main-induction', 'the innermost');
+  eq(graphMod.enteredSection(view(['sec-main', 'sec-foundations'])), null, 'two side by side');
+});
+
+await check('inside a section the level it was opened from is unreadable until the reader goes back up', async () => {
+  const w = dom.workers.created[dom.workers.created.length - 1];
+  const layout = async (hash) => {
+    await go(hash);
+    const req = lastLayoutMessage(w);
+    w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await tick(5);
+  };
+  const layer = root.querySelector('g.glayer');
+  const back = root.querySelector('button.graph-back');
+  const nodeAt = (nid) => root.querySelectorAll('.gnode').find((n) => n.dataset.nid === nid);
+  const outside = (sel) => root.querySelectorAll(sel).filter((g) => g.classList.contains('outside'));
+
+  await layout('#/graph?collapse=refines&expand=sec-main');
+  ok(layer.classList.contains('entered'), 'the layer is not marked as entered');
+  ok(!nodeAt('sec-main').classList.contains('outside'), 'the section itself is unreadable');
+  ok(!nodeAt('thm-tychonoff').classList.contains('outside'), 'what is inside it is unreadable');
+  ok(nodeAt('sec-foundations').classList.contains('outside'), 'the level it was opened from is readable');
+  eq(nodeAt('sec-foundations').getAttribute('tabindex'), '-1', 'and still reached with Tab');
+  for (const e of root.querySelectorAll('.gedge')) {
+    const inside = (nid) => nid === 'sec-main' || nid === 'thm-tychonoff' || nid === 'sec-main-induction';
+    eq(e.classList.contains('outside'), !(inside(e.dataset.src) && inside(e.dataset.tgt)),
+      `${e.dataset.src} -> ${e.dataset.tgt}`);
+  }
+  eq(back.hidden, false, 'no way back');
+  eq(back.textContent, '↑ Back to the top level', 'the way back');
+
+  await layout('#/graph?collapse=refines&expand=sec-main,sec-main-induction');
+  ok(nodeAt('sec-main').classList.contains('outside'), 'one level down, the section above is unreadable');
+  ok(!nodeAt('lem-finite-subcover').classList.contains('outside'), 'and the new level readable');
+  ok(back.textContent.endsWith('Back to ' + M.titleOf(app.model.byId.get('sec-main'))), back.textContent);
+
+  fire(back, 'click');
+  const req = lastLayoutMessage(w);
+  w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+  await tick(5);
+  eq(new URLSearchParams(app.route.params).get('expand'), 'sec-main', 'Back closes the section');
+  ok(!nodeAt('sec-main').classList.contains('outside'), 'the level above is readable again');
+
+  await layout('#/graph?collapse=refines');
+  ok(!layer.classList.contains('entered'), 'at the top nothing is entered');
+  eq(outside('.gnode').length + outside('.gtitle').length + outside('.gedge').length, 0, 'and nothing unreadable');
+  eq(back.hidden, true, 'nor a way back');
+});
+
 await check('a blocked worker falls back to laying out on the main thread', async () => {
   dom.workers.enabled = false;
   dom.workers.created.length = 0;

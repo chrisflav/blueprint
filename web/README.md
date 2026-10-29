@@ -126,6 +126,15 @@ The reduction (`transitiveReduction` in `model.js`) works
 Hiding everything it says loses no reachability. The status line counts the
 arcs it hid.
 
+Expanding a section enters it: the level it was opened from — every node,
+title and arc drawn outside it — is blurred, faded and out of reach (no
+clicks, no Tab) until the reader goes back up, with *↑ Back to …* at the top
+left of the stage or the section's own −. Going down another level does the
+same again, one level at a time. The section entered is the innermost of the
+open ones when they nest one inside the next (`enteredSection` in
+`graph.js`); with sections open side by side, as after *Expand all*, there is
+no one level to be in and nothing is blurred.
+
 The progress route carries the "All countable objects" listing's search and
 filters, so a filtered listing is a link too: `q=<search>`, `kind=<kind>`,
 `status=<derived status, or none, or unproved>`, `under=<id>` (objects that id

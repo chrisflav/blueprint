@@ -161,10 +161,17 @@ function mount(root, app) {
   stage.appendChild(svg);
   stage.appendChild(el('div.graph-status', { id: 'graph-status' }));
   stage.appendChild(legend(app));
+  // The way back up from the section the reader is in (`applyLevel`).
+  const back = el('button.graph-back', {
+    type: 'button', hidden: true,
+    onpointerdown: (ev) => ev.stopPropagation(), // a press here is no pan
+    onclick: () => { if (ui.entered) toggleExpand(app, ui.entered, ui.view); },
+  });
+  stage.appendChild(back);
 
   // `folded`: the side panel's listings the reader has opened (see `fold`).
-  ui = { page, toolbar, stage, svg, layer, side, transform: { x: 40, y: 40, k: 1 }, fitted: false,
-    folded: new Set() };
+  ui = { page, toolbar, stage, svg, layer, side, back, transform: { x: 40, y: 40, k: 1 }, fitted: false,
+    folded: new Set(), entered: null };
   installPanZoom(app);
   prevPos = new Map();
   lastSignature = null;
@@ -1320,6 +1327,7 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
 
   ui.bbox = bboxOf(abs);
   if (!ui.fitted) { fitToView(app); ui.fitted = true; } else applyTransform();
+  applyLevel(app, view);
   applyHighlight(app, st.q);
   applySelection(app, st.sel);
 }
@@ -1677,6 +1685,52 @@ function keepClearOfSheet(id) {
   if (dy <= 0) return;
   ui.transform.y -= dy;
   applyTransform(false);
+}
+
+/**
+ * The section the reader is in: the innermost open section, when the open
+ * sections nest one inside the next, as they do when each was opened from
+ * inside the last.  Null with nothing open, or with sections open side by
+ * side (Expand all): then there is no one level to be in.
+ */
+export function enteredSection(view) {
+  const open = [...view.expanded];
+  for (const id of open) {
+    const above = new Set(M.expandableAncestorsOf(view.order, id));
+    if (open.every((o) => o === id || above.has(o))) return id;
+  }
+  return null;
+}
+
+/**
+ * Entering a section leaves the level it was opened from behind: everything
+ * drawn outside the section is blurred, faded and out of reach until the
+ * reader goes back up, with the stage's Back button or the section's own −.
+ */
+function applyLevel(app, view) {
+  const id = enteredSection(view);
+  const here = id !== null && ui.chain && ui.chain.has(id) ? id : null;
+  ui.entered = here;
+  const inside = (nid) => nid === here || (ui.chain.get(nid) || []).includes(here);
+  ui.layer.classList.toggle('entered', here !== null);
+  for (const sel of ['.gnode', '.gtitle']) {
+    for (const g of ui.layer.querySelectorAll(sel)) {
+      const out = here !== null && !inside(g.dataset.nid);
+      g.classList.toggle('outside', out);
+      if (sel === '.gnode') g.setAttribute('tabindex', out ? -1 : 0);
+    }
+  }
+  for (const g of ui.layer.querySelectorAll('.gedge')) {
+    g.classList.toggle('outside', here !== null && !(inside(g.dataset.src) && inside(g.dataset.tgt)));
+  }
+
+  ui.back.hidden = here === null;
+  if (here === null) return;
+  // The level above: the open section around this one, or the top.
+  const around = (ui.chain.get(here) || []).at(-1);
+  const o = around && app.model.byId.get(around);
+  ui.back.textContent = '\u2191 Back to ' + (o ? M.titleOf(o) : 'the top level');
+  ui.back.title = 'close ' + M.titleOf(app.model.byId.get(here)) + ' and go back up a level';
 }
 
 function toggleExpand(app, id, view) {
