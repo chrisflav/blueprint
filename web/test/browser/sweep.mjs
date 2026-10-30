@@ -2926,7 +2926,8 @@ async function runBrowser(name, f) {
     await firstPaint();
     // The progress starts hidden for a reader who has not chosen (app.js).
     // The profile may remember an earlier run's choice: forget it first.
-    await d.js(`try { localStorage.removeItem('blueprint.progress'); } catch (e) {} return true;`);
+    await d.js(`try { ['blueprint.progress', 'blueprint.graph.tools', 'blueprint.graph.side']
+      .forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {} return true;`);
     await d.reload();
     await firstPaint();
     if (SECTIONS.has('boot')) await check(d, 'boot/progress-starts-hidden', async () => {
@@ -2942,8 +2943,34 @@ async function runBrowser(name, f) {
         evidence: `data-progress=${j(s.attr)}, button=${j(s.button)}, Progress tab display=${j(s.tab)}, status badges=${s.badges}`,
       };
     });
-    // Everything after covers the progress too: show it, as a reader would.
-    await d.js(`localStorage.setItem('blueprint.progress', 'shown'); return true;`);
+    // The graph starts bare too (graph.js, `renderToolbar`): of the toolbar
+    // only Filters, Collapse all, the search, the zoom and Show sidebar, and
+    // the stage across the whole page.
+    if (SECTIONS.has('boot')) await check(d, 'boot/graph-starts-bare', async () => {
+      await d.open(`${ORIGIN}/#/graph`);
+      await waitFor(d, `return !!document.querySelector('.toolbar .tb-zoom');`, { timeout: 60000, label: 'graph toolbar' });
+      const s = await d.js(`
+        var shown = function (el) { return !!el && el.getClientRects().length > 0; };
+        var bar = document.querySelector('.toolbar');
+        var visible = Array.prototype.slice.call(bar.querySelectorAll('button, select, input, label'))
+          .filter(shown).map(function (e) { return e.tagName === 'INPUT' ? 'input:' + e.type : e.textContent.trim(); });
+        var page = document.querySelector('.graph-page').getBoundingClientRect();
+        var stage = document.querySelector('.graph-stage').getBoundingClientRect();
+        return { visible: visible, side: shown(document.querySelector('aside.side')),
+                 stage: Math.round(stage.width), page: Math.round(page.width) };
+      `);
+      const want = ['Filters', 'Collapse all', 'input:search', 'Fit', '+', '\u2212', 'Show sidebar'];
+      return {
+        ok: j(s.visible) === j(want) && !s.side && s.stage === s.page,
+        evidence: `toolbar shows ${j(s.visible)}; side panel shown=${s.side}; stage ${s.stage}px of ${s.page}px`,
+      };
+    });
+    // Everything after covers the progress, the filters and the side panel
+    // too: show them, as a reader would.
+    await d.open(`${ORIGIN}/#/checks`);
+    await firstPaint();
+    await d.js(`['blueprint.progress', 'blueprint.graph.tools', 'blueprint.graph.side']
+      .forEach(function (k) { localStorage.setItem(k, 'shown'); }); return true;`);
     await d.reload();
     await firstPaint();
     const hooked = await d.installHooks();

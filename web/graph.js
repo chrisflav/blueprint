@@ -183,8 +183,11 @@ function mount(root, app) {
   stage.appendChild(back);
 
   // `folded`: the side panel's listings the reader has opened (see `fold`).
+  // `toolbarOpen`, `sideShown`: the reader's choices (`shownPref`).
   ui = { page, toolbar, stage, svg, layer, side, back, transform: { x: 40, y: 40, k: 1 }, fitted: false,
-    folded: new Set(), entered: null, legend: key, legendProgress: app.showProgress };
+    folded: new Set(), entered: null, legend: key, legendProgress: app.showProgress,
+    toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY) };
+  page.classList.toggle('side-hidden', !ui.sideShown);
   installPanZoom(app);
   prevPos = new Map();
   lastSignature = null;
@@ -252,14 +255,39 @@ function legend(app, progress) {
 // toolbar
 // ---------------------------------------------------------------------------
 
+// The graph opens on the graph alone: of the toolbar only Collapse all, the
+// search and the zoom, the rest folded behind the Filters button, and no side
+// panel beside it.  Whether the reader has unfolded either is theirs to keep,
+// in localStorage, as the top bar keeps the progress (app.js).
+const TOOLS_KEY = 'blueprint.graph.tools';
+const SIDE_KEY = 'blueprint.graph.side';
+
+/** Whether the reader asked for this to be shown: no, unless they did. */
+function shownPref(key) {
+  try {
+    const store = layoutStore();
+    return !!store && store.getItem(key) === 'shown';
+  } catch (e) {
+    return false;
+  }
+}
+
+function savePref(key, shown) {
+  try {
+    const store = layoutStore();
+    if (store) store.setItem(key, shown ? 'shown' : 'hidden');
+  } catch (e) { /* private mode */ }
+}
+
 function renderToolbar(app, st) {
   const { el, clear } = app;
   const m = drawnModel(app, st);
   const bar = clear(ui.toolbar);
 
-  // On a phone the filters would fill half the screen, so they fold behind a
-  // button there (style.css); on a wide screen the wrapper is `display:
-  // contents` and the toolbar is the one row it always was.
+  // Everything but Collapse all, the search and the zoom folds behind a
+  // button (style.css): unfolded, on a wide screen the wrapper is `display:
+  // contents` and the toolbar is the one row it always was, and on a phone it
+  // is a second row.
   const filtered = !!(st.ekinds || st.status || !st.reduce || !st.appendix);
   bar.classList.toggle('open', !!ui.toolbarOpen);
   const toggle = bar.appendChild(el('button.tb-toggle', {
@@ -269,10 +297,13 @@ function renderToolbar(app, st) {
     title: filtered ? 'some edges, statuses or appendices are filtered out' : null,
     onclick: () => {
       ui.toolbarOpen = !ui.toolbarOpen;
+      savePref(TOOLS_KEY, ui.toolbarOpen);
       bar.classList.toggle('open', ui.toolbarOpen);
       toggle.setAttribute('aria-expanded', ui.toolbarOpen ? 'true' : 'false');
     },
   }, 'Filters'));
+  bar.appendChild(el('div.group.tb-collapse',
+    el('button', { onclick: () => writeState(app, { expand: [] }) }, 'Collapse all')));
   const filters = bar.appendChild(el('div.tb-filters'));
 
   // collapse kind
@@ -291,8 +322,7 @@ function renderToolbar(app, st) {
     el('button', {
       onclick: () => writeState(app, { expand: [...order.expandable] }),
       title: `lay out all ${whenExpanded.toLocaleString()} objects at once`,
-    }, big ? `Expand all (${whenExpanded.toLocaleString()})` : 'Expand all'),
-    el('button', { onclick: () => writeState(app, { expand: [] }) }, 'Collapse all')));
+    }, big ? `Expand all (${whenExpanded.toLocaleString()})` : 'Expand all')));
 
   filters.appendChild(el('div.sep'));
 
@@ -367,6 +397,33 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => fitToView(app) , title: 'fit the graph into the viewport' }, 'Fit'),
     el('button', { onclick: () => zoomBy(app, 1.25) }, '+'),
     el('button', { onclick: () => zoomBy(app, 1 / 1.25) }, '\u2212')));
+  bar.appendChild(sideToggle(app));
+}
+
+/** Show or hide the side panel; on a phone it is a sheet of its own and this is not offered. */
+function sideToggle(app) {
+  const { el } = app;
+  const label = () => (ui.sideShown ? 'Hide sidebar' : 'Show sidebar');
+  const button = el('button.tb-side', {
+    type: 'button',
+    'aria-expanded': ui.sideShown ? 'true' : 'false',
+    title: 'the details of the selected object, beside the graph',
+    onclick: () => {
+      ui.sideShown = !ui.sideShown;
+      savePref(SIDE_KEY, ui.sideShown);
+      // The stage widens or narrows on its right: keep what was in its middle there.
+      const before = ui.stage.getBoundingClientRect().width;
+      ui.page.classList.toggle('side-hidden', !ui.sideShown);
+      const after = ui.stage.getBoundingClientRect().width;
+      if (after !== before) {
+        ui.transform.x += (after - before) / 2;
+        applyTransform(false);
+      }
+      button.setAttribute('aria-expanded', ui.sideShown ? 'true' : 'false');
+      button.textContent = label();
+    },
+  }, label());
+  return button;
 }
 
 /** Is there anything the "hide appendix" checkbox would hide? */

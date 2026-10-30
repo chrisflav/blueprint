@@ -167,6 +167,15 @@ open ones when they nest one inside the next (`enteredSection` in
 `graph.js`); with sections open side by side, as after *Expand all*, there is
 no one level to be in and nothing is blurred.
 
+The graph opens on the graph alone. Of the toolbar only *Collapse all*, the
+highlight search, Fit, `+` and `−` show; the collapse kind, *Expand all*, and
+the edge, *hide implied* and status filters fold behind *Filters*, which
+carries a dot while anything is filtered out. The side panel is hidden too,
+and the stage takes its column; *Show sidebar* at the right end of the
+toolbar brings it back, and *Hide sidebar* hides it again. Both choices are
+the reader's, kept in `localStorage` (`blueprint.graph.tools` and
+`blueprint.graph.side`, `shown` or `hidden`; no choice is hidden).
+
 The progress route carries the "All countable objects" listing's search and
 filters, so a filtered listing is a link too: `q=<search>`, `kind=<kind>`,
 `status=<derived status, or none, or unproved>`, `under=<id>` (objects that id
@@ -179,11 +188,12 @@ the table, not the page.
 Below 900px wide the graph page keeps the whole window for the graph, and
 nothing changes on a wider screen:
 
-* the toolbar is one row (*Filters*, the highlight search, Fit, `+`, `−`);
-  the collapse kind, Expand/Collapse all and the edge and status filters fold
-  behind *Filters*, which carries a dot while anything is filtered out;
+* the toolbar is one row (*Filters*, *Collapse all*, the highlight search,
+  Fit, `+`, `−`), wrapped in two on the narrowest phones; unfolded, what is
+  behind *Filters* is a row of its own below;
 * the side panel is a sheet over the bottom of the graph, there only while
-  something is selected. Its bar minimises it to the title and the
+  something is selected, whatever *Show sidebar* was set to on a wide screen
+  (the button is not offered). Its bar minimises it to the title and the
   *Expand/Collapse* button, or closes it, which deselects. A node tapped under
   the sheet is panned up into view;
 * two fingers pinch to zoom about their midpoint and pan; one finger pans;

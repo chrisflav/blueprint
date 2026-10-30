@@ -490,11 +490,18 @@ table.grid tr:last-child td { border-bottom: 0; }
 .toolbar .sep { width: 1px; align-self: stretch; background: var(--border); }
 .toolbar .spacer { flex: 1; }
 .toolbar input[type="search"] { width: 12rem; }
-/* The phone's folding of the filters (see the responsive section): on a wide
-   screen the wrapper lays its groups out as the toolbar's own items, and there
-   is nothing to fold. */
-.toolbar .tb-filters { display: contents; }
-.toolbar .tb-toggle { display: none; }
+/* Everything but Collapse all, the search and the zoom folds behind the
+   Filters button (graph.js, `renderToolbar`).  Unfolded on a wide screen, the
+   wrapper lays its groups out as the toolbar's own items; on a phone it is a
+   row of its own (see the responsive section). */
+.toolbar .tb-filters { display: none; }
+.toolbar.open .tb-filters { display: contents; }
+.toolbar .tb-toggle { display: inline-flex; align-items: center; gap: .35em; }
+.toolbar .tb-toggle::after { content: "\25be"; font-size: .8em; }
+.toolbar.open .tb-toggle::after { content: "\25b4"; }
+.toolbar .tb-toggle.filtered::before {
+  content: ""; width: .45em; height: .45em; border-radius: 50%; background: var(--accent);
+}
 
 .graph-stage {
   position: relative;
@@ -672,6 +679,13 @@ table.grid tr:last-child td { border-bottom: 0; }
 .side .hint { color: var(--faint); font-size: .84rem; }
 /* The bar that minimises and closes the panel when it is a sheet on a phone. */
 .side .sheet-bar { display: none; }
+/* Hidden by the toolbar's Show sidebar button, the panel leaves its column
+   to the graph.  Not on a phone, where it is a sheet that comes and goes with
+   the selection, and the button is not offered. */
+@media (min-width: 901px) {
+  .graph-page.side-hidden { grid-template-columns: 1fr; }
+  .graph-page.side-hidden > .side { display: none; }
+}
 
 /* ---------------------------------------------------------- object page */
 
@@ -1137,13 +1151,8 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
     grid-template-rows: auto 1fr;
   }
   .toolbar { padding: .4rem .6rem; gap: .4rem; flex-wrap: wrap; }
-  .toolbar .tb-toggle { display: inline-flex; align-items: center; gap: .35em; }
-  .toolbar .tb-toggle::after { content: "\25be"; font-size: .8em; }
-  .toolbar.open .tb-toggle::after { content: "\25b4"; }
-  .toolbar .tb-toggle.filtered::before {
-    content: ""; width: .45em; height: .45em; border-radius: 50%; background: var(--accent);
-  }
   .toolbar .spacer { display: none; }
+  .toolbar .tb-side { display: none; }
   .toolbar .tb-search { flex: 1 1 6rem; min-width: 0; }
   .toolbar .tb-search input[type="search"] { width: 100%; min-width: 0; }
   .toolbar .tb-zoom { flex-wrap: nowrap; }

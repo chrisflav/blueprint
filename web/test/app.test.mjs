@@ -1225,6 +1225,57 @@ await check('"hide appendix" is offered only when there is an appendix to hide',
   ok(!labels.includes('hide appendix'), 'offered on a snapshot without an appendix');
 });
 
+await check('the graph opens with its toolbar folded and no sidebar, until the reader asks', async () => {
+  const store = new Map();
+  global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => { store.set(k, String(v)); } };
+  const bar = () => root.querySelector('.toolbar');
+  const page = () => root.querySelector('.graph-page');
+  const button = (sel) => bar().querySelector(sel);
+  const mountGraph = async () => { await go('#/checks'); await go('#/graph?collapse=refines'); };
+  try {
+    await mountGraph();
+    // What stays: Collapse all, the search and the zoom, outside the fold.
+    const kept = [...bar().childNodes].map((n) => n.className);
+    for (const c of ['tb-toggle', 'group tb-collapse', 'group tb-search', 'group tb-zoom', 'tb-side']) {
+      ok(kept.includes(c), `${c} is not one of the toolbar's own items: ${JSON.stringify(kept)}`);
+    }
+    eq(button('.tb-collapse button').textContent, 'Collapse all', 'Collapse all is kept');
+    eq(button('.tb-zoom').textContent, 'Fit+\u2212', 'the zoom is kept');
+    const folded = button('.tb-filters');
+    ok(folded.querySelector('select'), 'the collapse kind is behind Filters');
+    ok(folded.querySelectorAll('button').some((b) => /^Expand all/.test(b.textContent)), 'Expand all is behind Filters');
+    ok(!folded.querySelectorAll('button').some((b) => b.textContent === 'Collapse all'), 'Collapse all is folded away');
+    ok(folded.querySelectorAll('label.chk').length > 0, 'the filters are behind Filters');
+    ok(!bar().classList.contains('open'), 'the filters start unfolded');
+    eq(button('.tb-toggle').getAttribute('aria-expanded'), 'false', 'Filters says it is shut');
+    ok(page().classList.contains('side-hidden'), 'the sidebar starts shown');
+    eq(button('.tb-side').textContent, 'Show sidebar', 'the toolbar offers the sidebar');
+
+    fire(button('.tb-toggle'), 'click');
+    fire(button('.tb-side'), 'click');
+    ok(bar().classList.contains('open'), 'Filters did not unfold');
+    ok(!page().classList.contains('side-hidden'), 'Show sidebar did not show it');
+    eq(button('.tb-side').textContent, 'Hide sidebar', 'the button offers to hide it again');
+    eq(store.get('blueprint.graph.tools'), 'shown', 'the unfolded filters are not remembered');
+    eq(store.get('blueprint.graph.side'), 'shown', 'the shown sidebar is not remembered');
+
+    // A redraw and a fresh graph page keep the reader's choice.
+    await go('#/graph?collapse=refines&reduce=0');
+    ok(bar().classList.contains('open') && !page().classList.contains('side-hidden'), 'lost on a redraw');
+    await mountGraph();
+    ok(bar().classList.contains('open') && !page().classList.contains('side-hidden'), 'lost on a fresh page');
+
+    fire(button('.tb-toggle'), 'click');
+    fire(button('.tb-side'), 'click');
+    eq(store.get('blueprint.graph.tools'), 'hidden', 'folding the filters is not remembered');
+    eq(store.get('blueprint.graph.side'), 'hidden', 'hiding the sidebar is not remembered');
+    ok(!bar().classList.contains('open') && page().classList.contains('side-hidden'), 'did not hide again');
+  } finally {
+    delete global.localStorage;
+    await mountGraph();
+  }
+});
+
 await check('Hide progress takes the statuses, bars and Progress tab away; Show brings them back', async () => {
   const aside = dom.document.getElementById('topbar-aside');
   const toggle = () => aside.querySelector('button.progress-toggle');
