@@ -332,6 +332,14 @@
     "proved": 2,
     "byStatus":
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "a78c83f183151b1947ce9a845083d10ad9791ab6",
+   "file": "data/a78c83f183151b1947ce9a845083d10ad9791ab6.json",
+   "date": "2026-10-30"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "faf1961eb20d9505239b2dc3142df727c62aa46e",
    "file": "data/faf1961eb20d9505239b2dc3142df727c62aa46e.json",
    "date": "2026-10-30"}]}
