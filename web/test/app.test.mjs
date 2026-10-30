@@ -581,8 +581,8 @@ await check('depth=1 on the top page writes out the top level, one level deep', 
   eq(root.querySelectorAll('.doc-entry').length, out.roots.length, 'one entry per top-level object');
   ok(entryIds().includes('doc-sec-main'), 'a chapter is on it');
   ok(!entryIds().includes('doc-thm-tychonoff'), 'its contents are not');
-  // Each chapter leads on to its own page, by its number and by a "Read" line.
-  ok(hrefs('.doc-open a').includes('#/document/sec-main?collapse=refines'), 'a link to the chapter page');
+  // Each chapter leads on to its own page, by its number and by a "Read" link in its head.
+  ok(hrefs('.doc-entry .head a.doc-open').includes('#/document/sec-main?collapse=refines'), 'a link to the chapter page');
   ok(hrefs('.doc-entry .head a.num').includes('#/document/sec-main?collapse=refines'), 'the number links there too');
   eq(root.querySelectorAll('.doc-crumbs').length, 0, 'no breadcrumbs at the top');
   eq(root.querySelectorAll('.doc-pager').length, 0, 'no siblings at the top');
@@ -592,7 +592,7 @@ await check('depth=2 inlines a second level', async () => {
   await go('#/document?depth=2');
   ok(entryIds().includes('doc-sec-main-induction'), 'sections are written out');
   ok(!entryIds().includes('doc-lem-finite-subcover'), 'their contents are not');
-  ok(hrefs('.doc-open a').includes('#/document/sec-main-induction?collapse=refines&depth=2'),
+  ok(hrefs('a.doc-open').includes('#/document/sec-main-induction?collapse=refines&depth=2'),
     'the depth travels with the links');
   const select = root.querySelectorAll('.doc-controls select')[1];
   eq(select.querySelectorAll('option[selected]')[0].getAttribute('value'), '2', 'the depth control shows it');

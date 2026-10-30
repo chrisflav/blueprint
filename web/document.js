@@ -237,6 +237,9 @@ export function render(root, app) {
       isSection ? null : el('span.kindword', M.kindWord(o.kind)),
       numNode,
       el('h' + hLevel, el('a.objlink', { href: app.objectHref(o.id) }, M.titleOf(o))),
+      // An entry whose children are on a page of their own leads on there,
+      // beside its title.
+      leadsOn ? el('a.doc-open', { href: href(o.id) }, 'Read ', num, ' →') : null,
       // Its Lean names, in a card of their own, so the heading keeps one word.
       // Before the badges: themes set the last of them apart.
       app.leanMark(o),
@@ -286,11 +289,6 @@ export function render(root, app) {
       for (const step of outline.steps.get(o.id) || []) {
         section.appendChild(stepBlock(app, step, outline, known, refs));
       }
-    }
-
-    if (leadsOn) {
-      section.appendChild(el('p.doc-open',
-        el('a', { href: href(o.id) }, 'Read ', num, ' →')));
     }
 
     flow.appendChild(section);
