@@ -1507,7 +1507,7 @@ const PAGE_STATE = `
     pageHead: head ? (head.textContent || '').trim().slice(0, 60) : null,
     crumbs: document.querySelectorAll('.doc-crumbs a').length,
     pagers: document.querySelectorAll('.doc-pager').length,
-    opens: document.querySelectorAll('.doc-open a').length,
+    opens: document.querySelectorAll('a.doc-open').length,
     rows: document.querySelectorAll('.doc-contents li').length,
     toc: document.querySelectorAll('nav.toc a').length,
     scrollY: Math.round(window.scrollY),

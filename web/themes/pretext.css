@@ -114,7 +114,7 @@ button, select, input[type="text"], input[type="search"] { border-radius: 0; }
 .doc-entry .head .num { font-family: var(--serif); color: var(--fg); font-weight: 700; }
 .doc-entry .head:has(> h1) > .num { font-size: 1.85rem; }
 .doc-entry .head:has(> h2) > .num { font-size: 1.35rem; }
-.doc-entry .head a:not(.num):not(.lean-mark) { color: var(--fg); }
+.doc-entry .head a:not(.num):not(.lean-mark):not(.doc-open) { color: var(--fg); }
 .doc-entry.is-section > .head, .doc-entry.page-head > .head {
   border-bottom: 2px solid var(--ptx-rule);
   padding-bottom: .25rem;

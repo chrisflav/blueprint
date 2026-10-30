@@ -934,7 +934,7 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .doc-entry.depth-0.is-statement { border-top: 0; padding-top: 0; margin-top: 1.1rem; }
 .doc-entry .head a.num { text-decoration: none; }
 .doc-entry .head a.num:hover { text-decoration: underline; }
-.doc-open { margin: .5rem 0 0; font-size: .9rem; }
+.doc-entry .head a.doc-open { font-size: .9rem; font-weight: 400; white-space: nowrap; }
 
 /* The top of the document: its contents, a row per top-level entry, each a
    link to the entry's page. */

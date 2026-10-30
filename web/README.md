@@ -199,7 +199,7 @@ chapters — with its number, title and progress, each a link to that entry's
 page; nothing is written out there but text at the top level (see below).
 `#/document/<id>` writes out one entry and the levels below it. An entry whose
 children are not on the page links on to its own page, by its number and by a
-*Read 1.2 →* line. Each page has breadcrumbs up its chain, back to the
+*Read 1.2 →* link beside its title. Each page has breadcrumbs up its chain, back to the
 contents, its previous and next siblings, and the contents in a sidebar. A
 top-level entry with nothing under it (an introduction, say) is read on its
 own page too, since the contents do not write it out.
