@@ -2285,24 +2285,22 @@ const LISTING_STATE = `
 `;
 
 const GSEARCH_STATE = `
-  var p = document.getElementById('gsearch-panel');
   var inp = document.getElementById('gsearch-input');
-  var items = Array.prototype.map.call(document.querySelectorAll('#gsearch-results .gsearch-item'), function (a) {
-    return { href: a.getAttribute('href'), active: a.classList.contains('active'), sel: a.getAttribute('aria-selected'),
-             lean: (a.querySelector('.gsearch-lean') || {}).textContent || null }; });
-  var r = p.getBoundingClientRect();
-  var first = document.querySelector('#gsearch-results .gsearch-item');
-  var hit = null;
-  if (first && !p.hidden) {
-    var fr = first.getBoundingClientRect();
-    var e = document.elementFromPoint(fr.left + fr.width / 2, fr.top + fr.height / 2);
-    hit = !!(e && first.contains(e));
-  }
-  return { open: !p.hidden, value: inp.value, focused: document.activeElement === inp,
-           expanded: inp.getAttribute('aria-expanded'), descendant: inp.getAttribute('aria-activedescendant'),
-           items: items, foot: (document.getElementById('gsearch-foot') || {}).textContent,
-           box: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, vw: window.innerWidth, vh: window.innerHeight,
-           firstOnTop: hit, hash: location.hash,
+  var page = document.getElementById('search-query');
+  var items = Array.prototype.map.call(document.querySelectorAll('ul.search-tree li.match'), function (li) {
+    var a = li.querySelector('span.preview-title a');
+    return a ? a.getAttribute('href') : null; });
+  var pv = document.querySelector('.search-preview:not([hidden])');
+  var lens = document.querySelector('button.previewable.previewing');
+  var box = function (e) { if (!e) return null; var r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
+  return { value: inp.value, focused: document.activeElement === inp, page: page ? page.value : null,
+           count: (document.querySelector('h2.search-count') || {}).textContent || null,
+           items: items, hash: location.hash,
+           radius: (document.querySelector('input[name="radius"]:checked') || {}).value || null,
+           preview: pv ? pv.textContent.slice(0, 80) : null, previewBox: box(pv), lensBox: box(lens),
+           folded: document.querySelectorAll('ul.search-tree li.collapsed').length,
+           wide: document.documentElement.scrollWidth > window.innerWidth,
+           vw: window.innerWidth,
            h1: (document.querySelector('.page h1') || {}).textContent || null };
 `;
 
@@ -2432,90 +2430,119 @@ async function searchChecks(d, f) {
     return { ok: s.focused && s.value === '', evidence: `after "/": focused=${s.focused}, value=${j(s.value)} (the slash must not be typed)` };
   });
 
+  // The Stacks project's search: Enter in the top bar's box opens the search
+  // page, whose results are the model's, a page of ten, in document order.
   const target = f.withFacts ? m.byId.get(f.withFacts) : all[0];
-  await check(d, 'search/global-finds-an-object-by-id', async () => {
-    if (!target) return { skip: true, evidence: 'no object to look for' };
-    await d.type(target.id);
-    await sleep(700);
+  const word = target ? (M.searchWords(M.titleOf(target)).find((w) => w.length >= 4) || M.searchWords(target.id)[0]) : null;
+  const wantHits = word ? M.fullTextSearch(m, word, { kind: f.kind }) : [];
+  await check(d, 'search/quick-search-opens-the-search-page', async () => {
+    if (!word) return { skip: true, evidence: 'no object to look for' };
+    await d.type(word);
+    await d.key('Enter');
+    await waitFor(d, `return !!document.querySelector('h2.search-count')`, { timeout: 30000, label: 'search results' });
+    await sleep(500);
     const s = await d.js(GSEARCH_STATE);
-    const hrefs = s.items.map((x) => x.href);
-    const bare = hrefs.map((h) => decodeURIComponent(h.replace('#/object/', ''))).filter((id) => {
-      const o = m.byId.get(id); return o && bareSugar(o);
-    });
-    const inView = s.box.left >= 0 && s.box.right <= s.vw && s.box.bottom <= s.vh;
+    const want = wantHits.slice(0, 10).map((o) => objHref(o.id));
+    const n = wantHits.length;
     return {
-      ok: s.open && hrefs[0] === objHref(target.id) && s.items[0].active && s.expanded === 'true'
-        && bare.length === 0 && inView && s.firstOnTop === true,
-      evidence: `typed ${j(target.id)}: open=${s.open}, ${s.items.length} results, first=${j(hrefs[0])} active=${s.items[0] && s.items[0].active}, `
-        + `bare sugar edges listed=${bare.length}, foot=${j(s.foot)}, panel ${Math.round(s.box.left)}..${Math.round(s.box.right)} x `
-        + `${Math.round(s.box.top)}..${Math.round(s.box.bottom)} in ${s.vw}x${s.vh}, first item on top=${s.firstOnTop}`,
+      ok: s.hash === '#/search?query=' + encodeURIComponent(word) && s.value === word && s.page === word
+        && s.count === `${n} ${n === 1 ? 'result' : 'results'} (now showing results 1\u2013${Math.min(10, n)})`
+        && j(s.items) === j(want) && s.items.includes(objHref(target.id)) === want.includes(objHref(target.id)) && !s.wide,
+      evidence: `typed ${j(word)}, Enter: hash=${j(s.hash)}, boxes ${j(s.value)} / ${j(s.page)}, count=${j(s.count)} (model ${n}), `
+        + `listed ${j(s.items.slice(0, 4))}… (model ${j(want.slice(0, 4))}…), page wider than the window=${s.wide}`,
     };
   });
 
-  await check(d, 'search/global-arrows-and-enter', async () => {
-    const s0 = await d.js(GSEARCH_STATE);
-    if (s0.items.length < 2) return { skip: true, evidence: `only ${s0.items.length} result(s) to move between` };
-    await d.key('ArrowDown');
-    await sleep(100);
-    const s1 = await d.js(GSEARCH_STATE);
-    await d.key('ArrowUp');
-    await d.key('ArrowUp');
-    await sleep(100);
+  await check(d, 'search/page-magnifier-shows-the-statement', async () => {
+    const lens = await d.js(elBox('ul.search-tree li.match button.previewable'));
+    if (!lens) return { skip: true, evidence: 'no statement among the results' };
+    await d.click(lens.x, lens.y);
+    await sleep(500);
+    const s = await d.js(GSEARCH_STATE);
+    const beside = s.previewBox && s.lensBox && s.previewBox.left >= s.lensBox.right - 1 && s.previewBox.top <= s.lensBox.bottom;
+    await d.click(lens.x, lens.y);
+    await sleep(300);
     const s2 = await d.js(GSEARCH_STATE);
-    const last = s2.items.length - 1;
-    await d.key('Enter');
-    await sleep(900);
-    const s3 = await d.js(GSEARCH_STATE);
-    const want = s2.items[last].href;
     return {
-      ok: s1.items[1].active && s1.descendant === 'gsearch-opt-1' && s2.items[last].active
-        && s3.hash === want && !s3.open && s3.value === '' && !!s3.h1,
-      evidence: `down -> active ${s1.items.findIndex((x) => x.active)} (${j(s1.descendant)}); up, up -> ${s2.items.findIndex((x) => x.active)} of ${s2.items.length}; `
-        + `Enter -> hash=${j(s3.hash)} (want ${j(want)}), open=${s3.open}, box=${j(s3.value)}, h1=${j(s3.h1)}`,
+      ok: !!s.preview && beside && s.previewBox.right <= s.vw && !s2.preview,
+      evidence: `clicked the magnifier: statement ${j(s.preview)}, at ${j(s.previewBox)} beside the magnifier at ${j(s.lensBox)}; clicked again: ${j(s2.preview)}`,
+    };
+  });
+
+  await check(d, 'search/page-folds-the-tree', async () => {
+    const thumb = await d.js(elBox('ul.search-tree li.has-children > button.thumb'));
+    if (!thumb) return { skip: true, evidence: 'nothing nested among the results' };
+    const before = await d.js(GSEARCH_STATE);
+    await d.click(thumb.x, thumb.y);
+    await sleep(300);
+    const s = await d.js(GSEARCH_STATE);
+    await d.click(thumb.x, thumb.y);
+    await sleep(300);
+    const s2 = await d.js(GSEARCH_STATE);
+    return {
+      ok: before.folded === 0 && s.folded === 1 && s2.folded === 0,
+      evidence: `folded entries: ${before.folded}, after a click on the triangle ${s.folded}, after another ${s2.folded}`,
+    };
+  });
+
+  await check(d, 'search/page-statements-only', async () => {
+    if (!word) return { skip: true, evidence: 'no query' };
+    const r = await d.js(elBox('#search-radius-statements'));
+    await d.click(r.x, r.y);
+    await sleep(900);
+    const s = await d.js(GSEARCH_STATE);
+    const n = M.fullTextSearch(m, word, { radius: 'statements', kind: f.kind }).length;
+    const ids = s.items.map((h) => decodeURIComponent(h.replace('#/object/', '')));
+    return {
+      ok: new URLSearchParams(s.hash.split('?')[1]).get('radius') === 'statements' && s.radius === 'statements'
+        && (n ? new RegExp('^' + n + ' results? ').test(s.count) : s.count === 'No results')
+        && ids.every((id) => M.isStatement(m, m.byId.get(id))),
+      evidence: `hash=${j(s.hash)}, checked=${j(s.radius)}, count=${j(s.count)} (model ${n}), listed ${j(ids.slice(0, 4))}`,
+    };
+  });
+
+  await check(d, 'search/page-pages', async () => {
+    if (wantHits.length <= 10) return { skip: true, evidence: `only ${wantHits.length} results for ${j(word)}: one page` };
+    await route(d, '#/search?query=' + encodeURIComponent(word));
+    await sleep(700);
+    const two = await d.js(elBoxByText('nav.search-pager a', '2'));
+    await d.click(two.x, two.y);
+    await sleep(900);
+    const s = await d.js(GSEARCH_STATE);
+    const want = wantHits.slice(10, 20).map((o) => objHref(o.id));
+    return {
+      ok: new URLSearchParams(s.hash.split('?')[1]).get('page') === '2' && j(s.items) === j(want)
+        && s.count.endsWith(`(now showing results 11\u2013${Math.min(20, wantHits.length)})`),
+      evidence: `page 2: hash=${j(s.hash)}, count=${j(s.count)}, listed ${j(s.items.slice(0, 3))}… (model ${j(want.slice(0, 3))}…)`,
+    };
+  });
+
+  await check(d, 'search/quick-search-id-opens-the-object', async () => {
+    if (!target) return { skip: true, evidence: 'no object to look for' };
+    await typeInto(d, '#gsearch-input', target.id);
+    await d.key('Enter');
+    await sleep(1200);
+    const s = await d.js(GSEARCH_STATE);
+    return {
+      ok: s.hash === objHref(target.id) && !!s.h1 && s.value === '',
+      evidence: `typed ${j(target.id)}, Enter: hash=${j(s.hash)} (want ${j(objHref(target.id))}), h1=${j(s.h1)}, box=${j(s.value)}`,
     };
   });
 
   const lean = f.withFacts ? M.leanNamesOf(m.byId.get(f.withFacts))[0] : null;
-  await check(d, 'search/global-finds-a-lean-name', async () => {
+  await check(d, 'search/quick-search-finds-a-lean-name', async () => {
     if (!lean) return { skip: true, evidence: 'no object with a Lean name' };
-    await typeInto(d, '#gsearch-input', lean);
-    await sleep(700);
+    await typeInto(d, '#gsearch-input', '"' + lean + '"');
+    await d.key('Enter');
+    await waitFor(d, `return !!document.querySelector('h2.search-count')`, { timeout: 30000, label: 'search results' });
+    await sleep(500);
     const s = await d.js(GSEARCH_STATE);
-    const mine = s.items.find((x) => x.href === objHref(f.withFacts));
+    const hits = M.fullTextSearch(m, '"' + lean + '"', { kind: f.kind }).map((o) => objHref(o.id));
+    const page = hits.slice(0, 10);
     return {
-      ok: s.open && !!mine && !!mine.lean && mine.lean.includes(lean),
-      evidence: `typed ${j(lean)}: ${s.items.length} results, ${j(f.withFacts)} listed=${!!mine} with Lean line ${j(mine && mine.lean)}`,
+      ok: hits.includes(objHref(f.withFacts)) && j(s.items) === j(page),
+      evidence: `searched ${j('"' + lean + '"')}: listed ${j(s.items.slice(0, 4))}, the model finds ${j(f.withFacts)}: ${hits.includes(objHref(f.withFacts))}`,
     };
-  });
-
-  await check(d, 'search/global-escape-then-click', async () => {
-    await d.key('Escape');
-    await sleep(150);
-    const s1 = await d.js(GSEARCH_STATE);
-    // ArrowDown reopens the list; a real click on a result follows it.
-    await d.key('ArrowDown');
-    await sleep(300);
-    const s2 = await d.js(GSEARCH_STATE);
-    const pick = s2.items[Math.min(1, s2.items.length - 1)];
-    if (!pick) return { ok: false, evidence: 'no results to click' };
-    const box = await d.js(elBox(`#gsearch-results .gsearch-item[href="${pick.href}"]`));
-    await d.click(box.x, box.y);
-    await sleep(900);
-    const s3 = await d.js(GSEARCH_STATE);
-    return {
-      ok: !s1.open && s1.value === lean && s2.open && s3.hash === pick.href && !s3.open && s3.value === '',
-      evidence: `Escape: open=${s1.open}, value kept=${j(s1.value)}; ArrowDown: open=${s2.open}; clicked ${j(pick.href)} -> hash=${j(s3.hash)}, open=${s3.open}`,
-    };
-  });
-
-  await check(d, 'search/global-closes-on-navigation', async () => {
-    await typeInto(d, '#gsearch-input', target ? target.id : 'e');
-    await sleep(700);
-    const s1 = await d.js(GSEARCH_STATE);
-    await d.back();
-    await sleep(900);
-    const s2 = await d.js(GSEARCH_STATE);
-    return { ok: s1.open && !s2.open, evidence: `open=${s1.open}, then back to ${j(s2.hash)}: open=${s2.open}` };
   });
 
   await d.js(`var e = document.getElementById('gsearch-input'); e.value = ''; e.blur(); return true;`);

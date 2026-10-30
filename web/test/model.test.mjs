@@ -662,6 +662,57 @@ check('search limits, and filters candidates with accept', () => {
   eq(nodesOnly.length, all.filter((h) => h.object.boundary.length === 0).length, 'and drops nothing else');
 });
 
+// --- the search page's full-text search -------------------------------------
+
+check('searchWords: letters and digits, lowercased, accents dropped', () => {
+  eq(M.searchWords('Stone–Čech $\\beta X$').join(' '), 'stone cech beta x', 'a title with maths');
+  eq(M.searchWords('Compact.ultrafilter_le').join(' '), 'compact ultrafilter le', 'a Lean name');
+  eq(M.searchWords('').length, 0, 'nothing');
+});
+
+check('parseQuery: words, wildcards, phrases, exclusions and OR, as on the Stacks project', () => {
+  const w = (word, prefix = false) => ({ word, prefix });
+  const q = M.parseQuery('a b OR c -d "e f*" quasi-compact');
+  eq(JSON.stringify(q.all), JSON.stringify([[[w('a')]], [[w('b')], [w('c')]], [[w('e'), w('f', true)]], [[w('quasi')]]]), 'wanted');
+  eq(JSON.stringify(q.none), JSON.stringify([[w('d')], [w('compact')]]), 'left out');
+  eq(JSON.stringify(M.parseQuery('Nat.succ_le').all), JSON.stringify([[[w('nat'), w('succ'), w('le')]]]), 'a word of several is a phrase');
+  eq(JSON.stringify(M.parseQuery('-"x y"').none), JSON.stringify([[w('x'), w('y')]]), 'a phrase left out');
+  eq(M.parseQuery('OR x').all.length, 1, 'a leading OR is ignored');
+  eq(M.parseQuery('or x').all.length, 2, 'a lowercase or is a word');
+});
+
+check('fullTextSearch: whole words, in document order', () => {
+  const ids = (q, opts) => M.fullTextSearch(model, q, opts).map((o) => o.id);
+  eq(ids('').length, 0, 'empty query');
+  eq(ids('-compact').length, 0, 'only words to leave out finds nothing');
+  const compact = ids('compact');
+  ok(!compact.includes('sec-foundations'), '"compact" is not "compactness"');
+  ok(ids('compact*').includes('sec-foundations'), 'but "compact*" is');
+  // Ordered as the document reads: 1.1, 1.2, …, a proof right after its statement.
+  const outline = M.documentOutline(model, 'refines');
+  const at = (id) => (outline.byId.has(id) ? outline.entries.indexOf(outline.byId.get(id)) : outline.entries.indexOf(outline.byId.get(outline.stepOf.get(id))) + 0.5);
+  for (let i = 1; i < compact.length; i += 1) ok(at(compact[i - 1]) <= at(compact[i]), `document order at ${compact[i]}`);
+  eq(compact[0], 'def-compact', 'Definition 1.1 first');
+  ok(compact.indexOf('proof/thm-heine-borel') === compact.indexOf('thm-heine-borel') + 1, 'a proof after its statement');
+  sameSet(ids('"finite intersection"'), ['def-filter'], 'a phrase');
+  eq(ids('"intersection finite"').length, 0, 'a phrase is in order');
+  sameSet(ids('heineBorel'), ['thm-heine-borel'], 'a Lean name');
+  sameSet(ids('cech'), ids('Čech'), 'accents do not matter');
+  ok(ids('compact -tychonoff').every((id) => !ids('tychonoff').includes(id)), 'exclusion');
+  const either = ids('ultrafilter OR net');
+  ok(ids('ultrafilter').concat(ids('net')).every((id) => either.includes(id)) && either.length <= ids('ultrafilter').length + ids('net').length, 'OR');
+});
+
+check('fullTextSearch: all objects but bare sugar, or the statements alone', () => {
+  const all = M.fullTextSearch(model, 'compact*');
+  ok(all.every((o) => !M.isBareSugar(model, o)), 'no bare sugar edge');
+  ok(M.fullTextSearch(model, 'ultrafilter').some((o) => o.id === 'uses/thm-tychonoff/lem-ultrafilter'), 'an edge with prose of its own is found');
+  const st = M.fullTextSearch(model, 'compact*', { radius: 'statements' });
+  ok(st.length > 0 && st.length < all.length, 'fewer statements than objects');
+  ok(st.every((o) => M.isStatement(model, o)), 'only statements');
+  ok(!st.some((o) => o.kind === 'section' || o.kind === 'proof' || o.boundary.length), 'no section, proof or edge');
+});
+
 // --- the progress listing -------------------------------------------------
 
 check('countableObjects is every countable object, by title, memoised', () => {

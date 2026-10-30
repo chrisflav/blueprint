@@ -20,6 +20,7 @@ const PAGES = {
   document: () => import('./document.js'),
   progress: () => import('./progress.js'),
   checks: () => import('./checks.js'),
+  search: () => import('./search.js'),
 };
 const pageModules = new Map(); // view -> Promise of its module
 const loadedPages = new Map(); // view -> its module, once it is in
@@ -712,6 +713,9 @@ const app = {
   /** Show or hide the formalization progress, remembered for the reader. */
   setShowProgress: (shown) => setShowProgress(shown),
 
+  /** Put `text` in the top bar's search box (the search page's query). */
+  setQuickSearch: (text) => setQuickSearch(text),
+
   /** Known object ids, for `[slug]` link resolution. */
   knownIds() {
     return app.model ? new Set(app.model.byId.keys()) : new Set();
@@ -969,39 +973,32 @@ function updateChrome() {
 // the search box in the top bar
 // ---------------------------------------------------------------------------
 
-// It finds any object of the blueprint by id, title, Lean name or body and
-// goes to its page.  The matcher is `model.search`, the one the graph's
-// highlight and the progress listing use too, over the index it builds once
-// per snapshot; what is left per keystroke is one pass over that index, a few
-// milliseconds on a real blueprint, after a short debounce.
-//
-// Bare sugar edges are left out: every `uses/a/b` id matches whatever `a`
-// matches, and a real blueprint has several per statement, so they would push
-// the statements themselves off the list.  An edge with a title or prose of
-// its own is something to find, sugar or not, and is kept.
-const GLOBAL_RESULTS = 12;
-const GLOBAL_DEBOUNCE_MS = 100;
+// The Stacks project's quick search: a box in the top bar, "keywords or an
+// id", whose Enter asks the search page (search.js), or goes straight to the
+// object when what is in it is an id, as a Stacks tag does.  While the search
+// page is on screen the two boxes say the same, whichever is typed in.
 
-const gsearch = { input: null, panel: null, list: null, foot: null, timer: null, hits: [], active: -1 };
+const gsearch = { form: null, input: null };
 
 function setupGlobalSearch() {
+  const form = document.getElementById('gsearch');
   const input = document.getElementById('gsearch-input');
-  const panel = document.getElementById('gsearch-panel');
-  const list = document.getElementById('gsearch-results');
-  const foot = document.getElementById('gsearch-foot');
-  if (!input || !panel || !list || !foot) return;
-  Object.assign(gsearch, { input, panel, list, foot });
+  if (!form || !input) return;
+  Object.assign(gsearch, { form, input });
 
-  input.addEventListener('input', () => {
-    clearTimeout(gsearch.timer);
-    gsearch.timer = setTimeout(runGlobalSearch, GLOBAL_DEBOUNCE_MS);
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    quickSearch(input.value);
   });
-  input.addEventListener('keydown', onGlobalSearchKey);
-  input.addEventListener('focus', () => { if (input.value.trim()) runGlobalSearch(); });
-  input.addEventListener('blur', () => closeGlobalSearch());
-  // Keep the focus in the box while a result is clicked: a blur on mousedown
-  // would close the list before the click arrived.
-  panel.addEventListener('mousedown', (ev) => ev.preventDefault());
+  input.addEventListener('input', () => {
+    const page = document.getElementById('search-query');
+    if (page) page.value = input.value;
+  });
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    ev.preventDefault();
+    input.blur();
+  });
 
   // `/` from anywhere that is not itself taking text.
   document.addEventListener('keydown', (ev) => {
@@ -1023,112 +1020,29 @@ function takesText(node) {
   return node.tagName === 'TEXTAREA' || node.tagName === 'SELECT' || !!node.isContentEditable;
 }
 
-/** Search for what is in the box now and show the list. Exported for tests. */
-export function runGlobalSearch() {
-  clearTimeout(gsearch.timer);
-  gsearch.timer = null;
-  const m = app.model;
-  const q = gsearch.input ? gsearch.input.value : '';
-  if (!m || !q.trim()) { closeGlobalSearch(); return; }
-  const accept = (o) => !(m.kinds[o.kind] && m.kinds[o.kind].sugar)
-    || !!(o.attrs.title || o.body.trim());
-  const hits = model.search(m, q, Infinity, { accept });
-  gsearch.hits = hits.slice(0, GLOBAL_RESULTS).map((h) => h.object);
-  gsearch.active = gsearch.hits.length ? 0 : -1;
-  drawGlobalResults(q.trim().toLowerCase(), hits.length);
-}
-
-function drawGlobalResults(q, total) {
-  const { input, panel, list, foot } = gsearch;
-  const m = app.model;
-  clear(list);
-  gsearch.hits.forEach((o, i) => {
-    const st = model.statusOf(m, o.id);
-    // Say which Lean name matched when that is why the object is listed: the
-    // title alone would not show it.
-    const lean = model.leanNamesOf(o).find((n) => n.toLowerCase().includes(q));
-    list.appendChild(el('a.gsearch-item', {
-      id: 'gsearch-opt-' + i, role: 'option', href: objectHref(o.id),
-      'aria-selected': 'false',
-      onmousemove: () => { if (gsearch.active !== i) setGlobalActive(i); },
-      onclick: (ev) => {
-        // A modified click opens a tab and leaves this one as it is.
-        if (ev.button || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
-        ev.preventDefault();
-        goToResult(i);
-      },
-    },
-    el('span.gsearch-title', model.titleOf(o)),
-    el('span.gsearch-meta',
-      kindBadge(o.kind),
-      st === null ? null : statusBadge(st),
-      el('span.gsearch-id', o.id),
-      lean ? el('span.gsearch-lean', lean) : null)));
-  });
-  const shown = gsearch.hits.length;
-  foot.textContent = !total ? 'No object matches.'
-    : total > shown ? `${shown} of ${total} matches; keep typing to narrow them down.`
-      : `${total} ${total === 1 ? 'match' : 'matches'}.`;
-  panel.hidden = false;
-  input.setAttribute('aria-expanded', 'true');
-  setGlobalActive(gsearch.active);
-  renderMath(list); // titles carry maths
-}
-
-function setGlobalActive(i) {
-  gsearch.active = i;
-  const items = gsearch.list.querySelectorAll('.gsearch-item');
-  items.forEach((a, k) => {
-    a.classList.toggle('active', k === i);
-    a.setAttribute('aria-selected', k === i ? 'true' : 'false');
-  });
-  if (i >= 0 && items[i]) {
-    gsearch.input.setAttribute('aria-activedescendant', items[i].id);
-    if (typeof items[i].scrollIntoView === 'function') items[i].scrollIntoView({ block: 'nearest' });
-  } else {
-    gsearch.input.removeAttribute('aria-activedescendant');
+/**
+ * Search for `text` from the top bar: an object's id opens its page, anything
+ * else the search page.  On the search page its choices (all objects or
+ * statements, results per page) stay as they are.  Exported for tests.
+ */
+export function quickSearch(text) {
+  const q = String(text || '').trim();
+  if (gsearch.input) gsearch.input.blur();
+  if (q && app.model && app.model.byId.has(q)) {
+    location.hash = objectHref(q);
+    return;
   }
-}
-
-function closeGlobalSearch() {
-  if (!gsearch.panel) return;
-  clearTimeout(gsearch.timer);
-  gsearch.timer = null;
-  gsearch.panel.hidden = true;
-  gsearch.input.setAttribute('aria-expanded', 'false');
-  gsearch.input.removeAttribute('aria-activedescendant');
-}
-
-function goToResult(i) {
-  const o = gsearch.hits[i];
-  if (!o) return;
-  gsearch.input.value = '';
-  closeGlobalSearch();
-  gsearch.input.blur();
-  location.hash = objectHref(o.id);
-}
-
-function onGlobalSearchKey(ev) {
-  const open = !gsearch.panel.hidden;
-  const n = gsearch.hits.length;
-  if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
-    ev.preventDefault();
-    if (!open || gsearch.timer) { runGlobalSearch(); return; }
-    if (!n) return;
-    const step = ev.key === 'ArrowDown' ? 1 : -1;
-    setGlobalActive((gsearch.active + step + n) % n);
-  } else if (ev.key === 'Enter') {
-    ev.preventDefault();
-    // Enter straight after typing must not act on the list from before the
-    // last keystrokes: search now, then go.
-    if (!open || gsearch.timer) runGlobalSearch();
-    goToResult(gsearch.active);
-  } else if (ev.key === 'Escape') {
-    // Close the list first; a second Escape gives the keyboard back to the page.
-    ev.preventDefault();
-    if (open) closeGlobalSearch();
-    else gsearch.input.blur();
+  const params = new URLSearchParams();
+  if (q) params.set('query', q);
+  if (app.route && app.route.view === 'search') {
+    for (const k of ['radius', 'perpage']) if (app.route.params.has(k)) params.set(k, app.route.params.get(k));
   }
+  app.go('search', null, params);
+}
+
+/** What the top bar's box says: the search page's query there, nothing elsewhere. */
+function setQuickSearch(text) {
+  if (gsearch.input && gsearch.input.value !== text) gsearch.input.value = text;
 }
 
 function updateTabs(view) {
@@ -1155,8 +1069,10 @@ let lastPageKey = null;
 
 function render() {
   app.route = parseHash();
-  closeGlobalSearch(); // back, forward, a link: the list is about the page left behind
-  closePreviews(); // and so are the cards of the links on it
+  // Off the search page the top bar's box is empty again, as a page of the
+  // Stacks project's is, unless the reader is typing in it.
+  if (app.route.view !== 'search' && gsearch.input && document.activeElement !== gsearch.input) setQuickSearch('');
+  closePreviews(); // back, forward, a link: the cards are about the page left behind
   closeExport(); // and the export dialog, which is about the page
   updateTabs(app.route.view);
   const pageKey = app.route.view + ' ' + (app.route.id || '');

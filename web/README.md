@@ -69,7 +69,7 @@ Only what the screen on it needs, and as much of it at once as can be:
   `index.html`, before any other script has arrived; `app.js` takes that
   request over (`fetchSnapshot`) rather than making its own;
 * each page's module (`graph.js`, `document.js`, `object.js`, `progress.js`,
-  `checks.js`) is imported the first time the reader goes to it (`PAGES` in
+  `checks.js`, `search.js`) is imported the first time the reader goes to it (`PAGES` in
   `app.js`). The one the URL opens on is preloaded by the same script in
   `index.html`, and `app.js`'s own imports by `modulepreload` tags, so they
   download beside `app.js` instead of after it;
@@ -104,6 +104,7 @@ All state lives in the URL hash, so every view is a shareable link.
 | `#/document` | the contents of the linear document |
 | `#/document/<id>` | the page of one entry of the document |
 | `#/progress` | dashboard and time slider |
+| `#/search?query=<keywords>` | the search page; also `radius=all\|statements`, `page=<n>`, `perpage=10\|50\|all` |
 | `#/checks` | `derived.checks` |
 
 The graph route carries its full view state as query parameters:
@@ -203,17 +204,47 @@ nothing changes on a wider screen:
 
 ## Search
 
-There is one matcher, `model.search`: a case-insensitive substring match over
-id, title, the Lean declaration names in `attrs.lean`, and body, ranked in that
-spirit (exact id or title, exact Lean name, id, title, part of a Lean name,
-body; within a tier statements before edges and shorter ids first), over a
-lowercase index built once per snapshot. Three places use it:
+The search is the Stacks project's (<https://stacks.math.columbia.edu/search>):
 
-* the **search box in the top bar** (`/` focuses it from anywhere that is not
-  taking text) lists the best twelve objects of the whole blueprint, leaving
-  out bare sugar edges (a `uses/a/b` with no title and no prose of its own
-  matches whatever `a` matches); arrows move, Enter or a click opens the
-  object page, Escape closes the list;
+* the **box in the top bar**, "keywords or an id", is a form, with no list
+  under it: Enter opens the search page with what is in it, or the object
+  page when it is exactly an object's id, as a Stacks tag does
+  (`quickSearch` in `app.js`). `/` focuses it from anywhere that is not
+  taking text, Escape gives the keyboard back. While the search page is on
+  screen the two boxes say the same, whichever is typed in;
+* the **search page** (`search.js`, `#/search?query=…`) has the form again,
+  "Keywords", a Search button and *Search all objects* or *Search only
+  statements*; then "15 results (now showing results 1–10)", the results ten
+  to a page (or 50, or ∞, beside them) with pages « 1 2 3 4 5 … 43 », and the
+  query syntax in a few lines. The results are read in the document's order,
+  along the default collapse order, and set as its tree: each under the
+  chapters and sections it is read in, which are repeated as context on every
+  page of results, a proof or a step under what it is read with, and what the
+  document does not hold at the end. Each line is "Lemma 2.1.3: Title", its
+  number the link to the object page; a triangle folds what is under an
+  entry (*Expand all*, *Collapse all*), and a statement's magnifier shows the
+  statement itself, rendered, in place of its line.
+
+The page's matcher is `model.fullTextSearch`, whole words in the syntax of
+SQLite's full-text queries, which is what the Stacks project runs on
+(`model.parseQuery`): the words are all wanted, `ideal*` matches every word
+it begins, `"double quotes"` make a phrase, `-word` leaves out what has it (so
+an unquoted `quasi-compact` asks for *quasi* but not *compact*), and `OR`
+between two terms wants either. It looks through id, title, the Lean
+declaration names in `attrs.lean` and body, split into words once per
+snapshot (letters and digits, lowercased, accents dropped, so `Nat.succ_le` is
+the phrase `nat succ le` and `cech` finds Čech). *All objects* leaves out the
+bare sugar edges (a `uses/a/b` with no title and no prose of its own repeats
+the ids of `a` and `b`); *statements* are the nodes that are neither a
+section nor text (`model.isStatement`).
+
+The pages that filter as the reader types keep the substring matcher,
+`model.search`, which a word typed halfway still finds: a case-insensitive
+substring match over the same fields, ranked in that spirit (exact id or
+title, exact Lean name, id, title, part of a Lean name, body; within a tier
+statements before edges and shorter ids first), over a lowercase index built
+once per snapshot. Two places use it:
+
 * the graph's highlight (`q=`), which dims every node that does not match;
 * the progress listing's search box, combined with its kind, status and
   "under" filters (`model.filterListing`).
@@ -469,15 +500,16 @@ the pages knowing about it.
 
 | file | contents |
 |------|----------|
-| `index.html` | the shell: the early request for the snapshot, CDN tags, module preloads, top bar (with the search box), banner, `#app` mount point |
+| `index.html` | the shell: the early request for the snapshot, CDN tags, module preloads, top bar (with the quick search form), banner, `#app` mount point |
 | `style.css` | everything visual, light and dark via `prefers-color-scheme` |
-| `model.js` | **pure** logic: indexing, collapse orders, views, the quotient, consistency states, the document outline and its pages, progress, search, the progress listing's filters. No DOM, no fetch |
+| `model.js` | **pure** logic: indexing, collapse orders, views, the quotient, consistency states, the document outline and its pages, progress, search (the substring matcher and the search page's full-text one), the progress listing's filters. No DOM, no fetch |
 | `app.js` | data loading, hash router, the top bar's search box, and the DOM helpers handed to the pages in the `app` context object |
 | `graph.js` | ELK compound layout plus hand-written SVG rendering, pan/zoom, filters, side panel |
 | `object.js` | the object page |
 | `document.js` | the linear document, one page per entry of the collapse order |
 | `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |
 | `checks.js` | the lint report |
+| `search.js` | the search page, after the Stacks project's: the form, the results as the document's tree, the pages, results per page and the query tips |
 | `intro.js` | the project's intro, shown over the landing page while the graph is laid out under it |
 | `preview.js` | the card a link to an object opens while the pointer rests on it, and the document's Lean mark and its card |
 | `pdf.js` | the Export PDF button and dialog: the part, the detail, finding or making the PDF, the TeX source |
@@ -495,7 +527,7 @@ the pages knowing about it.
 | `sample/real/blueprint.json` | a snapshot produced by the Lean tool itself, kept as a second fixture, regenerated with `lake exe blueprint build --root examples/induction --facts examples/induction/lean-facts.json -o web/sample/real/blueprint.json` and checked by `./test.sh` |
 | `test/browser/` | the pre-deploy sweep: the whole site driven in real headless Firefox and Chromium (`test/browser/README.md`) |
 | `test/model.test.mjs` | unit tests for `model.js` |
-| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, the document pages and their lazy rendering, the ELK worker and its fallbacks, the progress filters, the top bar's search, the link previews, the Export PDF dialog and the intro |
+| `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, the document pages and their lazy rendering, the ELK worker and its fallbacks, the progress filters, the top bar's search and the search page, the link previews, the Export PDF dialog and the intro |
 | `test/export.test.mjs` | the PDF export without TeX: selection, order, numbers, depth, shared objects, proofs, text, appendices, references, maths, escaping, images, the store and the command line's errors |
 | `test/export-compile.test.mjs` | the PDF export with TeX (skipped without pdflatex): real PDFs read back, TeX errors, the sandbox, the time limit |
 
@@ -679,9 +711,12 @@ The shape the pages are built for:
   opening it costs a screenful;
 * `quotient`, `rep` and the incidence lookups are linear, with the ancestor
   chains precomputed once per collapse kind and views and quotients memoised;
-* search works off a lowercase index built once per snapshot, so a query is
-  one pass over it (a few milliseconds on a real blueprint, edges included),
-  and every search box waits for a pause in the typing before it asks;
+* search works off an index built once per snapshot (lowercase text for the
+  substring matcher, the words of each field for the search page), so a
+  query is one pass over it (a few milliseconds on a real blueprint, edges
+  included), and every box that filters as the reader types waits for a pause
+  in the typing before it asks; the search page renders a statement only when
+  its magnifier is clicked;
 * the progress listing sorts the countable objects once per snapshot, and a
   filter change rebuilds only its table, at most 300 rows of it until "Show
   all" is pressed.
