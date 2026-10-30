@@ -1244,11 +1244,14 @@ export function outOfGraph(model, { hideOptional = false } = {}) {
     const g = graphHint(model, o.kind);
     if (g === 'never' || (g === 'optional' && hideOptional)) stack.push(o.id);
   }
-  const orders = model.collapseKinds.map((k) => collapseOrder(model, k));
+  // Built only when something is left out: most snapshots leave nothing, and
+  // the graph and object pages then need no order but the one they show.
+  let orders = null;
   while (stack.length) {
     const id = stack.pop();
     if (out.has(id)) continue;
     out.add(id);
+    if (!orders) orders = model.collapseKinds.map((k) => collapseOrder(model, k));
     for (const order of orders) for (const c of childrenOf(order, id)) stack.push(c);
     for (const { object } of incidentTo(model, id)) stack.push(object.id);
   }

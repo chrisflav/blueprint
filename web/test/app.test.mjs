@@ -49,18 +49,19 @@ const dom = setupDom({
   snapshot: sample,
 });
 
-// index.html's pinned ELK tag: graph.js reads the worker's script URL off it.
-const elkTag = dom.document.createElement('script');
-elkTag.setAttribute('src', 'https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js');
-dom.document.documentElement.appendChild(elkTag);
-
 global.window.marked = fakeMarked();
 const katex = fakeKatex();
 global.window.renderMathInElement = katex;
 
+// What index.html's inline script does before any module has loaded: ask for
+// the snapshot, and leave the request for app.js to pick up.
+global.window.blueprintSnapshot = { url: './blueprint.json', response: global.fetch('./blueprint.json') };
+dom.net.fetches.length = 0;
+
 global.location.hash = '#/object/def-compact';
 const app = (await import(path.join(webDir, 'app.js'))).default;
 await tick(20);
+await app.rendered;
 
 const root = dom.document.getElementById('app');
 const { shieldMath, THEMES, applyTheme, currentTheme, currentShowProgress } = await import(path.join(webDir, 'app.js'));
@@ -120,6 +121,12 @@ await check('the progress starts hidden until the reader shows it', () => {
 // The rest of the suite covers the progress too: show it.
 app.setShowProgress(true);
 await tick(5);
+
+await check('the snapshot came from the request index.html started, not a second one', () => {
+  const again = dom.net.fetches.filter((f) => /blueprint\.json$/.test(f.url));
+  eq(again.length, 0, `app.js fetched the snapshot itself: ${JSON.stringify(again.map((f) => f.url))}`);
+  eq(global.window.blueprintSnapshot, null, 'the early request was not marked as taken');
+});
 
 await check('every route renders without falling over', async () => {
   for (const hash of ['#/graph', '#/document', '#/progress', '#/checks',
@@ -1545,6 +1552,199 @@ await check('a failure after the layout says so, and the next attempt still work
   ok(root.querySelectorAll('.gnode').length > 0, 'the retry drew nothing');
   ok(/nodes, \d+ links/.test(statusText()), `status stayed at "${statusText()}"`);
   ok(!errorLine(), 'the error line outlived the failure');
+});
+
+await check('the graph fetches elkjs itself: the page half for the worker, the bundle only for the main thread', async () => {
+  const elkTags = () => dom.document.querySelectorAll('script[src*="elkjs"]');
+  const fireScript = (tag, type) => { for (const fn of tag._listeners.get(type) || []) fn({ target: tag }); };
+  const before = elkTags().length;
+  const saved = global.window.ELK;
+  global.window.ELK = null;
+  dom.workers.created.length = 0;
+  try {
+    const graphPage = await freshGraph('cdn');
+    graphPage.prepare(app);
+    await tick(1);
+    let tags = elkTags().slice(before);
+    eq(tags.length, 1, 'prepare() did not ask for exactly one script');
+    eq(tags[0].getAttribute('src'), 'https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk-api.js', 'not the page half');
+    ok(/^sha384-/.test(tags[0].getAttribute('integrity')), 'elk-api.js is loaded without its integrity hash');
+    eq(tags[0].getAttribute('crossorigin'), 'anonymous', 'crossorigin');
+    // A layout asked for while it is on its way waits for it, not a second copy.
+    graphPage.render(root, app);
+    await tick(5);
+    eq(elkTags().length - before, 1, 'the layout fetched elk-api.js a second time');
+    eq(dom.workers.created.length, 0, 'a worker was started before ELK was there');
+
+    // It arrives: the worker starts, and the bundle is never asked for.
+    const state = installFakeELK();
+    fireScript(tags[0], 'load');
+    await tick(5);
+    eq(dom.workers.created.length, 1, 'no worker once elk-api.js was in');
+    eq(state.instances[state.instances.length - 1].mode, 'worker', 'not driving the worker');
+    const w = dom.workers.created[0];
+    const req = lastLayoutMessage(w);
+    ok(req, 'the layout that waited for ELK never reached the worker');
+    w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await tick(5);
+    ok(root.querySelectorAll('.gnode').length > 0, 'nothing was drawn once ELK was in');
+    ok(!elkTags().slice(before).some((t) => /elk\.bundled\.js$/.test(t.getAttribute('src'))), 'the bundle was fetched for a worker layout');
+
+    // Workers blocked by a policy, which shows only once one is made: the
+    // main thread then needs the whole of elkjs, and fetches it only then.
+    global.window.ELK = null;
+    dom.workers.enabled = false;
+    const blocked = await freshGraph('cdn-blocked');
+    const seen = elkTags().length;
+    blocked.render(root, app);
+    await tick(5);
+    const api = elkTags().slice(seen);
+    eq(api.length, 1, 'the page half was not asked for first');
+    installFakeELK();
+    fireScript(api[0], 'load');
+    await tick(5);
+    tags = elkTags().slice(seen).filter((t) => /elk\.bundled\.js$/.test(t.getAttribute('src')));
+    eq(tags.length, 1, 'the main-thread fallback did not fetch elk.bundled.js');
+    ok(/^sha384-/.test(tags[0].getAttribute('integrity')), 'elk.bundled.js is loaded without its integrity hash');
+    // The CDN is down: the graph says so rather than "laying out…" for ever.
+    fireScript(tags[0], 'error');
+    await tick(5);
+    ok(/ELK could not be loaded/.test(statusText()), `status was "${statusText()}"`);
+    ok(!layingOut(), 'the stage is still marked as laying out');
+  } finally {
+    dom.workers.enabled = true;
+    global.window.ELK = saved;
+  }
+});
+
+await check('the worker index.html starts for the graph is taken over, once, and only if it is the pinned one', async () => {
+  const saved = global.window.ELK;
+  try {
+    // The one it started: no second worker, and the page drives this one.
+    let state = installFakeELK();
+    dom.workers.created.length = 0;
+    const early = new global.Worker('blob:http://localhost/early');
+    global.window.blueprintElkWorker = { src: graphMod.ELK_WORKER, worker: early, failed: false };
+    let graphPage = await freshGraph('early-worker');
+    graphPage.render(root, app);
+    await tick(5);
+    eq(dom.workers.created.length, 1, 'a second worker was started beside the early one');
+    ok(state.instances[state.instances.length - 1].worker === early, 'ELK is not driving the early worker');
+    eq(global.window.blueprintElkWorker, null, 'the early worker was not marked as taken');
+    const req = lastLayoutMessage(early);
+    ok(req, 'no layout was asked of the early worker');
+    early.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await tick(5);
+    ok(root.querySelectorAll('.gnode').length > 0, 'nothing was drawn from its answer');
+
+    // One importing some other file, or one that already failed, is dropped.
+    for (const [tag, entry] of [
+      ['stale', { src: 'https://cdn.jsdelivr.net/npm/elkjs@0.9.2/lib/elk-worker.min.js', failed: false }],
+      ['failed', { src: graphMod.ELK_WORKER, failed: true }],
+    ]) {
+      state = installFakeELK();
+      dom.workers.created.length = 0;
+      const old = new global.Worker('blob:http://localhost/' + tag);
+      global.window.blueprintElkWorker = { ...entry, worker: old };
+      graphPage = await freshGraph('early-' + tag);
+      graphPage.render(root, app);
+      await tick(5);
+      ok(old.terminated, `the ${tag} early worker was left running`);
+      const used = state.instances[state.instances.length - 1].worker;
+      ok(used && used !== old, `the ${tag} early worker was used`);
+      ok(String(used.url).startsWith('blob:') && used.source.includes(graphMod.ELK_WORKER), 'its replacement is not the pinned worker');
+      const r = lastLayoutMessage(used);
+      used.reply({ id: r.id, data: fakeLayout(JSON.parse(JSON.stringify(r.graph))) });
+      await tick(5);
+    }
+  } finally {
+    global.window.ELK = saved;
+    global.window.blueprintElkWorker = null;
+  }
+});
+
+await check('a layout is remembered under its exact input, and drawn again without ELK', async () => {
+  const items = new Map();
+  let full = false;
+  global.localStorage = {
+    getItem: (k) => (items.has(k) ? items.get(k) : null),
+    setItem: (k, v) => { if (full) throw new Error('QuotaExceededError'); items.set(k, String(v)); },
+    removeItem: (k) => { items.delete(k); },
+  };
+  const saved = global.window.ELK;
+  try {
+    // The first time: ELK lays it out, and it is kept.
+    installFakeELK();
+    dom.workers.created.length = 0;
+    let graphPage = await freshGraph('remember-1');
+    graphPage.render(root, app);
+    await tick(5);
+    const w = dom.workers.created[0];
+    const req = lastLayoutMessage(w);
+    ok(req, 'the first layout did not go to ELK');
+    w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await tick(5);
+    const drawn = root.querySelectorAll('.gnode').map((g) => g.getAttribute('transform')).join(' ');
+    ok(drawn, 'nothing was drawn the first time');
+    const names = [...items.keys()].filter((k) => k.startsWith('blueprint.layout.'));
+    eq(names.length, 1, 'the layout was not kept');
+    const entry = JSON.parse(items.get(names[0]));
+    eq(entry.elk, graphMod.ELK_WORKER, 'the entry does not say which ELK made it');
+    eq(entry.input, JSON.stringify(req.graph), 'the entry is not keyed by the exact input');
+
+    // A new page load, the same graph: drawn from memory, no ELK at all.
+    installFakeELK();
+    dom.workers.created.length = 0;
+    graphPage = await freshGraph('remember-2');
+    graphPage.render(root, app);
+    await tick(5);
+    eq(dom.workers.created.length, 0, 'a worker was started for a remembered layout');
+    eq(root.querySelectorAll('.gnode').map((g) => g.getAttribute('transform')).join(' '), drawn,
+      'the remembered layout is not the one ELK gave');
+    ok(/nodes, \d+ links/.test(statusText()), `status was "${statusText()}"`);
+    ok(!layingOut(), 'the stage is marked as laying out');
+
+    // Another ELK's layout, or an entry for another input under the same name,
+    // is never used.
+    for (const tamper of [(e) => ({ ...e, elk: 'https://example.org/elk-worker.min.js' }),
+      (e) => ({ ...e, input: e.input.replace('"id"', '"id" ') })]) {
+      items.set(names[0], JSON.stringify(tamper(entry)));
+      eq(graphMod.rememberedLayout(entry.input), null, 'an entry that does not match was used');
+    }
+    items.set(names[0], JSON.stringify(entry));
+    ok(graphMod.rememberedLayout(entry.input), 'the untampered entry is not found');
+
+    // Bounded: only the last few are kept, and their index stays in step.
+    for (let i = 0; i < 20; i += 1) graphMod.rememberLayout(`{"id":"g${i}"}`, '{"id":"root","children":[]}');
+    const kept = [...items.keys()].filter((k) => k.startsWith('blueprint.layout.'));
+    ok(kept.length <= 12, `${kept.length} layouts kept`);
+    eq(JSON.parse(items.get('blueprint.layouts')).sort().join(), kept.sort().join(), 'the index lists other entries than are kept');
+    ok(graphMod.rememberedLayout('{"id":"g19"}'), 'the newest was dropped');
+    eq(graphMod.rememberedLayout('{"id":"g0"}'), null, 'the oldest was kept');
+    // Too large to be worth the space: not kept.
+    graphMod.rememberLayout('{"id":"big"}', 'x'.repeat(500000));
+    eq(graphMod.rememberedLayout('{"id":"big"}'), null, 'a huge layout was kept');
+
+    // Full storage, or storage that throws on access: no cache, nothing worse.
+    full = true;
+    graphMod.rememberLayout('{"id":"full"}', '{"id":"root"}');
+    eq(graphMod.rememberedLayout('{"id":"full"}'), null, 'kept although storage was full');
+    full = false;
+    global.localStorage = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); }, removeItem() {} };
+    eq(graphMod.rememberedLayout(entry.input), null, 'a refusing storage answered');
+    graphMod.rememberLayout('{"id":"x"}', '{"id":"root"}');
+  } finally {
+    delete global.localStorage;
+    global.window.ELK = saved;
+  }
+});
+
+await check('index.html starts the early worker on the URL graph.js pins', () => {
+  const html = fs.readFileSync(path.join(webDir, 'index.html'), 'utf8');
+  const m = html.match(/var src = '([^']+)'/);
+  ok(m, 'index.html starts no early ELK worker');
+  eq(m[1], graphMod.ELK_WORKER, 'index.html and graph.js pin different elk-worker.min.js');
+  ok(!/<script[^>]+elk(\.bundled|-api)?[.-]/.test(html), 'index.html loads ELK on every page again');
 });
 
 // --- the real thing, when a copy of elkjs is at hand -------------------------

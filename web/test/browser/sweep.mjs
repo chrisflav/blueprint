@@ -2957,8 +2957,10 @@ async function runBrowser(name, f) {
                  viewport: [window.innerWidth, window.innerHeight] };
       `);
       return {
-        ok: !s.errorBox && s.marked && s.katex === 'object' && s.render === 'function' && s.elk === 'function',
-        evidence: `title=${j(s.title)} brand=${j(s.brand)} topbar=${j(s.aside)}; CDN: katex=${s.katex} autorender=${s.render} marked=${s.marked} ELK=${s.elk}; viewport=${j(s.viewport)}; recorder=${hooked}`,
+        // ELK is the graph's own, fetched when the graph is first shown; the
+        // checks page this opens on must not have paid for it.
+        ok: !s.errorBox && s.marked && s.katex === 'object' && s.render === 'function' && s.elk === 'undefined',
+        evidence: `title=${j(s.title)} brand=${j(s.brand)} topbar=${j(s.aside)}; CDN: katex=${s.katex} autorender=${s.render} marked=${s.marked} ELK (not wanted yet)=${s.elk}; viewport=${j(s.viewport)}; recorder=${hooked}`,
       };
     });
 

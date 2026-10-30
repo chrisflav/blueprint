@@ -5,8 +5,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Blueprint</title>
 
+<!-- The snapshot is the slowest thing the page waits for, so it is asked for
+     before anything else: app.js picks this request up instead of making its
+     own (`dataUrlFromQuery` and `loadInto` there).  Without it the request
+     would wait for every script below to arrive and run. -->
+<script>
+  try {
+    (function () {
+      var url = new URLSearchParams(location.search).get('data') || './blueprint.json';
+      var response = fetch(url, { cache: 'no-cache' });
+      response.catch(function () { /* app.js reports it */ });
+      window.blueprintSnapshot = { url: url, response: response };
+    })();
+  } catch (e) { /* app.js fetches it itself */ }
+  // The module of the page on screen, which app.js imports only once it runs
+  // (`PAGES` there); asking for it now lets it download beside app.js.
+  try {
+    (function () {
+      var view = (location.hash.match(/^#\/([a-z]+)/) || [])[1];
+      if (['object', 'document', 'progress', 'checks'].indexOf(view) < 0) view = 'graph';
+      var link = document.createElement('link');
+      link.rel = 'modulepreload';
+      link.href = view + '.js';
+      document.head.appendChild(link);
+      // The graph's largest download is ELK's worker half, 430 kB: start the
+      // worker now rather than once graph.js has arrived and run.  graph.js
+      // takes it over (`earlyWorker` there) only if it imports graph.js's own
+      // `ELK_WORKER`, which this URL must therefore be (a test checks).
+      if (view === 'graph' && typeof Worker === 'function' && window.Blob && URL.createObjectURL) {
+        var src = 'https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk-worker.min.js';
+        var program = new Blob(['importScripts(' + JSON.stringify(src) + ');\n'], { type: 'text/javascript' });
+        var early = { src: src, worker: new Worker(URL.createObjectURL(program)), failed: false };
+        early.worker.onerror = function () { early.failed = true; };
+        window.blueprintElkWorker = early;
+      }
+    })();
+  } catch (e) { /* app.js imports it anyway; graph.js starts its own worker */ }
+</script>
+<!-- What app.js imports, so it is not found only once app.js has arrived.
+     Only a hint: a module missing here is still loaded, a little later. -->
+<link rel="modulepreload" href="app.js">
+<link rel="modulepreload" href="model.js">
+<link rel="modulepreload" href="preview.js">
+<link rel="modulepreload" href="pdf.js">
+<link rel="modulepreload" href="export/sha256.js">
+<link rel="modulepreload" href="intro.js">
+
 <!-- Pinned CDN dependencies.  No build step: everything below is plain
-     HTML/CSS/ES modules served statically. -->
+     HTML/CSS/ES modules served statically.  ELK is not among them: only the
+     graph needs it, and graph.js loads it when the graph is drawn. -->
 <link rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css"
       integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
@@ -24,10 +71,6 @@
 <script defer
         src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"
         integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script defer
-        src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"
-        integrity="sha384-KO35c6PFq7tFxAEx6FtATwL9vOBOmCzQYr7GM0iTr3oO22s7Jc9OkclOH4AV7jwK"
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
@@ -72,6 +115,8 @@
   <div class="loading">Loading blueprint&hellip;</div>
 </main>
 
-<script type="module" src="app.js"></script>
+<!-- async: app.js starts loading the page on screen while the scripts above
+     are still arriving, and waits for them only before it draws. -->
+<script type="module" async src="app.js"></script>
 </body>
 </html>

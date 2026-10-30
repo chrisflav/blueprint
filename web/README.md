@@ -61,6 +61,38 @@ sorted and deduplicated, and `blueprint site --history <dir>` copies that
 directory to `<site>/data` and makes sure the current snapshot is in the
 index (DESIGN.md §7, `docs/snapshot-format.md`).
 
+### What a page loads
+
+Only what the screen on it needs, and as much of it at once as can be:
+
+* the snapshot is asked for by a few lines of script at the top of
+  `index.html`, before any other script has arrived; `app.js` takes that
+  request over (`fetchSnapshot`) rather than making its own;
+* each page's module (`graph.js`, `document.js`, `object.js`, `progress.js`,
+  `checks.js`) is imported the first time the reader goes to it (`PAGES` in
+  `app.js`). The one the URL opens on is preloaded by the same script in
+  `index.html`, and `app.js`'s own imports by `modulepreload` tags, so they
+  download beside `app.js` instead of after it;
+* elkjs is fetched by the graph alone, and only its 9 kB page half plus the
+  worker (`prepare` in `graph.js` starts both while the snapshot is still on
+  its way); the 1.6 MB bundle only when the layout falls back to the main
+  thread (see *How layout runs*). A page opened on the graph starts the
+  worker from `index.html` itself, before any module has arrived, and
+  `graph.js` takes it over (`earlyWorker`) if it imports the same pinned file;
+* a layout ELK has made is remembered in `localStorage` under its exact input
+  (`rememberedLayout` / `rememberLayout` in `graph.js`), so a reload, the next
+  visit, or collapsing back to a view seen before is drawn without ELK at all.
+  ELK is deterministic, and the whole input is the key, so the cache can only
+  give what ELK would; it keeps the last 12 layouts of up to 400,000
+  characters, and storage that is full or refused just means no cache;
+* `data/index.json` is not waited for: the first page is drawn without it, and
+  the progress page again once it is in;
+* the snapshot's SHA-256 is worked out when the PDF export first asks for it.
+
+`app.js` itself is loaded `async`, so it starts on the above while KaTeX and
+marked are still arriving, and waits for them (`DOMContentLoaded`) only before
+it draws.
+
 ## Routes
 
 All state lives in the URL hash, so every view is a shareable link.
@@ -427,7 +459,7 @@ the pages knowing about it.
 
 | file | contents |
 |------|----------|
-| `index.html` | the shell: CDN tags, top bar (with the search box), banner, `#app` mount point |
+| `index.html` | the shell: the early request for the snapshot, CDN tags, module preloads, top bar (with the search box), banner, `#app` mount point |
 | `style.css` | everything visual, light and dark via `prefers-color-scheme` |
 | `model.js` | **pure** logic: indexing, collapse orders, views, the quotient, consistency states, the document outline and its pages, progress, search, the progress listing's filters. No DOM, no fetch |
 | `app.js` | data loading, hash router, the top bar's search box, and the DOM helpers handed to the pages in the `app` context object |
@@ -474,11 +506,14 @@ stays a tree.
 |---------|---------|--------|
 | KaTeX (css, js, auto-render) | 0.16.11 | cdnjs |
 | marked | 12.0.2 | cdnjs |
-| elkjs (`elk.bundled.js`, and `elk-worker.min.js` in the worker) | 0.9.3 | jsDelivr — elkjs is not published on cdnjs |
+| elkjs (`elk-api.js` on the page, `elk-worker.min.js` in the worker, `elk.bundled.js` only for the fallback) | 0.9.3 | jsDelivr — elkjs is not published on cdnjs |
 
-Each tag carries an `integrity` hash.  The worker half is not a tag: it is
-fetched by `importScripts` from the same pinned directory as the bundle (see
-below), so it carries no SRI hash.
+KaTeX and marked are tags in `index.html`; elkjs is not, since only the graph
+needs it: `graph.js` adds its tags itself when the graph is first shown (the
+pin and the hashes are `ELK_CDN`, `ELK_API` and `ELK_BUNDLE` there). Each tag
+carries an `integrity` hash. The worker half is not a tag: it is fetched by
+`importScripts` from the same pinned directory (see below), so it carries no
+SRI hash.
 
 ### How layout runs
 
@@ -486,16 +521,16 @@ elkjs ships as two halves that talk to each other over one fixed protocol
 (`{id, cmd: 'register' | 'layout', …}` out, `{id, data}` or `{id, error}`
 back): `elk-api`, the `ELK` class on the page, and `elk-worker.min.js`, the
 layouter itself, which claims `self.onmessage` for that protocol as soon as it
-is loaded in a worker. `elk.bundled.js` is both halves in one file; that is
-what `index.html` loads, and its tag is the only place the version is written
-down.
+is loaded in a worker. `elk-api.js` is the page half alone, 9 kB, and is
+what the page loads; `elk.bundled.js` is both halves in one file, 1.6 MB, and
+is fetched only when the layout has to run on the main thread.
 
 `graph.js` pairs them the way elkjs intends:
 
-* the worker's whole program is `importScripts("…/elk-worker.min.js")` — the
-  URL derived from the `elk.bundled.js` tag by swapping the file name, so the
-  pin stays in one place — built into a `Blob`, so the deployment stays a
-  directory of static files: no worker script to serve, still no build step;
+* the worker's whole program is `importScripts("…/elk-worker.min.js")`, from
+  the same pinned directory as the page half, built into a `Blob`, so the
+  deployment stays a directory of static files: no worker script to serve,
+  still no build step;
 * the page lays out with
   `new ELK({ workerFactory: () => new Worker(blobUrl) })`, so elkjs's own
   protocol runs on both sides.
@@ -514,8 +549,9 @@ takes `self.onmessage` for elkjs's protocol and exports no in-thread worker, so
 is dropped without an answer: the page waits for ever.
 
 Every way this can still go wrong ends on the main thread, in
-`elk.bundled.js`'s in-thread mode (`new ELK()` with no worker at all), with a
-yield to the event loop around it so the status line is painted first:
+`elk.bundled.js`'s in-thread mode (`new ELK()` with no worker at all), fetched
+then, with a yield to the event loop around it so the status line is painted
+first:
 
 * `Worker`, `Blob` or `URL.createObjectURL` missing, or construction refused by
   a CSP that forbids `blob:` workers or the cross-origin `importScripts`;
