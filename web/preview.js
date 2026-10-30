@@ -118,10 +118,10 @@ export function leanMark(ctx, o) {
 }
 
 /**
- * The card of an object's Lean declarations: each name, linked to the object
- * page, where its signature is, with its kind and status from the Lean facts
- * and a link to its documentation when the snapshot says where that is
- * (`project.docgen`).
+ * The card of an object's Lean declarations: each name, linked to its
+ * declaration on the object page, where its signature is, with its kind and
+ * status from the Lean facts and a link to its documentation when the
+ * snapshot says where that is (`project.docgen`).
  */
 export function leanCard(ctx, id) {
   const { el } = ctx;
@@ -136,7 +136,7 @@ export function leanCard(ctx, id) {
     el('span.preview-title', 'of ' + (ref ? ref.word + ' ' + ref.number : M.titleOf(o))),
     status === null ? null : ctx.statusBadge(status));
   const rows = facts.map(({ name, fact }) => el('li',
-    el('a.lean-name', { href: ctx.objectHref(id) }, el('code', name)),
+    el('a.lean-name', { href: ctx.objectHref(id, { lean: name }) }, el('code', name)),
     fact && fact.kind ? el('span.chip', fact.kind) : null,
     // Without any facts there is nothing to say of one name in particular.
     !m.facts || !ctx.showProgress ? null
@@ -153,7 +153,7 @@ export function leanCard(ctx, id) {
   el('div.preview-body', el('ul.lean-names', ...rows)),
   el('div.preview-foot',
     el('code.preview-id', o.id),
-    el('a.preview-open', { href: ctx.objectHref(id) }, 'Signatures →')));
+    el('a.preview-open', { href: ctx.objectHref(id, { lean: '' }) }, 'Signatures →')));
   ctx.renderMath(head);
   return card;
 }
