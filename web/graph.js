@@ -11,15 +11,18 @@
 //   * the graph handed to ELK carries no back-references into the model (see
 //     `plainGraph`); the metadata is looked up again by id after layout;
 //   * layout runs in a Web Worker built from a Blob URL whose whole program is
-//     an `importScripts` of elkjs's own worker half, elk-worker.min.js, pinned
-//     to the same version as the elk.bundled.js in index.html and driven from
-//     the page with `new ELK({workerFactory})`, so elkjs's own protocol runs
-//     on both sides and the main thread keeps panning, zooming and responding
-//     while ELK thinks.  If the worker cannot be created — a
+//     an `importScripts` of elkjs's own worker half, elk-worker.min.js, and is
+//     driven from the page with `new ELK({workerFactory})` out of elk-api.js,
+//     elkjs's 9 kB page half, so elkjs's own protocol runs on both sides and
+//     the main thread keeps panning, zooming and responding while ELK thinks.
+//     None of it is fetched until the graph is shown (`prepare` starts it as
+//     soon as this module is in, beside the snapshot).  If the worker cannot
+//     be created — a
 //     Content-Security-Policy with a `worker-src` that forbids `blob:`, say —
 //     or it fails, or it does not answer within a deadline, the layout falls
-//     back to the main thread and yields to the event loop between phases so
-//     the status line is painted before the browser freezes;
+//     back to the main thread, which fetches the whole of elkjs,
+//     elk.bundled.js, only then, and yields to the event loop between phases
+//     so the status line is painted before the browser freezes;
 //   * the status line says how many nodes are being laid out, and the
 //     "Expand all" button says so up front.
 
@@ -940,6 +943,98 @@ export function plainGraph(graph) {
 }
 
 // ---------------------------------------------------------------------------
+// remembered layouts
+// ---------------------------------------------------------------------------
+//
+// ELK is deterministic: the same graph in, the same layout out.  So a layout
+// is remembered in localStorage under its exact input and the ELK that made
+// it, and when that graph is asked for again — a reload, the next visit,
+// collapsing back to a view seen before — it is drawn without ELK at all: no
+// worker to wait for, no 1.6 MB layouter to compile, no first slow run.
+// Being keyed by the whole input, it can only ever give what ELK would: a
+// changed snapshot, view or measured title width is a different graph.
+// Storage that is missing, full or refused is no cache, nothing worse.
+
+const LAYOUT_PREFIX = 'blueprint.layout.';
+const LAYOUT_INDEX = 'blueprint.layouts'; // their keys, least recently used first
+const LAYOUT_KEEP = 12;
+const LAYOUT_MAX_CHARS = 400000; // input and layout together: a few hundred nodes
+
+function layoutStore() {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage ? localStorage : null;
+  } catch (e) {
+    return null; // a sandbox that throws on the very access
+  }
+}
+
+/** FNV-1a over the text: only a name for the entry, which holds the input itself. */
+function layoutName(inputText) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < inputText.length; i += 1) {
+    h ^= inputText.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return LAYOUT_PREFIX + (h >>> 0).toString(36) + '.' + inputText.length.toString(36);
+}
+
+function layoutIndex(store) {
+  try {
+    const list = JSON.parse(store.getItem(LAYOUT_INDEX) || '[]');
+    return Array.isArray(list) ? list.filter((k) => typeof k === 'string') : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/** The layout ELK gave for exactly this input before, or null. */
+export function rememberedLayout(inputText) {
+  const store = layoutStore();
+  if (!store) return null;
+  try {
+    const name = layoutName(inputText);
+    const raw = store.getItem(name);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (!entry || entry.elk !== ELK_WORKER || entry.input !== inputText) return null;
+    const laid = JSON.parse(entry.laid);
+    const index = layoutIndex(store).filter((k) => k !== name);
+    index.push(name);
+    store.setItem(LAYOUT_INDEX, JSON.stringify(index));
+    return laid && typeof laid === 'object' ? laid : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** Keep a layout ELK has just made, dropping the least recently used beyond `LAYOUT_KEEP`. */
+export function rememberLayout(inputText, laidText) {
+  const store = layoutStore();
+  if (!store || inputText.length + laidText.length > LAYOUT_MAX_CHARS) return;
+  const name = layoutName(inputText);
+  const entry = JSON.stringify({ elk: ELK_WORKER, input: inputText, laid: laidText });
+  const index = layoutIndex(store).filter((k) => k !== name);
+  index.push(name);
+  try {
+    while (index.length > LAYOUT_KEEP) store.removeItem(index.shift());
+    // Full: make room from the oldest, and give up when there is nothing left
+    // of ours to drop.
+    for (;;) {
+      try {
+        store.setItem(name, entry);
+        break;
+      } catch (e) {
+        if (index.length <= 1) return;
+        store.removeItem(index.shift());
+      }
+    }
+    store.setItem(LAYOUT_INDEX, JSON.stringify(index));
+  } catch (e) {
+    /* storage refused: no cache */
+  }
+}
+
+// ---------------------------------------------------------------------------
 // layout + draw
 // ---------------------------------------------------------------------------
 
@@ -950,11 +1045,6 @@ function signatureOf(st) {
 
 async function scheduleLayout(app, st, view, quot) {
   const status = ui.stage.querySelector('#graph-status');
-  if (!window.ELK && !elkScriptUrl()) {
-    status.textContent = 'ELK could not be loaded from the CDN; the graph needs it.';
-    return;
-  }
-
   const sig = signatureOf(st);
   const structureChanged = sig !== lastSignature;
   lastSignature = sig;
@@ -970,17 +1060,25 @@ async function scheduleLayout(app, st, view, quot) {
   }
 
   const { graph, nodes, edgeMeta, implied, contents } = buildElk(app, st, view, quot);
+  const input = plainGraph(graph);
+  const inputText = JSON.stringify(input);
+  const remembered = rememberedLayout(inputText);
 
-  const n = countNodes(graph);
-  status.textContent = `laying out ${n.toLocaleString()} node${n === 1 ? '' : 's'}\u2026`;
-  ui.stage.classList.add('laying-out');
+  if (!remembered) {
+    const n = countNodes(graph);
+    status.textContent = `laying out ${n.toLocaleString()} node${n === 1 ? '' : 's'}\u2026`;
+    ui.stage.classList.add('laying-out');
+  }
 
   clearLayoutError();
   try {
-    const laid = await layoutGraph(plainGraph(graph));
+    const laid = remembered || await layoutGraph(input);
     if (token !== layoutToken) return; // superseded
     ui.stage.classList.remove('laying-out');
+    // Before drawing, which may add to it; kept only once it has drawn.
+    const laidText = remembered ? null : JSON.stringify(laid);
     draw(app, st, view, quot, laid, nodes, edgeMeta, structureChanged);
+    if (laidText) rememberLayout(inputText, laidText);
     const nCount = countNodes(laid);
     status.textContent = `${nCount.toLocaleString()} nodes, ${(laid.edges || []).length} links \u2014 ` +
       (st.reduce ? `${implied} implied arc${implied === 1 ? '' : 's'} hidden \u2014 ` : '') +
@@ -1062,26 +1160,74 @@ export function layoutDeadline(items) {
   return Math.max(base, base + WATCHDOG_PER_ITEM_MS * items);
 }
 
-/** The pinned elk.bundled.js URL, taken from the tag index.html already has. */
-function elkScriptUrl() {
-  if (typeof document === 'undefined' || !document.querySelector) return null;
-  const tag = document.querySelector('script[src*="elk"]');
-  return tag ? tag.getAttribute('src') : null;
+// elkjs, pinned.  The version lives here and only here: the page half, the
+// worker half and the whole bundle must all be the same one.  The worker half
+// is loaded by `importScripts`, which takes no integrity hash.
+const ELK_CDN = 'https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/';
+const ELK_API = {
+  src: ELK_CDN + 'elk-api.js',
+  integrity: 'sha384-ia1agyOe54zRe+J2Z07fmT5UL7g+pPm8rnefIG3Z7ej9s4sEJfVid71assPZygZP',
+};
+const ELK_BUNDLE = {
+  src: ELK_CDN + 'elk.bundled.js',
+  integrity: 'sha384-KO35c6PFq7tFxAEx6FtATwL9vOBOmCzQYr7GM0iTr3oO22s7Jc9OkclOH4AV7jwK',
+};
+export const ELK_WORKER = ELK_CDN + 'elk-worker.min.js';
+
+let elkApiLoad = null;    // the Promise of elk-api.js, once asked for
+let elkBundleLoad = null; // the Promise of elk.bundled.js, once asked for
+// `window.ELK` is elk-api.js's, which drives a worker but cannot lay out on
+// the main thread.  An `ELK` the page had before this module asked for one
+// (a test's, or a site that loads the bundle itself) is taken to do both.
+let elkApiOnly = false;
+
+/** A classic script from the CDN, with its integrity hash. */
+function loadScript({ src, integrity }) {
+  return new Promise((resolve, reject) => {
+    const tag = document.createElement('script');
+    tag.setAttribute('src', src);
+    tag.setAttribute('integrity', integrity);
+    tag.setAttribute('crossorigin', 'anonymous');
+    tag.setAttribute('referrerpolicy', 'no-referrer');
+    tag.addEventListener('load', () => resolve());
+    tag.addEventListener('error', () =>
+      reject(new Error('ELK could not be loaded from the CDN; the graph needs it')));
+    (document.head || document.documentElement).appendChild(tag);
+  });
+}
+
+/** An `ELK` that can drive a worker: elk-api.js, unless one is there. */
+function elkForWorker() {
+  if (window.ELK) return Promise.resolve();
+  if (!elkApiLoad) {
+    elkApiLoad = loadScript(ELK_API).then(() => { if (!elkBundleLoad) elkApiOnly = true; });
+    elkApiLoad.catch(() => { elkApiLoad = null; }); // try again next layout
+  }
+  return elkApiLoad;
+}
+
+/** An `ELK` that lays out on the main thread: elk.bundled.js. */
+function elkForMainThread() {
+  if (window.ELK && !elkApiOnly) return Promise.resolve();
+  if (!elkBundleLoad) {
+    elkBundleLoad = loadScript(ELK_BUNDLE).then(() => { elkApiOnly = false; });
+    elkBundleLoad.catch(() => { elkBundleLoad = null; });
+  }
+  return elkBundleLoad;
+}
+
+function workersAllowed() {
+  return typeof Worker === 'function' && typeof Blob === 'function' &&
+    typeof URL !== 'undefined' && !!URL.createObjectURL;
 }
 
 /**
- * elk-worker.min.js beside it on the same CDN: the same pinned version, the
- * file name swapped, so the version still lives in exactly one place —
- * index.html's script tag.
+ * Called by app.js as soon as this module is loaded, before the snapshot has
+ * arrived: fetch ELK and start its worker, so that they download beside the
+ * data rather than after it.
  */
-function elkWorkerUrl() {
-  const url = elkScriptUrl();
-  if (!url) return null;
-  try {
-    return new URL('elk-worker.min.js', new URL(url, location.href)).href;
-  } catch (e) {
-    return null;
-  }
+export function prepare() {
+  ensureWorkerElk().catch(() => { /* the first layout says what went wrong */ });
 }
 
 /**
@@ -1107,24 +1253,27 @@ function elkWorkerUrl() {
  * cross-origin `importScripts` are both allowed; where a CSP forbids either,
  * construction throws and we lay out on the main thread instead.
  */
-function ensureWorkerElk() {
+async function ensureWorkerElk() {
   if (workerElk || workerBroken) return workerElk;
-  // The CDN bundle may simply not have arrived yet; that is not a verdict on
-  // workers, so it is worth asking again next time.
-  if (!window.ELK) return null;
-  const src = elkWorkerUrl();
-  if (!src || typeof Worker !== 'function' || typeof Blob !== 'function' ||
-      typeof URL === 'undefined' || !URL.createObjectURL) {
+  if (!workersAllowed()) {
     workerBroken = true;
     return null;
   }
-  const source = `importScripts(${JSON.stringify(src)});\n`;
+  // elk-api.js not arriving is not a verdict on workers: the main thread
+  // tries the bundle and reports, and the next layout asks again.
+  try {
+    await elkForWorker();
+  } catch (e) {
+    return null;
+  }
+  if (workerElk || workerBroken) return workerElk; // made while this waited
+  const source = `importScripts(${JSON.stringify(ELK_WORKER)});\n`;
   let objectUrl = null;
   try {
     objectUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     workerElk = new window.ELK({
       workerFactory: () => {
-        const w = new Worker(objectUrl);
+        const w = earlyWorker() || new Worker(objectUrl);
         workerHandle = w;
         // The worker could not even start (a blocked import, most likely).
         w.onerror = (ev) => breakWorker((ev && ev.message) || 'the ELK worker failed');
@@ -1141,6 +1290,22 @@ function ensureWorkerElk() {
     return null;
   }
   return workerElk;
+}
+
+/**
+ * The worker index.html starts for a page opened on the graph, before any
+ * module has loaded: the same one-line program as the one built above, begun
+ * half a second sooner, its 430 kB download beside the snapshot's.  Taken
+ * once, and only if it imports this very file; a worker that already failed,
+ * or that a stale index.html pointed elsewhere, is dropped for a fresh one.
+ */
+function earlyWorker() {
+  const early = typeof window !== 'undefined' ? window.blueprintElkWorker : null;
+  if (!early) return null;
+  window.blueprintElkWorker = null;
+  if (early.worker && early.src === ELK_WORKER && !early.failed) return early.worker;
+  try { if (early.worker) early.worker.terminate(); } catch (e) { /* never started */ }
+  return null;
 }
 
 /**
@@ -1167,8 +1332,10 @@ function describe(reason) {
   return reason.message ? reason.message : String(reason);
 }
 
-function layoutGraph(graph) {
-  const inst = ensureWorkerElk();
+async function layoutGraph(graph) {
+  // A worker already running is used at once, so the request is posted
+  // before this returns; only the first layout waits for ELK to arrive.
+  const inst = workerElk || workerBroken ? workerElk : await ensureWorkerElk();
   if (!inst) return layoutOnMainThread(graph);
   const deadline = layoutDeadline(countNodes(graph) + (graph.edges || []).length);
   return new Promise((resolve, reject) => {
@@ -1216,6 +1383,7 @@ function layoutGraph(graph) {
  * take the thread away, and let it paint again before we draw.
  */
 async function layoutOnMainThread(graph) {
+  await elkForMainThread();
   if (!window.ELK) throw new Error('ELK could not be loaded from the CDN; the graph needs it');
   if (!elk) elk = new window.ELK();
   await nextFrame();

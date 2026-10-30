@@ -5,23 +5,40 @@
 // to import each other.
 
 import * as model from './model.js';
-import * as graphPage from './graph.js';
-import * as objectPage from './object.js';
-import * as documentPage from './document.js';
-import * as progressPage from './progress.js';
-import * as checksPage from './checks.js';
 import { setupPreviews, closePreviews, leanMark } from './preview.js';
 import { setupExport, exportButton, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
 import { wantsIntro, showIntro } from './intro.js';
 
+// The pages, each loaded the first time it is shown: a reader who opens an
+// object page never downloads the graph.  `prepare`, where a page has one, is
+// called as soon as its module is in, before the snapshot is, so a page can
+// start fetching what it needs (the graph: ELK) while the data arrives.
 const PAGES = {
-  graph: graphPage,
-  object: objectPage,
-  document: documentPage,
-  progress: progressPage,
-  checks: checksPage,
+  graph: () => import('./graph.js'),
+  object: () => import('./object.js'),
+  document: () => import('./document.js'),
+  progress: () => import('./progress.js'),
+  checks: () => import('./checks.js'),
 };
+const pageModules = new Map(); // view -> Promise of its module
+const loadedPages = new Map(); // view -> its module, once it is in
+
+function loadPage(view) {
+  if (!pageModules.has(view)) {
+    const p = PAGES[view]().then((page) => {
+      if (typeof page.prepare === 'function') {
+        try { page.prepare(app); } catch (e) { console.error(e); }
+      }
+      loadedPages.set(view, page);
+      return page;
+    });
+    // A failed import is worth trying again on the next visit.
+    p.catch(() => pageModules.delete(view));
+    pageModules.set(view, p);
+  }
+  return pageModules.get(view);
+}
 
 const DEFAULT_DATA = './blueprint.json';
 const SAMPLE_DATA = './sample/blueprint.json';
@@ -604,6 +621,7 @@ const app = {
 
   // routing
   route: null,
+  rendered: null, // a Promise that settles once the last route's page is drawn (or superseded)
 
   // helpers (re-exported so pages only import ./app.js)
   el,
@@ -628,8 +646,18 @@ const app = {
   leanMark: (o) => leanMark(app, o),
   /** A button that opens the Export PDF dialog, defaulting to the part on screen. */
   exportButton: (label) => exportButton(app, label),
-  /** SHA-256 of the bytes of the snapshot on screen (a Promise), which its prepared PDFs are filed under. */
-  snapshotHash: null,
+  /**
+   * SHA-256 of the bytes of the snapshot on screen (a Promise), which its
+   * prepared PDFs are filed under.  Worked out the first time it is asked
+   * for, by the export, rather than on every load.
+   */
+  get snapshotHash() {
+    if (!snapshotHashPromise && snapshotBytes) {
+      snapshotHashPromise = sha256(snapshotBytes).catch(() => null);
+      snapshotBytes = null;
+    }
+    return snapshotHashPromise;
+  },
 
   /**
    * Navigate to a route.  `replace` swaps the current history entry instead of
@@ -678,7 +706,7 @@ const app = {
       const url = new URL(entry.file, app.baseUrl).href;
       await loadInto(url, { sha: entry.sha, keepBase: true, entry });
     }
-    render();
+    await render();
   },
 
   /** Show or hide the formalization progress, remembered for the reader. */
@@ -700,10 +728,27 @@ async function fetchJson(url) {
   return res.json();
 }
 
+// The snapshot's bytes until its hash is asked for (`app.snapshotHash`).
+let snapshotBytes = null;
+let snapshotHashPromise = null;
+
+/**
+ * The request for `url`: the one index.html started before any script had
+ * arrived, when it is for this URL and not yet taken, or a new one.
+ */
+function fetchSnapshot(url) {
+  const early = typeof window !== 'undefined' ? window.blueprintSnapshot : null;
+  if (early && early.url === url && early.response) {
+    window.blueprintSnapshot = null; // once: a later load of the same URL is a fresh one
+    return early.response;
+  }
+  return fetch(url, { cache: 'no-cache' });
+}
+
 async function loadInto(url, { sha = null, keepBase = false, entry = null } = {}) {
   // The bytes, not just the JSON: the PDF export finds what was prepared for
   // this snapshot by their hash.
-  const res = await fetch(url, { cache: 'no-cache' });
+  const res = await fetchSnapshot(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   const snapshot = JSON.parse(new TextDecoder('utf-8').decode(bytes));
@@ -711,7 +756,8 @@ async function loadInto(url, { sha = null, keepBase = false, entry = null } = {}
     throw new Error(`${url} is not a blueprint snapshot (no "objects" array)`);
   }
   app.snapshot = snapshot;
-  app.snapshotHash = sha256(bytes).catch(() => null);
+  snapshotBytes = bytes;
+  snapshotHashPromise = null;
   app.model = model.buildModel(snapshot);
   setKatexMacros(app.model.project);
   app.dataUrl = url;
@@ -1118,9 +1164,34 @@ function render() {
     lastPageKey = pageKey;
     if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
   }
-  const page = PAGES[app.route.view] || PAGES.graph;
+  const view = PAGES[app.route.view] ? app.route.view : 'graph';
+  const token = ++renderToken;
+  // A page already loaded is drawn at once, as every page was before they
+  // were loaded on demand: a page that patches its own DOM after a route
+  // change expects it drawn when `render` returns.
+  const loaded = loadedPages.get(view);
+  if (loaded) {
+    drawPage(() => loaded.render(root, app));
+    app.rendered = Promise.resolve();
+    return app.rendered;
+  }
+  app.rendered = loadPage(view).then(
+    (page) => {
+      // A later route won while this page's module was on its way.
+      if (token === renderToken) drawPage(() => page.render(root, app));
+    },
+    (e) => {
+      if (token === renderToken) drawPage(() => { throw e; });
+    });
+  return app.rendered;
+}
+
+// Counts the calls to `render`, so only the latest draws once its page is in.
+let renderToken = 0;
+
+function drawPage(draw) {
   try {
-    page.render(root, app);
+    draw();
   } catch (e) {
     console.error(e);
     clear(root);
@@ -1150,17 +1221,32 @@ function showLoadError(err, url) {
   document.getElementById('banner').hidden = true;
 }
 
+/**
+ * index.html loads app.js `async`, so it may run before the deferred CDN
+ * scripts (KaTeX, marked) have; DOMContentLoaded waits for those.
+ */
+function scriptsReady() {
+  if (typeof document === 'undefined' || document.readyState !== 'loading') return Promise.resolve();
+  return new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+}
+
 async function boot() {
   applyTheme(currentTheme()); // before anything is drawn, so nothing flashes
   applyShowProgress(currentShowProgress());
   const url = dataUrlFromQuery();
   app.dataUrlOriginal = url;
+  // The page on screen starts loading now, beside the snapshot; it is drawn
+  // once both are in.  A failure here is `render`'s to report.
+  const route = parseHash();
+  loadPage(route.view).catch(() => {});
   try {
     await loadInto(url);
   } catch (err) {
+    await scriptsReady();
     showLoadError(err, new URL(url, location.href).href);
     return;
   }
+  await scriptsReady();
   // The project's style is known only now: switch to it unless the URL or the
   // reader chose another, and draw the top bar again so its menu shows it.
   const theme = currentTheme(app.model && app.model.project);
@@ -1170,7 +1256,12 @@ async function boot() {
   }
   // The project's intro, over the page while the graph is laid out under it.
   if (wantsIntro(app.model.project, parseHash(), location.search)) showIntro(app);
-  await loadHistory();
+  // The history index matters only to the progress page's time slider, so the
+  // first page does not wait for it; the progress page is drawn again when it
+  // arrives, if that is where the reader is.
+  loadHistory().then(() => {
+    if (app.history && app.route && app.route.view === 'progress' && !app.viewingSha) render();
+  });
   setupGlobalSearch();
   setupPreviews(app);
   setupExport(app);

@@ -151,8 +151,8 @@ class Element2 extends Node2 {
         const inner = a.slice(1, -1);
         const eq = inner.indexOf('=');
         if (eq < 0) { if (!node.hasAttribute(inner)) return false; continue; }
-        // Support the substring operators too: graph.js looks its ELK script
-        // up with `script[src*="elk"]`.
+        // Support the substring operators too: the tests find the ELK
+        // scripts graph.js adds with `script[src*="elkjs"]`.
         let k = inner.slice(0, eq);
         let op = '=';
         if (/[*^$~|]$/.test(k)) { op = k.slice(-1) + '='; k = k.slice(0, -1); }
