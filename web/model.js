@@ -118,6 +118,8 @@ export function buildModel(snapshot) {
     _views: new Map(), // memoised views, keyed by kind + normalised expanded set
     _search: null, // lowercase search index, built on first search
     _searchHits: new Map(), // memoised results per query string
+    _fullText: null, // the search page's index of words, built on its first search
+    _positions: new Map(), // memoised document positions, per collapse kind
     _countable: null, // countable objects by title, for the progress listing
     _outlines: new Map(), // memoised document outlines, per collapse kind
     _mixes: new Map(), // memoised status counts under each object, per collapse kind
@@ -1710,6 +1712,177 @@ export function searchIds(model, query) {
   const ids = new Set(search(model, q, Infinity).map((h) => h.object.id));
   if (model._searchHits) cachePut(model._searchHits, q, ids, SEARCH_CACHE_LIMIT);
   return ids;
+}
+
+// ---------------------------------------------------------------------------
+// 6b. The search page's full-text search, after the Stacks project's
+// ---------------------------------------------------------------------------
+
+/**
+ * The words of a text as the search page reads them: runs of letters and
+ * digits, lowercased, accents dropped ("Čech" is `cech`), the way the Stacks
+ * project's full-text index (SQLite FTS) splits its text.  A Lean name
+ * splits at its dots and underscores: `Nat.succ_le` is `nat succ le`.
+ */
+export function searchWords(text) {
+  return String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .match(/[\p{L}\p{N}]+/gu) || [];
+}
+
+// The words of a piece of query, each with whether it ends in `*`.
+function queryWords(text) {
+  return (String(text).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .match(/[\p{L}\p{N}]+\*?/gu) || [])
+    .map((w) => (w.endsWith('*') ? { word: w.slice(0, -1), prefix: true } : { word: w, prefix: false }));
+}
+
+/**
+ * A query of the search page, in the syntax of the Stacks project's search
+ * (SQLite's full-text queries):
+ *
+ *   * the words are all wanted: `compact space` finds what has both;
+ *   * a word matches a whole word, so `ideal` does not find `ideals`, and a
+ *     `*` at its end matches every word it begins: `ideal*` finds both;
+ *   * "double quotes" make a phrase, its words next to each other and in
+ *     order; so does a word that splits into several (`Nat.succ_le`);
+ *   * `-word` (or `-"a phrase"`) leaves out what has it, which is why an
+ *     unquoted `quasi-compact` asks for quasi but not compact;
+ *   * `OR` between two terms wants either of them.
+ *
+ * Returns `{ all, none }`: `all` a list of groups, every group to be matched
+ * by one of its terms, and `none` the terms nothing found may match.  A term
+ * is a phrase, a list of `{word, prefix}`, often of one word.
+ */
+export function parseQuery(query) {
+  const all = [];
+  const none = [];
+  let orNext = false;
+  const add = (term, negated) => {
+    if (!term.length) return;
+    if (negated) { none.push(term); orNext = false; return; }
+    if (orNext && all.length) all[all.length - 1].push(term);
+    else all.push([term]);
+    orNext = false;
+  };
+  const re = /(-?)"([^"]*)"?|([^\s"]+)/g;
+  let m;
+  while ((m = re.exec(String(query || ''))) !== null) {
+    if (m[3] === undefined) { add(queryWords(m[2]), m[1] === '-'); continue; }
+    if (m[3] === 'OR') { orNext = all.length > 0; continue; }
+    // A hyphen inside a word starts a word to leave out, as in SQLite.
+    for (const piece of m[3].split(/(?=-)/)) {
+      add(queryWords(piece), piece.startsWith('-'));
+    }
+  }
+  return { all, none };
+}
+
+/** Which objects the search page looks through: all of them, or the statements alone. */
+export const SEARCH_RADII = ['all', 'statements'];
+
+/**
+ * Whether an object is a *statement* for the search page's "Search only
+ * statements": a node that is neither a section nor a piece of text, so a
+ * definition, a lemma, a remark, but not a proof, an edge or a heading.
+ */
+export function isStatement(model, o) {
+  return !!o && o.boundary.length === 0 && !isSectionKind(o.kind) && o.kind !== TEXT_KIND;
+}
+
+/**
+ * An edge that sugar made and that says nothing of its own: every `uses/a/b`
+ * repeats the ids of `a` and `b`, and a real blueprint has several per
+ * statement, so listing them would bury the statements themselves.
+ */
+export function isBareSugar(model, o) {
+  return !!(model.kinds[o.kind] && model.kinds[o.kind].sugar) && !(o.attrs.title || o.body.trim());
+}
+
+// The full-text index: per object, the words of each of its fields (id,
+// title, every Lean name, body) and the set of all of them.  A phrase never
+// runs from one field into the next.  Built once per model.
+function fullTextIndex(model) {
+  if (!model._fullText) {
+    model._fullText = model.objects.map((o) => {
+      const fields = [searchWords(o.id), searchWords(o.attrs.title), ...leanNamesOf(o).map(searchWords), searchWords(o.body)]
+        .filter((f) => f.length);
+      return { object: o, fields, words: new Set(fields.flat()) };
+    });
+  }
+  return model._fullText;
+}
+
+const wordMatches = (w, q) => (q.prefix ? w.startsWith(q.word) : w === q.word);
+
+function termMatches(row, term) {
+  if (term.length === 1) {
+    const q = term[0];
+    if (!q.prefix) return row.words.has(q.word);
+    for (const w of row.words) if (w.startsWith(q.word)) return true;
+    return false;
+  }
+  for (const field of row.fields) {
+    for (let i = 0; i + term.length <= field.length; i += 1) {
+      let k = 0;
+      while (k < term.length && wordMatches(field[i + k], term[k])) k += 1;
+      if (k === term.length) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Where each object comes in the document read along the collapse order
+ * `kind`: id -> position.  A proof and a step come right after what they are
+ * read under.  Memoised per kind.
+ */
+function documentPositions(model, kind) {
+  if (model._positions.has(kind)) return model._positions.get(kind);
+  const pos = new Map();
+  if (kind) {
+    const outline = documentOutline(model, kind);
+    const place = (id) => { if (!pos.has(id)) pos.set(id, pos.size); };
+    for (const e of outline.entries) {
+      if (e.duplicate) continue;
+      place(e.id);
+      for (const p of outline.proofs.get(e.id) || []) place(p.id);
+      for (const s of outline.steps.get(e.id) || []) place(s.id);
+    }
+  }
+  model._positions.set(kind, pos);
+  return pos;
+}
+
+/**
+ * The search page's search: the objects matching `query` (see `parseQuery`),
+ * in the order they are read in the document along the collapse order
+ * `kind`, as the Stacks project lists its results in the order of the book.
+ * What the document does not hold comes last, by id.
+ *
+ *   * `radius` — `'all'` looks through every object but the bare sugar edges
+ *                (`isBareSugar`), `'statements'` through the statements alone
+ *                (`isStatement`);
+ *   * `kind`   — the collapse order that gives the reading order, by default
+ *                the model's.
+ *
+ * A query with nothing to look for (empty, or only words to leave out)
+ * finds nothing.
+ */
+export function fullTextSearch(model, query, { radius = 'all', kind = model.defaultCollapse || model.collapseKinds[0] || null } = {}) {
+  const { all, none } = parseQuery(query);
+  if (!all.length) return [];
+  const accept = radius === 'statements' ? (o) => isStatement(model, o) : (o) => !isBareSugar(model, o);
+  const hits = [];
+  for (const row of fullTextIndex(model)) {
+    if (!accept(row.object)) continue;
+    if (!all.every((group) => group.some((t) => termMatches(row, t)))) continue;
+    if (none.some((t) => termMatches(row, t))) continue;
+    hits.push(row.object);
+  }
+  const pos = documentPositions(model, kind);
+  const at = (o) => (pos.has(o.id) ? pos.get(o.id) : Infinity);
+  hits.sort((a, b) => at(a) - at(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return hits;
 }
 
 /**

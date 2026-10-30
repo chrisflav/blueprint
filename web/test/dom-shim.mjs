@@ -47,6 +47,19 @@ class Node2 {
     this.childNodes.push(c);
     return c;
   }
+  insertBefore(c, ref) {
+    if (!ref) return this.appendChild(c);
+    if (c.nodeType === FRAGMENT_NODE) {
+      for (const x of c.childNodes.slice()) this.insertBefore(x, ref);
+      return c;
+    }
+    if (c.parentNode) c.parentNode.removeChild(c);
+    const i = this.childNodes.indexOf(ref);
+    if (i < 0) throw new Error('insertBefore: not a child');
+    c.parentNode = this;
+    this.childNodes.splice(i, 0, c);
+    return c;
+  }
   removeChild(c) {
     const i = this.childNodes.indexOf(c);
     if (i >= 0) this.childNodes.splice(i, 1);

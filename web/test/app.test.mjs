@@ -44,7 +44,7 @@ const tick = (n = 1) => new Promise((r) => setTimeout(r, n));
 
 const dom = setupDom({
   ids: ['app', 'banner', 'project-title', 'topbar-aside', 'tabs',
-    'gsearch-input', 'gsearch-panel', 'gsearch-results', 'gsearch-foot', 'export-pdf'],
+    'gsearch', 'gsearch-input', 'export-pdf'],
   base: webDir,
   snapshot: sample,
 });
@@ -268,7 +268,7 @@ await check('a snapshot without macros gets an empty macro table', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 1b. the progress listing's filters, and the search box in the top bar
+// 1b. the progress listing's filters, the search box in the top bar and the search page
 // ---------------------------------------------------------------------------
 
 const modelMod1 = await import(path.join(webDir, 'model.js'));
@@ -375,77 +375,146 @@ await check('Show all works over the filtered rows', async () => {
 });
 
 const gs = {
+  form: dom.document.getElementById('gsearch'),
   input: dom.document.getElementById('gsearch-input'),
-  panel: dom.document.getElementById('gsearch-panel'),
-  list: dom.document.getElementById('gsearch-results'),
-  foot: dom.document.getElementById('gsearch-foot'),
 };
-const gsItems = () => gs.list.querySelectorAll('.gsearch-item');
+const { pageNumbers } = await import(path.join(webDir, 'search.js'));
+const searchCount = () => (root.querySelector('h2.search-count') || {}).textContent;
+const searchItems = (cls = 'match') => root.querySelectorAll('ul.search-tree li.' + cls);
+const itemHref = (li) => li.querySelector('span.preview-title a').getAttribute('href');
 
-await check('the top-bar search finds objects and leaves out bare sugar edges', async () => {
+await check('the top-bar box asks the search page, or opens the object an id names', async () => {
   await go('#/progress');
-  gs.panel.hidden = true;
-  gs.input.value = 'tychonoff';
-  fire(gs.input, 'input');
-  ok(gs.panel.hidden, 'debounced');
-  await tick(150);
-  ok(!gs.panel.hidden, 'the list opened');
-  eq(gs.input.getAttribute('aria-expanded'), 'true', 'aria-expanded');
-  const hrefs = gsItems().map((a) => a.getAttribute('href'));
-  eq(hrefs[0], '#/object/thm-tychonoff', 'the exact id first');
-  ok(!hrefs.some((h) => /refines%2F|uses%2Fthm-tychonoff%2Fdef-compact/.test(h)), `no bare sugar edges in ${hrefs}`);
-  ok(hrefs.includes('#/object/' + encodeURIComponent('uses/thm-tychonoff/lem-ultrafilter')),
-    'a sugar edge with prose of its own is kept');
-  ok(/match/.test(gs.foot.textContent), `the foot counts: ${gs.foot.textContent}`);
-  eq(gsItems()[0].getAttribute('aria-selected'), 'true', 'the first result is active');
+  gs.input.value = 'compact';
+  const ev = fire(gs.form, 'submit');
+  ok(ev.defaultPrevented, 'the form is not sent anywhere');
+  global.window.dispatch('hashchange', {});
+  await tick(20);
+  await app.rendered;
+  eq(String(global.location.hash), '#/search?query=compact', 'the search page');
+  ok(/^\d+ results/.test(searchCount()), `results counted: ${searchCount()}`);
+  eq(root.querySelector('#search-query').value, 'compact', "the page's box says the query");
+  eq(gs.input.value, 'compact', "and so does the top bar's");
 
-  gs.input.value = 'heineBorel';
+  gs.input.value = 'compactness';
   fire(gs.input, 'input');
-  await tick(150);
-  eq(gsItems()[0].getAttribute('href'), '#/object/thm-heine-borel', 'found by Lean name');
-  ok(/heineBorel/.test(gsItems()[0].querySelector('.gsearch-lean').textContent), 'and says which');
+  eq(root.querySelector('#search-query').value, 'compactness', 'typing in one box types in the other');
+  root.querySelector('#search-query').value = 'net';
+  fire(root.querySelector('#search-query'), 'input');
+  eq(gs.input.value, 'net', 'both ways');
 
-  gs.input.value = 'zzzzzz';
-  fire(gs.input, 'input');
-  await tick(150);
-  eq(gsItems().length, 0, 'no results');
-  eq(gs.foot.textContent, 'No object matches.', 'says so');
+  gs.input.value = ' thm-tychonoff ';
+  fire(gs.form, 'submit');
+  global.window.dispatch('hashchange', {});
+  await tick(5);
+  eq(String(global.location.hash), '#/object/thm-tychonoff', 'an id goes to its object');
+  eq(gs.input.value, '', "and leaves the search page's query behind");
+
+  await go('#/search?query=lem-diagonal');
+  await app.rendered;
+  eq(String(global.location.hash), '#/object/lem-diagonal', 'so does a search page link to an id');
 });
 
-await check('the top-bar search: arrows, Enter, Escape', async () => {
-  gs.input.value = 'compact';
-  fire(gs.input, 'input');
-  await tick(150);
-  const n = gsItems().length;
-  ok(n >= 3, 'several results');
-  fire(gs.input, 'keydown', { key: 'ArrowDown' });
-  eq(gsItems()[1].getAttribute('aria-selected'), 'true', 'down moves to the second');
-  eq(gs.input.getAttribute('aria-activedescendant'), gsItems()[1].id, 'aria-activedescendant');
-  fire(gs.input, 'keydown', { key: 'ArrowUp' });
-  fire(gs.input, 'keydown', { key: 'ArrowUp' });
-  eq(gsItems()[n - 1].getAttribute('aria-selected'), 'true', 'up from the first wraps to the last');
-  const want = gsItems()[n - 1].getAttribute('href');
-  const ev = fire(gs.input, 'keydown', { key: 'Enter' });
-  ok(ev.defaultPrevented, 'Enter is taken');
-  await tick(5);
-  eq(String(global.location.hash), want, 'Enter goes to the active result');
-  eq(gs.input.value, '', 'and empties the box');
-  ok(gs.panel.hidden, 'and closes the list');
+await check('the search page lists the results in document order, as a tree', async () => {
+  await go('#/search?query=compact');
+  await app.rendered;
+  const want = modelMod1.fullTextSearch(app.model, 'compact');
+  eq(searchCount(), `${want.length} results (now showing results 1\u2013${Math.min(10, want.length)})`, 'the count');
+  const hits = searchItems();
+  eq(hits.length, Math.min(10, want.length), 'ten to a page');
+  eq(itemHref(hits[0]), '#/object/def-compact', 'Definition 1.1 first');
+  eq(hits[0].querySelector('span.preview-title').textContent, 'Definition 1.1: Compact space', 'its line');
+  // Its section is there, as context, with the definition under it.
+  const top = root.querySelector('ul.search-tree').children[0];
+  ok(top.classList.contains('kind-section') && !top.classList.contains('match'), 'the section is context');
+  eq(top.querySelector('span.preview-title').textContent, 'Section 1: Foundations', "the section's line");
+  // A proof is filed under its statement.
+  await go('#/search?query=compact&perpage=all');
+  await app.rendered;
+  const proof = searchItems().find((li) => li.classList.contains('kind-proof'));
+  ok(proof, 'the proof is listed');
+  ok(proof.parentNode.parentNode.classList.contains('kind-theorem'), 'under the theorem it proves');
+  eq(searchItems().length, want.length, 'all of them on one page');
+});
 
-  // Enter straight after typing acts on the new query, not the old list.
-  gs.input.value = 'heine';
-  fire(gs.input, 'input');
-  fire(gs.input, 'keydown', { key: 'Enter' });
-  await tick(5);
-  eq(String(global.location.hash), '#/object/thm-heine-borel', 'Enter before the debounce fired');
+await check('the search page: magnifier, folding, statements only, no results', async () => {
+  await go('#/search?query=compact');
+  await app.rendered;
+  const li = searchItems()[0];
+  const lens = li.querySelector('button.previewable');
+  ok(lens, 'a statement has a magnifier');
+  const preview = li.querySelector('div.search-preview');
+  ok(preview.hidden, 'its statement starts hidden');
+  fire(lens, 'click');
+  ok(!preview.hidden && li.querySelector('span.preview-title').hidden, 'the statement in place of the line');
+  ok(/^Definition 1\.1 \(Compact space\)\. /.test(preview.textContent), `run in: ${preview.textContent.slice(0, 60)}`);
+  eq(lens.getAttribute('aria-expanded'), 'true', 'aria-expanded');
+  fire(lens, 'click');
+  ok(preview.hidden && !li.querySelector('span.preview-title').hidden, 'and back');
+  ok(!root.querySelector('ul.search-tree li.kind-section.match button.previewable'), 'a section has none');
 
-  gs.input.value = 'compact';
-  fire(gs.input, 'input');
-  await tick(150);
-  fire(gs.input, 'keydown', { key: 'Escape' });
-  ok(gs.panel.hidden, 'Escape closes the list');
-  eq(gs.input.value, 'compact', 'and keeps the query');
-  gs.input.value = '';
+  const parent = root.querySelector('ul.search-tree li.has-children');
+  fire(parent.querySelector('button.thumb'), 'click');
+  ok(parent.classList.contains('collapsed') && parent.querySelector('ul').hidden, 'a triangle folds');
+  const expand = root.querySelectorAll('.search-expand button');
+  fire(expand[0], 'click');
+  ok(parent.classList.contains('expanded') && !parent.querySelector('ul').hidden, 'Expand all');
+  fire(expand[1], 'click');
+  ok(root.querySelectorAll('ul.search-tree li.has-children').every((x) => x.classList.contains('collapsed')), 'Collapse all');
+
+  const radio = root.querySelector('#search-radius-statements');
+  ok(radio && !radio.checked, 'all objects by default');
+  radio.checked = true;
+  root.querySelector('#search-radius-all').checked = false;
+  fire(radio, 'change');
+  global.window.dispatch('hashchange', {});
+  await tick(5);
+  await app.rendered;
+  eq(hashParams().get('radius'), 'statements', 'a choice searches again');
+  ok(searchItems().every((x) => !x.classList.contains('kind-proof') && !x.classList.contains('kind-section')), 'statements alone');
+  ok(root.querySelector('#search-radius-statements').checked, 'and says so');
+
+  await go('#/search?query=zzzzzz');
+  await app.rendered;
+  eq(searchCount(), 'No results', 'says so');
+  eq(searchItems().length, 0, 'lists nothing');
+
+  await go('#/search');
+  await app.rendered;
+  ok(!searchCount(), 'no count without a query');
+  ok(root.querySelector('.search-tips'), 'the tips are there');
+});
+
+await check('the search page pages its results as the Stacks project does', async () => {
+  eq(pageNumbers(1, 3).join(' '), '1 2 3', 'few pages: all');
+  eq(pageNumbers(1, 43).map((n) => n || '…').join(' '), '1 2 3 4 5 … 43', 'the first');
+  eq(pageNumbers(20, 43).map((n) => n || '…').join(' '), '1 … 19 20 21 … 43', 'the middle');
+  eq(pageNumbers(42, 43).map((n) => n || '…').join(' '), '1 … 39 40 41 42 43', 'the end');
+  const saved = { model: app.model, snapshot: app.snapshot };
+  app.snapshot = generate({ seed: 3 });
+  app.model = modelMod1.buildModel(app.snapshot);
+  try {
+    const n = modelMod1.fullTextSearch(app.model, 'flat').length;
+    ok(n > 20, `enough results to page: ${n}`);
+    await go('#/search?query=flat&page=2');
+    await app.rendered;
+    eq(searchCount(), `${n} results (now showing results 11\u201320)`, 'the second page');
+    const pager = root.querySelector('nav.search-pager');
+    ok(pager, 'pages');
+    eq(pager.querySelector('li.active a').textContent, '2', 'the current one');
+    ok(!pager.querySelector('li.search-prev').classList.contains('inactive'), 'a way back');
+    eq(new URLSearchParams(pager.querySelector('li.search-next a').getAttribute('href').split('?')[1]).get('page'), '3', 'and on');
+    const per = root.querySelectorAll('nav.search-perpage a').map((a) => a.textContent);
+    eq(per.join(' '), '10 50 \u221e', 'results per page');
+    await go('#/search?query=flat&page=999&perpage=50');
+    await app.rendered;
+    const last = Math.ceil(n / 50);
+    eq(root.querySelector('nav.search-pager li.active a').textContent, String(last), 'a page past the end is the last');
+    ok(root.querySelector('nav.search-pager li.search-next').classList.contains('inactive'), 'with nowhere further');
+  } finally {
+    app.model = saved.model;
+    app.snapshot = saved.snapshot;
+  }
   await go('#/object/def-compact');
 });
 
