@@ -625,6 +625,18 @@ def assembleSite (root : System.FilePath) (out : System.FilePath) (args : Args) 
   IO.FS.writeFile (out / "blueprint.json") snap.render
   IO.println s!"site: {out} ({copied} file(s) from {web}, \
     {snap.objects.size} objects; {summarise a.checks})"
+  -- The intro on its own as well, a few hundred bytes the website reads
+  -- before the snapshot, so that the intro plays while a large snapshot is
+  -- still on its way.  A site without it plays the intro once the snapshot
+  -- is in.
+  let project := l.blueprint.project
+  let introFile := out / "intro.json"
+  if project.intro.isEmpty then
+    if ← introFile.pathExists then IO.FS.removeFile introFile
+  else
+    IO.FS.writeFile introFile (Lean.Json.mkObj [
+      ("title", Lean.Json.str (if project.title.isEmpty then project.name else project.title)),
+      ("intro", project.introJson)]).compress
   -- The project's own files, such as the pictures of its intro, which
   -- refers to them as `assets/…`.
   let assets := l.blueprint.project.assets

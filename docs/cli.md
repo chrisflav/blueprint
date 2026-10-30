@@ -550,6 +550,19 @@ assets = "site-assets"              # copied into the site as assets/
 file     = "intro.md"               # Markdown; or body = """…""" inline
 duration = 4                        # seconds, default 3
 
+# or, instead of the single node, a zoom from the intro as a title into the
+# graph, through pictures of its own:
+#   background = "assets/page.jpg"   # faded behind the title
+#   hold       = 0.5                 # seconds the title stays, default 0.5
+#   step       = 1                   # seconds per step of the zoom, default 1
+#
+#   [[site.intro.zoom]]
+#   nodes  = [{ title = "Main theorem", kind = "theorem" }]
+#
+#   [[site.intro.zoom]]
+#   nodes  = [{ id = "a", title = "Part A" }, { id = "b", title = "Part B" }]
+#   arrows = [["a", "b"]]
+
 [kinds.theorem]                     # extends the built-in `theorem`
 attrs = ["title", "lean", "review", "tags", "order", "aliases", "owner"]
 
@@ -622,6 +635,26 @@ as an object's prose is, so it may hold maths, `[slug]` references, pictures
 float, default 3); a click, Escape, Enter or Space skips it.  It reaches the
 snapshot as `project.intro`.  A link to any other page of the site opens
 straight on that page, and `?intro=0` in the page's URL leaves the intro out.
+
+With one or more `[[site.intro.zoom]]` tables the intro is a short zoom
+instead of the single node.  The Markdown is a title, large in the middle of
+the screen in the font of the top bar's title, over `background` (an address
+the site serves, such as `assets/page.jpg`, shown faded; optional).  After
+`hold` seconds (default 0.5) the title flies into the top bar and becomes
+its title, the top bar and the graph's tools fade in, and the view zooms
+into the middle of the screen: the background grows and fades while the
+first picture grows out of a point, then that picture grows on and fades
+while the next grows out of its middle, and so on, the last being the graph
+itself.  Each step takes `step` seconds (default 1) and makes everything ten
+times bigger, so the zoom keeps one speed throughout.  A picture is a few
+boxes and arrows, laid out and drawn as the graph lays out and draws its
+nodes and arcs: `nodes` lists them, each a title or a table with a `title`,
+an `id` for `arrows` to name (default: the title) and the `kind` it is drawn
+as (default `section`, drawn as a collapsed section); `arrows` lists pairs of
+ids, each drawn from the first to the second.  `duration` is unused then.
+`blueprint site` writes the intro to `intro.json` beside the snapshot as
+well, so that the title shows at once and stays until the snapshot is in and
+the graph is drawn, rather than the page waiting blank for a large snapshot.
 
 `[site] assets` names a directory, relative to the root, that `blueprint
 site` copies into the site as `assets/`: the place for the intro's pictures.

@@ -191,6 +191,65 @@ def decodeKind (name : String) (base : Option KindSpec) (t : TValue) :
     | none => throw s!"kind '{name}': 'graph' must be a string"
   return k
 
+/-- A number of seconds in `[site.intro]`, as milliseconds; `none` when the
+key is not there. -/
+def decodeIntroSeconds (it : TValue) (k : String) : Except String (Option Nat) :=
+  match it.get? k with
+  | none => pure none
+  | some (.int n) =>
+    if n > 0 then pure (some (n.toNat * 1000))
+    else throw s!"'[site.intro] {k}' must be positive, got {n}"
+  | some (.float f) =>
+    if f > 0 then pure (some (f * 1000).round.toUInt64.toNat)
+    else throw s!"'[site.intro] {k}' must be positive, got {f}"
+  | some v => throw s!"'[site.intro] {k}' must be a number of seconds, got a {v.typeName}"
+
+/-- The `n`th (from 1) `[[site.intro.zoom]]`: `nodes`, each a title or a table
+`{ id, title, kind }`, and `arrows`, each a pair of their ids. -/
+def decodeIntroLayer (n : Nat) (l : TValue) : Except String IntroLayer := do
+  let at_ := s!"'[[site.intro.zoom]]' number {n}"
+  unless l matches .table _ do
+    throw s!"{at_} must be a table, got a {l.typeName}"
+  let nodeVals ← match l.get? "nodes" with
+    | some (.arr xs) => pure xs
+    | some v => throw s!"{at_}: 'nodes' must be an array, got a {v.typeName}"
+    | none => throw s!"{at_} needs 'nodes', the boxes it draws"
+  if nodeVals.isEmpty then throw s!"{at_}: 'nodes' is empty"
+  let mut nodes : Array IntroNode := #[]
+  for v in nodeVals do
+    let node ← match v with
+      | .str t => pure { id := t, title := t : IntroNode }
+      | .table _ =>
+        let str (k : String) : Except String String :=
+          match v.get? k with
+          | none => pure ""
+          | some x => match x.asString? with
+            | some s => pure s
+            | none => throw s!"{at_}: a node's '{k}' must be a string, got a {x.typeName}"
+        let title ← str "title"
+        if title.isEmpty then throw s!"{at_}: a node needs a 'title'"
+        let id ← str "id"
+        let kind ← str "kind"
+        pure { id := if id.isEmpty then title else id, title,
+               kind := if kind.isEmpty then "section" else kind : IntroNode }
+      | x => throw s!"{at_}: a node must be a title or a table, got a {x.typeName}"
+    if nodes.any (·.id == node.id) then throw s!"{at_}: two nodes are called '{node.id}'"
+    nodes := nodes.push node
+  let arrowVals ← match l.get? "arrows" with
+    | none => pure #[]
+    | some (.arr xs) => pure xs
+    | some v => throw s!"{at_}: 'arrows' must be an array, got a {v.typeName}"
+  let mut arrows : Array (String × String) := #[]
+  for v in arrowVals do
+    match v.asStrings? with
+    | some #[a, b] =>
+      for e in [a, b] do
+        unless nodes.any (·.id == e) do
+          throw s!"{at_}: an arrow names '{e}', which is none of its nodes"
+      arrows := arrows.push (a, b)
+    | _ => throw s!"{at_}: an arrow must be a pair of node ids, [\"from\", \"to\"]"
+  return { nodes, arrows }
+
 /-- Decode a whole `blueprint.toml` on top of the default schema. -/
 def decodeConfig (t : TValue) (defaultName : String) :
     Except String (Project × Schema) := do
@@ -235,8 +294,9 @@ def decodeConfig (t : TValue) (defaultName : String) :
       | none => throw s!"'[site] {k}' must be a string, got a {v.typeName}"
   let theme ← siteStr "theme"
   let assets ← siteStr "assets"
-  let (intro, introFile, introMs) ← match site.bind (·.get? "intro") with
-    | none => pure ("", "", none)
+  let (intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom) ←
+    match site.bind (·.get? "intro") with
+    | none => pure ("", "", none, "", none, none, #[])
     | some it@(.table _) => do
       let str (k : String) : Except String String :=
         match it.get? k with
@@ -250,20 +310,23 @@ def decodeConfig (t : TValue) (defaultName : String) :
         throw "'[site.intro]' takes a 'body' or a 'file', not both"
       if body.isEmpty && file.isEmpty then
         throw "'[site.intro]' needs a 'body' (Markdown) or a 'file' to read it from"
-      let ms ← match it.get? "duration" with
-        | none => pure none
-        | some (.int n) =>
-          if n > 0 then pure (some (n.toNat * 1000))
-          else throw s!"'[site.intro] duration' must be positive, got {n}"
-        | some (.float f) =>
-          if f > 0 then pure (some (f * 1000).round.toUInt64.toNat)
-          else throw s!"'[site.intro] duration' must be positive, got {f}"
-        | some v => throw s!"'[site.intro] duration' must be a number of seconds, got a {v.typeName}"
-      pure (body, file, ms)
+      let ms ← decodeIntroSeconds it "duration"
+      let background ← str "background"
+      let hold ← decodeIntroSeconds it "hold"
+      let step ← decodeIntroSeconds it "step"
+      let zoom ← match it.get? "zoom" with
+        | none => pure #[]
+        | some (.arr ls) => do
+          let mut out := #[]
+          for l in ls do out := out.push (← decodeIntroLayer (out.size + 1) l)
+          pure out
+        | some v => throw s!"'[site.intro] zoom' must be an array of tables, got a {v.typeName}"
+      pure (body, file, ms, background, hold, step, zoom)
     | some v => throw s!"'[site] intro' must be a table, got a {v.typeName}"
   let project : Project :=
     { name, title, dir, leanModules, leanDescend, katexMacros, theme,
-      intro, introFile, introMs, assets }
+      intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom,
+      assets }
   let mut schema := defaultSchema
   if let some v := lookup "defaultCollapse" then
     match v.asString? with

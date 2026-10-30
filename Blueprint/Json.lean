@@ -113,6 +113,21 @@ def Analysis.snapshot (a : Analysis) (facts : Option Facts := none) : Snapshot :
     progress := a.progress
     checks := a.checks }
 
+/-- The project's intro as JSON, `project.intro` in the snapshot (and in the
+site's `intro.json`).  Each optional field is left out when it is not set. -/
+def Project.introJson (p : Project) : Json :=
+  let nat (n : Nat) := Json.num (JsonNumber.fromNat n)
+  let layer (l : IntroLayer) := Json.mkObj [
+    ("nodes", Json.arr (l.nodes.map fun n => Json.mkObj [
+      ("id", Json.str n.id), ("title", Json.str n.title), ("kind", Json.str n.kind)])),
+    ("arrows", Json.arr (l.arrows.map fun (a, b) => Json.arr #[Json.str a, Json.str b]))]
+  Json.mkObj ([("body", Json.str p.intro)] ++
+    (match p.introMs with | some ms => [("durationMs", nat ms)] | none => []) ++
+    (if p.introBackground.isEmpty then [] else [("background", Json.str p.introBackground)]) ++
+    (match p.introHoldMs with | some ms => [("holdMs", nat ms)] | none => []) ++
+    (match p.introStepMs with | some ms => [("stepMs", nat ms)] | none => []) ++
+    (if p.introZoom.isEmpty then [] else [("zoom", Json.arr (p.introZoom.map layer))]))
+
 /-- A snapshot as JSON, exactly as `docs/snapshot-format.md` describes it. -/
 def Snapshot.toJson (s : Snapshot) : Json :=
   Json.mkObj [
@@ -129,10 +144,7 @@ def Snapshot.toJson (s : Snapshot) : Json :=
       (if s.project.theme.isEmpty then [] else
         [("theme", Json.str s.project.theme)]) ++
       (if s.project.intro.isEmpty then [] else
-        [("intro", Json.mkObj ([("body", Json.str s.project.intro)] ++
-          match s.project.introMs with
-          | some ms => [("durationMs", Json.num (JsonNumber.fromNat ms))]
-          | none => []))]))),
+        [("intro", s.project.introJson)]))),
     ("schema", s.schema.toJson),
     ("objects", Json.arr (s.objects.map Object.toJson)),
     ("facts", s.facts.getD Json.null),
@@ -271,15 +283,33 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
   let katexMacros : Array (String × String) := match field? p "katexMacros" with
     | some m => (objEntries m).filterMap fun (n, v) => (v.getStr?.toOption).map (n, ·)
     | none => #[]
+  let intro := (field? p "intro").getD Json.null
+  let introNat (k : String) : Option Nat := (field? intro k).bind (·.getNat?.toOption)
+  let introZoom : Array IntroLayer := match field? intro "zoom" with
+    | some (.arr ls) => ls.map fun l =>
+      { nodes := match field? l "nodes" with
+          | some (.arr ns) => ns.map fun n =>
+            { id := fieldStrD n "id" "", title := fieldStrD n "title" "",
+              kind := fieldStrD n "kind" "section" }
+          | _ => #[]
+        arrows := match field? l "arrows" with
+          | some (.arr xs) => xs.filterMap fun
+            | .arr #[.str a, .str b] => some (a, b)
+            | _ => none
+          | _ => #[] }
+    | _ => #[]
   let project : Project :=
     { name := fieldStrD p "name" "blueprint"
       title := fieldStrD p "title" ""
       dir := fieldStrD p "dir" "blueprint"
       katexMacros
       theme := fieldStrD p "theme" ""
-      intro := fieldStrD ((field? p "intro").getD Json.null) "body" ""
-      introMs := (field? p "intro").bind fun i =>
-        (field? i "durationMs").bind (·.getNat?.toOption) }
+      intro := fieldStrD intro "body" ""
+      introMs := introNat "durationMs"
+      introBackground := fieldStrD intro "background" ""
+      introHoldMs := introNat "holdMs"
+      introStepMs := introNat "stepMs"
+      introZoom }
   let schema := Schema.ofJson ((field? j "schema").getD Json.null)
   let objects ← match field? j "objects" with
     | some (.arr xs) => xs.mapM Object.ofJson

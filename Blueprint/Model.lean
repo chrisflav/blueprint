@@ -260,6 +260,28 @@ end Schema
 
 /-! ## Project and blueprint -/
 
+/-- A box of one of the pictures the website's intro zooms through on its way
+to the graph, `nodes` of a `[[site.intro.zoom]]`: drawn as the graph draws an
+object of `kind`, with `title` in it. -/
+structure IntroNode where
+  /-- What the picture's `arrows` call it; its title when not given. -/
+  id : String
+  /-- The text in the box. -/
+  title : String
+  /-- The kind it is drawn as, which gives its shape and kind mark. -/
+  kind : String := "section"
+  deriving Inhabited, BEq, Repr
+
+/-- One picture the website's intro zooms through on its way to the graph,
+`[[site.intro.zoom]]` in `blueprint.toml`: a few boxes, laid out and drawn as
+the graph lays out and draws its nodes. -/
+structure IntroLayer where
+  /-- Its boxes, in the order the layout keeps where it can. -/
+  nodes : Array IntroNode := #[]
+  /-- Its arrows, each drawn from the first id to the second. -/
+  arrows : Array (String × String) := #[]
+  deriving Inhabited, BEq, Repr
+
 /-- Project level configuration from `blueprint.toml`. -/
 structure Project where
   /-- Short name. -/
@@ -295,6 +317,23 @@ structure Project where
   duration` (given in seconds); `none` for the website's default.  Handed to
   the website as `project.intro.durationMs`. -/
   introMs : Option Nat := none
+  /-- `[site.intro] background`: a picture the intro shows faded behind its
+  title, the address of a file the site serves (`assets/…`); empty for none.
+  Handed to the website as `project.intro.background`. -/
+  introBackground : String := ""
+  /-- `[site.intro] hold`, in milliseconds (given in seconds): how long a
+  zooming intro's title stays before the zoom starts; `none` for the
+  website's default.  Handed to the website as `project.intro.holdMs`. -/
+  introHoldMs : Option Nat := none
+  /-- `[site.intro] step`, in milliseconds (given in seconds): how long each
+  step of a zooming intro takes; `none` for the website's default.  Handed to
+  the website as `project.intro.stepMs`. -/
+  introStepMs : Option Nat := none
+  /-- `[[site.intro.zoom]]`: the pictures the intro zooms through, between its
+  title and the graph.  With none, the intro is the single node of `intro`;
+  with some, `intro` is the title the zoom starts from.  Handed to the website
+  as `project.intro.zoom`. -/
+  introZoom : Array IntroLayer := #[]
   /-- `[site] assets`: a directory, relative to the root, of files the website
   serves, such as the pictures of the intro.  `blueprint site` copies it into
   the site as `assets/`.  Empty for none; not part of the snapshot. -/

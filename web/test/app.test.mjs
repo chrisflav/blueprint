@@ -2083,6 +2083,65 @@ await check('a project has an intro only with a body, and a duration by default'
   eq(intro.introOf({ intro: { body: 'x', durationMs: -1 } }).durationMs, intro.DEFAULT_MS, 'a nonsense one is the default');
 });
 
+await check('a zooming intro: its pictures, hold and step', () => {
+  const d = intro.introOf({ intro: { body: 'Weil' } });
+  eq(d.zoom.length, 0, 'none: the single node');
+  eq(d.holdMs, intro.HOLD_MS, 'the default hold');
+  eq(d.stepMs, intro.STEP_MS, 'the default step');
+  eq(d.background, '', 'no background');
+  const z = intro.introOf({ intro: {
+    body: 'Weil', background: 'assets/page.jpg', holdMs: 800, stepMs: 1200,
+    zoom: [
+      { nodes: [{ id: 'w', title: 'Weil Conjecture', kind: 'theorem' }] },
+      { nodes: [{ id: 'a', title: 'A' }, { title: 'B' }, { id: 'c' }],
+        arrows: [['a', 'B'], ['a', 'c'], ['a'], 'x'] },
+      { nodes: [] },
+    ],
+  } });
+  eq(z.background, 'assets/page.jpg', 'the background');
+  eq(z.holdMs, 800, 'its hold');
+  eq(z.stepMs, 1200, 'its step');
+  eq(z.zoom.length, 2, 'a picture without nodes is left out');
+  eq(z.zoom[0].nodes[0].kind, 'theorem', 'a node keeps its kind');
+  eq(JSON.stringify(z.zoom[1].nodes.map((n) => [n.id, n.kind])), '[["a","section"],["B","section"]]',
+    'a node without a title is left out; an id defaults to the title, a kind to section');
+  eq(JSON.stringify(z.zoom[1].arrows), '[["a","B"]]', 'only arrows between two of its nodes');
+});
+
+await check('the zoom keeps one speed, from rest to rest', () => {
+  const steps = 3;
+  eq(intro.zoomProgress(0, steps), 0, 'starts at 0');
+  eq(intro.zoomProgress(steps, steps), steps, 'ends at the last step');
+  eq(intro.zoomProgress(-1, steps), 0, 'clamped below');
+  eq(intro.zoomProgress(9, steps), steps, 'clamped above');
+  eq(intro.zoomProgress(1.5, steps), 1.5, 'steady in the middle');
+  const h = 1e-4;
+  const speed = (t) => (intro.zoomProgress(t + h, steps) - intro.zoomProgress(t - h, steps)) / (2 * h);
+  ok(speed(h) < 0.01, 'from rest');
+  ok(Math.abs(speed(1) - 1) < 0.01, 'into the steady speed without a jolt');
+  ok(Math.abs(speed(2) - 1) < 0.01, 'out of it without a jolt');
+  ok(speed(steps - h) < 0.01, 'to rest');
+  for (let t = 0; t < steps; t += 0.05) {
+    ok(intro.zoomProgress(t + 0.05, steps) >= intro.zoomProgress(t, steps), 'never backwards at ' + t);
+  }
+  eq(intro.zoomProgress(0.5, 1), 0.5, 'one step: symmetric');
+});
+
+await check('each layer of the zoom grows by the same factor per step', () => {
+  const at = (p) => intro.zoomLayers(p, 4, 10);
+  const r = (x) => Math.round(x * 1000) / 1000;
+  eq(JSON.stringify(at(0).map((l) => [r(l.scale), r(l.opacity)])),
+    '[[1,1],[0.1,0],[0.01,0],[0.001,0]]', 'at the start: the background alone');
+  eq(JSON.stringify(at(1).map((l) => [r(l.scale), r(l.opacity)])),
+    '[[10,0],[1,1],[0.1,0],[0.01,0]]', 'after one step: the first picture at rest');
+  const mid = at(1.5);
+  eq(r(mid[1].scale / mid[2].scale), 10, 'the picture going out is ten times the one coming in');
+  ok(mid[1].opacity > 0 && mid[2].opacity > 0, 'both shown, half way');
+  eq(JSON.stringify(at(3).map((l) => [r(l.scale), r(l.opacity)])),
+    '[[1000,0],[100,0],[10,0],[1,1]]', 'at the end: the graph at rest');
+  eq(r(at(5)[3].scale), 1, 'the last layer stays at rest');
+});
+
 await check('the intro is shown on the landing page only, and ?intro=0 leaves it out', () => {
   const p = { intro: { body: 'Welcome' } };
   const at = (raw) => ({ view: raw.startsWith('/graph') ? 'graph' : raw.slice(1).split('/')[0], raw });
