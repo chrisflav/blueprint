@@ -74,8 +74,19 @@ export function render(root, app) {
   page.appendChild(attrsPanel(app, o));
 
   // ------------------------------------------------------ Lean declarations
+  // `?lean=<name>` (from a Lean card) lands on that declaration, `?lean=` on
+  // the panel.
   const facts = M.leanFactsFor(m, o);
-  if (facts.length) page.appendChild(leanPanel(app, o, facts));
+  const want = app.route.params.get('lean');
+  if (facts.length) {
+    const panel = leanPanel(app, o, facts, want);
+    page.appendChild(panel);
+    if (want !== null) {
+      const target = (want && panel.querySelector(`[id="lean-${cssId(want)}"]`)) || panel;
+      target.classList.add('flash');
+      requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
+    }
+  }
 
   // ---------------------------------------------------------- the boundary
   if (o.boundary.length) {
@@ -276,24 +287,28 @@ function cssId(id) {
   return String(id).replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
-// The panels the reader has opened, by key.  The page is rebuilt on every
-// visit, and a reader going from object to object to follow the incident
-// objects should not have to open that listing again each time.
-const opened = new Set();
+// Whether the reader left each panel open, by key.  The page is rebuilt on
+// every visit, and a reader going from object to object to follow the
+// incident objects should not have to open that listing again each time.
+const opened = new Map();
+
+// The panels that start open: what the reader of an object page with Lean
+// names most often came for.
+const STARTS_OPEN = new Set(['lean']);
 
 /**
  * A panel behind a disclosure, shut until the reader opens it: the long and
  * secondary listings (incident objects, attributes, the positions in the
  * collapse orders, checks), so that what the object says comes first and the
- * page is not a scroll through hundreds of rows to reach it.
+ * page is not a scroll through hundreds of rows to reach it.  The Lean
+ * declarations fold the same way but start open (`STARTS_OPEN`).
  */
 function foldPanel(app, key, title, ...children) {
   return app.el('details.panel.fold', {
-    open: opened.has(key),
+    open: opened.has(key) ? opened.get(key) : STARTS_OPEN.has(key),
     'data-fold': key,
     ontoggle: (ev) => {
-      if (ev.target.open) opened.add(key);
-      else opened.delete(key);
+      if (ev.target === ev.currentTarget) opened.set(key, ev.target.open);
     },
   }, app.el('summary', app.el('h3', title)), ...children);
 }
@@ -352,43 +367,66 @@ function attrsPanel(app, o) {
   return foldPanel(app, 'attrs', `Declared attributes (${rows.length / 2})`, el('dl.kv', ...rows));
 }
 
-function leanPanel(app, o, facts) {
+/**
+ * The Lean declarations, numbered, each led by what it says in words (its
+ * docstring) with its name, kind and status small beneath that, then the
+ * signature and where it lives.  A name the docstring does not explain is
+ * its own heading.  `want` is the name a link asked for (`?lean=`), or ''
+ * for the panel itself; the panel is opened for it either way.
+ */
+function leanPanel(app, o, facts, want) {
   const { el } = app;
   const docgen = app.model.project && app.model.project.docgen;
-  const items = facts.map(({ name, fact }) => {
-    const head = docgen
-      ? el('a', { href: M.docgenUrl(docgen, name), target: '_blank', rel: 'noopener' }, el('code', name))
-      : el('code', name);
+  const items = facts.map(({ name, fact }, i) => {
+    const code = el('code', name);
+    const link = docgen
+      ? el('a', { href: M.docgenUrl(docgen, name), target: '_blank', rel: 'noopener' }, code)
+      : code;
     // Whether the declaration is there at all is progress too, hidden with it.
-    if ((!fact || fact.exists === false) && !app.showProgress) return el('div.lean-decl', head);
-    if (!fact) {
-      return el('div.lean-decl', head, ' ', el('span.badge.status-absent', el('span.dot'), 'no facts'));
+    const quiet = !fact || fact.exists === false ? !app.showProgress : false;
+    const badge = quiet ? null
+      : !fact ? el('span.badge.status-absent', el('span.dot'), 'no facts')
+        : fact.exists === false ? el('span.badge.status-missing', el('span.dot'), 'does not exist')
+          : fact.status ? app.statusBadge(fact.status) : null;
+    const doc = fact && fact.exists !== false && typeof fact.doc === 'string' && fact.doc.trim()
+      ? fact.doc : null;
+    let notation;
+    if (doc) {
+      notation = el('div.lean-notation.body-prose');
+      app.renderBody(notation, doc, app.knownIds(), undefined, { untrusted: true });
+    } else {
+      notation = el('div.lean-notation.is-name', link);
     }
-    if (fact.exists === false) {
-      return el('div.lean-decl', head, ' ',
-        el('span.badge.status-missing', el('span.dot'), 'does not exist'));
-    }
-    const r = fact.range;
-    return el('div.lean-decl',
-      el('div.row', head,
-        fact.kind ? el('span.chip', fact.kind) : null,
-        fact.status ? app.statusBadge(fact.status) : null),
-      fact.signature ? el('pre', el('code', fact.signature)) : null,
-      el('div.where',
-        fact.module ? el('span', 'module ', el('code', fact.module)) : null,
-        r ? el('span', ' · ', el('code', `${r.file}:${r.startLine}–${r.endLine}`)) : null),
-      Array.isArray(fact.axioms) && fact.axioms.length
+    const meta = el('div.lean-meta',
+      doc ? link : null,
+      fact && fact.kind ? el('span.chip', fact.kind) : null,
+      badge);
+    const real = fact && fact.exists !== false;
+    const r = real ? fact.range : null;
+    return el('div.lean-decl', { id: 'lean-' + cssId(name), 'data-lean': name },
+      el('div.lean-decl-head',
+        el('span.lean-num', { 'aria-label': 'Declaration ' + (i + 1) }, String(i + 1)),
+        el('div.lean-decl-title', notation, meta.childNodes.length ? meta : null)),
+      real && fact.signature ? el('pre', el('code', fact.signature)) : null,
+      real && (fact.module || r)
+        ? el('div.where',
+            fact.module ? el('span', 'module ', el('code', fact.module)) : null,
+            r ? el('span', ' · ', el('code', `${r.file}:${r.startLine}–${r.endLine}`)) : null)
+        : null,
+      real && Array.isArray(fact.axioms) && fact.axioms.length
         ? el('div.where', 'axioms: ', ...fact.axioms.map((a) => el('code', a)))
         : null,
-      fact.doc ? el('div.doc', fact.doc) : null,
-      Array.isArray(fact.deps) && fact.deps.length
+      real && Array.isArray(fact.deps) && fact.deps.length
         ? el('div.where', 'depends on: ', ...fact.deps.map((d) => el('code', d)))
         : null);
   });
-  return el('div.panel',
-    el('h3', 'Lean declarations'),
+  const title = facts.length === 1 ? 'Lean declaration' : `Lean declarations (${facts.length})`;
+  const panel = foldPanel(app, 'lean', title,
     docgen ? null : el('p.muted.small', 'No ', el('code', 'project.docgen'), ' in the snapshot, so names are not linked.'),
-    ...items);
+    el('div.lean-decls', ...items));
+  panel.id = 'lean';
+  if (want !== null) panel.open = true;
+  return panel;
 }
 
 function incidencePanel(app, o) {

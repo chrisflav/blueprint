@@ -1060,13 +1060,40 @@ await check('resting on the Lean mark opens a card of its Lean declarations', as
   const names = card.querySelectorAll('ul.lean-names li');
   eq(names.length, 2, 'one row per name');
   eq(names.map((li) => li.querySelector('code').textContent).join(' '), 'Compact.Filter Compact.Ultrafilter', 'the names');
-  eq(names[0].querySelector('a.lean-name').getAttribute('href'), '#/object/def-filter', 'each name leads to the object page');
+  eq(names[0].querySelector('a.lean-name').getAttribute('href'), '#/object/def-filter?lean=Compact.Filter', 'each name leads to its declaration on the object page');
   eq(names[0].querySelector('a.lean-docs').getAttribute('href'),
     'https://example.github.io/compact/docs/Compact.html#Compact.Filter', 'and to its documentation');
   eq(card.querySelector('.preview-lead').textContent, 'Lean declarations (2)', 'the head counts them');
   preview.hover(root);
   await tick(GONE);
   eq(cards().length, 0, 'the card outlived the pointer');
+});
+
+await check('the object page numbers its Lean declarations and leads each with its docstring', async () => {
+  await go('#/object/def-filter');
+  const panel = root.querySelector('details.panel[data-fold="lean"]');
+  ok(panel, 'the Lean declarations fold like the other panels');
+  // The shim does not reflect the attribute onto the property.
+  ok(panel.hasAttribute('open'), 'and start open');
+  const decls = panel.querySelectorAll('.lean-decl');
+  eq(decls.map((d) => d.querySelector('.lean-num').textContent).join(' '), '1 2', 'numbered in order');
+  // Compact.Filter has no docstring: its name is the heading.
+  ok(decls[0].querySelector('.lean-notation.is-name code'), 'a name without a docstring heads its own entry');
+  eq(decls[0].querySelector('.lean-meta code'), null, 'and is not repeated beneath');
+  // Compact.Ultrafilter has one: it leads, the name beneath it.
+  ok(decls[1].querySelector('.lean-notation').textContent.includes('A maximal filter.'), 'the docstring leads');
+  eq(decls[1].querySelector('.lean-meta code').textContent, 'Compact.Ultrafilter', 'the name beneath it');
+  ok(!panel.querySelector('.lean-decl .doc'), 'the docstring is not repeated at the foot');
+});
+
+await check('a Lean card link opens the panel and lands on the declaration', async () => {
+  await go('#/object/def-filter?lean=Compact.Ultrafilter');
+  const panel = root.querySelector('details.panel[data-fold="lean"]');
+  ok(panel.open || panel.hasAttribute('open'), 'the panel is open for the link');
+  const target = panel.querySelector('[data-lean="Compact.Ultrafilter"]');
+  ok(target.classList.contains('flash'), 'the declaration asked for is marked');
+  await go('#/object/def-filter?lean=');
+  ok(root.querySelector('details.panel[data-fold="lean"]').classList.contains('flash'), '?lean= marks the panel');
 });
 
 // ---------------------------------------------------------------------------

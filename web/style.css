@@ -944,7 +944,52 @@ ul.lean-names li:last-child { border-bottom: 0; }
 ul.lean-names code { font-family: var(--mono); font-size: .85rem; overflow-wrap: anywhere; }
 ul.lean-names .lean-docs { margin-left: auto; font-size: .78rem; white-space: nowrap; }
 
-.lean-decl { margin: .7rem 0; }
+/* Each declaration of the object page's Lean panel: its number, then what it
+   says in words (its docstring), large and centred, with the Lean name, kind
+   and status small beneath; the signature and the rest follow. */
+.lean-decl {
+  margin: .8rem 0;
+  padding: .75rem .9rem .7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  scroll-margin-top: calc(var(--topbar-h) + 1rem);
+}
+.lean-decl:first-child { margin-top: 0; }
+.lean-decl:last-child { margin-bottom: 0; }
+.lean-decl-head { display: flex; align-items: flex-start; gap: .75rem; margin-bottom: .45rem; }
+.lean-num {
+  flex: none;
+  min-width: 1.45rem;
+  height: 1.45rem;
+  padding: 0 .3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font: 600 .8rem/1 var(--mono);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.lean-decl-title { flex: 1; min-width: 0; text-align: center; }
+.lean-notation { font-size: 1.12rem; line-height: 1.45; color: var(--fg); }
+.lean-notation > :last-child { margin-bottom: 0; }
+.lean-notation.is-name code { font-size: .95rem; overflow-wrap: anywhere; }
+.lean-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: .25em .5em;
+  margin-top: .3em;
+  font-size: .8rem;
+  color: var(--muted);
+}
+.lean-meta code { font-size: .78rem; overflow-wrap: anywhere; }
+.lean-meta a { color: var(--muted); }
+.lean-meta a:hover { color: var(--accent); }
+/* Room on the right as on the left of the centred title, so it centres on
+   the card rather than on what the number leaves of it. */
+.lean-decl-head::after { content: ""; flex: none; width: 1.45rem; }
 .lean-decl pre { margin: .25em 0; white-space: pre-wrap; }
 /* The axiom and dependency lists are runs of `code` chips with nothing but a
    margin between them, and a margin is not a break opportunity: on a theorem
@@ -961,7 +1006,6 @@ ul.lean-names .lean-docs { margin-left: auto; font-size: .78rem; white-space: no
   min-width: 0;
 }
 .lean-decl .where code { overflow-wrap: anywhere; }
-.lean-decl .doc { font-size: .88rem; color: var(--muted); margin-top: .3em; }
 
 ul.objlist { list-style: none; margin: 0; padding: 0; }
 ul.objlist li { padding: .2em 0; display: flex; gap: .45rem; align-items: baseline; flex-wrap: wrap; }
@@ -1559,9 +1603,9 @@ button.primary:hover { background: var(--accent); filter: brightness(1.08); }
   from { background: var(--accent-soft); }
   to { background: transparent; }
 }
-.doc-entry.flash, .step.flash, .proof.flash { animation: doc-flash 1.6s ease-out; }
+.doc-entry.flash, .step.flash, .proof.flash, .lean-decl.flash, .panel.flash { animation: doc-flash 1.6s ease-out; }
 @media (prefers-reduced-motion: reduce) {
-  .doc-entry.flash, .step.flash, .proof.flash { animation: none; outline: 2px solid var(--accent-soft); }
+  .doc-entry.flash, .step.flash, .proof.flash, .lean-decl.flash, .panel.flash { animation: none; outline: 2px solid var(--accent-soft); }
 }
 
 /* Proofs fold under their "Proof." heading. */
