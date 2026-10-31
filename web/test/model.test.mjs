@@ -1371,13 +1371,15 @@ check('the graph never draws a hidden object, or what touches it', () => {
   eq(outline.byId.get('thm').text, false, 'a statement is not text');
   eq(M.referenceOf(outline, 'intro'), null, 'nothing to refer to it by');
   eq(M.documentPageOf(outline, 'intro'), 'main', 'read on its section\'s page');
-  // Text at the top level is read on the top page, contents and all.
+  // Text at the top level is read on the top level written out, not on the
+  // contents.
   const snap = appendixSnapshot();
   snap.objects = snap.objects.filter((o) => o.id !== 'refines/intro/main');
   const top = M.documentOutline(M.buildModel(snap), 'refines');
   eq(top.byId.get('intro').depth, 0, 'text at the top level');
   eq(M.documentPageOf(top, 'intro'), null, 'is read on the top page');
-  eq(M.documentPageShows(top, null, 0, 'intro'), true, 'which the contents write out');
+  eq(M.documentPageShows(top, null, 0, 'intro'), false, 'which the contents do not write out');
+  eq(M.documentPageShows(top, null, 1, 'intro'), true, 'the top level written out does');
 });
 
 check('hiding the appendix takes its contents and their relations along', () => {

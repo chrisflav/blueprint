@@ -1589,13 +1589,14 @@ export function documentPageOf(outline, id) {
 /**
  * Whether the page of `pageId` (null for the top level), inlining `levels`
  * levels below itself, writes out `id`.  `levels` 0 on the top page is its
- * contents alone, which write out only the text at the top level.
+ * contents alone, which write nothing out: text at the top level is read on
+ * the top level written out.
  */
 export function documentPageShows(outline, pageId, levels, id) {
   if (outline.stepOf.has(id)) id = outline.stepOf.get(id);
   const entry = outline.byId.get(id);
   if (!entry) return false;
-  if (pageId === null) return entry.depth < levels || (entry.depth === 0 && entry.text);
+  if (pageId === null) return entry.depth < levels;
   if (entry.id === pageId) return true;
   for (let p = entry.parent; p; p = p.parent) {
     if (p.id === pageId) return entry.depth - p.depth <= levels;

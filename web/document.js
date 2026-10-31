@@ -17,8 +17,10 @@
 // contents list of what it shows.
 //
 // The top of the document is its contents: a row per top-level entry, each
-// leading to that entry's page, and only the text at the top level written
-// out.  A `depth=` on the top page writes the top levels out instead.
+// leading to its level, and nothing written out — not even the text at the
+// top level (an abstract, an introduction), which is read on the top level
+// written out, where a row leads.  A `depth=` on the top page writes the top
+// levels out instead.
 //
 // `?focus=<id>` scrolls to an entry.  A focus the page does not show — every
 // link written before the split, `#/document?focus=x` — is redirected to the
@@ -86,7 +88,8 @@ export function render(root, app) {
   if (focus && !M.documentPageShows(outline, pageId, shown, focus)) {
     const home = M.documentPageOf(outline, focus);
     if (home !== undefined) {
-      app.go('document', home, docQuery(kind, levels, focus), { replace: true });
+      // Read at the top level: written out, since the contents write nothing.
+      app.go('document', home, docQuery(kind, levels, focus, home === null), { replace: true });
       return;
     }
   }
@@ -297,24 +300,15 @@ export function render(root, app) {
   // --------------------------------------------------------------- contents
   //
   // The top of the document: a row per top-level entry, each leading to its
-  // page, and the text at the top level read where it stands between them.
+  // level.  The text at the top level is not here but on that level, read
+  // where it stands once the reader goes in.
   if (contents) {
     flow.appendChild(el('h2.toc-head', 'Contents'));
-    let list = null;
+    const list = el('ol.doc-contents');
     for (const entry of outline.roots) {
-      if (entry.text) {
-        list = null;
-        build(entry);
-        continue;
-      }
-      if (!list) {
-        list = el('ol.doc-contents');
-        flow.appendChild(list);
-      }
-      list.appendChild(contentsRow(app, outline, entry, href, levelHref));
+      if (!entry.text) list.appendChild(contentsRow(app, outline, entry, href, levelHref));
     }
-    const target = focus && document.getElementById('doc-' + cssId(focus));
-    if (target) land(target);
+    flow.appendChild(list);
     return;
   }
 
