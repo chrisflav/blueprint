@@ -324,18 +324,16 @@ function statusChip(app, id) {
 }
 
 /**
- * The page of the split document this object is read on, scrolled to it.
- * Nothing at all for an object the document leaves out (a plain sugar edge,
- * say): a link to the top of the document would only look like an answer.
+ * The page of the split document with this object's level, scrolled to it,
+ * where every link to it in the document leads.  Nothing at all for an
+ * object the document leaves out (a plain sugar edge, say): a link to the top
+ * of the document would only look like an answer.
  */
 function documentLink(app, o) {
   const kind = app.model.defaultCollapse;
   if (!kind) return null;
-  const page = M.documentPageOf(M.documentOutline(app.model, kind), o.id);
-  if (page === undefined) return null;
-  const q = new URLSearchParams({ collapse: kind, focus: o.id });
-  const href = '#/document' + (page ? '/' + encodeURIComponent(page) : '') + '?' + q.toString();
-  return app.el('a', { href }, 'In the document →');
+  const href = app.documentLevelHref(M.documentOutline(app.model, kind), kind, o.id);
+  return href && app.el('a', { href }, 'In the document →');
 }
 
 function graphHref(app, id) {

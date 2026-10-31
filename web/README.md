@@ -271,16 +271,23 @@ The document is the reading order of DESIGN.md §6, numbered as a paper is
 chapters — with its number, title and progress, each a link to its level
 (below); nothing is written out there, not even text at the top level (see below).
 `#/document/<id>` writes out one entry and the levels below it. An entry whose
-children are not on the page links on to its own page, by its number and by a
-*Read 1.2 →* link beside its title. Each page has breadcrumbs up its chain, back to the
+children are not on the page links on to its own page by a *Read 1.2 →* link
+beside its title. Each page has breadcrumbs up its chain, back to the
 contents, its previous and next siblings, and the contents in a sidebar. A
 top-level entry with nothing under it (an introduction, say) is read on its
 own page too, since the contents do not write it out.
 
-Every entry of the contents and of the sidebar leads to its *level*: the page
-of its parent, which writes out the entry and its siblings and nothing below
-them, scrolled to it (`?focus=`) — for a chapter, the top level written out
-(`#/document?depth=1&focus=<id>`). The sidebar (`levelSidebar` in
+Every link to an entry — a row of the contents or of the sidebar, a heading
+on a page, a cross reference in prose, *In the document →* on an object page —
+leads to its *level* (`documentLevelOf` in `model.js`): the page of its
+parent, which writes out the entry and its siblings, scrolled to it
+(`?focus=`) — for a chapter, the top level written out
+(`#/document?depth=1&focus=<id>`). A heading is one link, the kind, the
+number and the title together: *Lemma 2.1 Triviality on fibres* leads to the
+page with 2.1, 2.2, …, and the title of section 2's own page to the page with
+sections 1, 2, 3, …, whatever page it is clicked on; when that is the page
+already open, the click scrolls. The object page is a step aside, on the small
+*object* link beside the heading. The sidebar (`levelSidebar` in
 `document.js`) lists the level the page writes out, under the chain down to
 it as headings, with the entry gone to opened on its own entries. So after a
 click on chapter 1 the page is 1, 2, 3, … and the sidebar is 1 with 1.1, 1.2,
@@ -302,13 +309,13 @@ whole outline opened along the way to the page. Query parameters:
   `depth=1` there writes out the chapters, `depth=2` the chapters with their
   sections, and `depth=all` is the whole document on one page;
 * `focus=<id>`: scroll to that entry. If the page does not show it, the route
-  is replaced by the page that does: an entry with children is read on its own
-  page, any other on its parent's (or its own, at the top level), a step
-  wherever its source is (`documentPageOf` in `model.js`). That is what keeps every link written
-  before the split, `#/document?focus=<id>`, working.
+  is replaced by its level: its parent's page, or the top level written out
+  for a chapter, a step's being its source's (`documentLevelOf` in
+  `model.js`). That is what keeps every link written before the split,
+  `#/document?focus=<id>`, working.
 
 What is in the document, the numbers and the pages are pure functions of the
-snapshot (`documentOutline`, `documentPageOf`, `documentPageShows`,
+snapshot (`documentOutline`, `documentLevelOf`, `documentPageShows`,
 `documentPageEntries` in `model.js`), tested in `test/model.test.mjs`. An
 object with several parents in the order is written out under its first parent
 and repeated under the others as a pointer back to it; the repetition carries
@@ -431,11 +438,11 @@ collapse order: the document's `collapse=`, the graph's `collapse=`, and the
 default order on the object page. The slug stays the link's tooltip.
 
 * A click jumps to the level of what it names. In the document, and from
-  object pages, the intro and preview cards, that is the document's page for
-  it: its own page when it has entries below it (a section, or a statement
-  with refinements), and otherwise the page it is read on, scrolled to it,
-  which is the same page when it is written out there (a click scrolls). The
-  object page is one click further, on the entry's title.
+  object pages, the intro and preview cards, that is the document's page with
+  it and its siblings, scrolled to it, as its heading leads: "Section 2" to
+  the page with sections 1, 2, 3, …, "Lemma 2.1" to the one with 2.1, 2.2, ….
+  When that is the page already open, a click scrolls. The object page is one
+  click further, on the *object* link beside the entry's heading.
 * In the graph's side panel and its cards it is the level of the graph the
   object is drawn at: the sections above it opened, the object itself too
   when it has contents (so the reader is in it), and the object selected; the

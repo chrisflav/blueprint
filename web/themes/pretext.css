@@ -112,9 +112,8 @@ button, select, input[type="text"], input[type="search"] { border-radius: 0; }
 /* Headings: black serif, a steel rule under them, the number in the same
    face as the title. */
 .doc-entry .head .num { font-family: var(--serif); color: var(--fg); font-weight: 700; }
-.doc-entry .head:has(> h1) > .num { font-size: 1.85rem; }
-.doc-entry .head:has(> h2) > .num { font-size: 1.35rem; }
-.doc-entry .head a:not(.num):not(.lean-mark):not(.doc-open) { color: var(--fg); }
+.doc-entry .head :is(h1, h2, h3, h4, h5) .num { font-size: 1em; }
+.doc-entry .head a:not(.num):not(.lean-mark):not(.doc-open):not(.doc-object) { color: var(--fg); }
 .doc-entry.is-section > .head, .doc-entry.page-head > .head {
   border-bottom: 2px solid var(--ptx-rule);
   padding-bottom: .25rem;

@@ -24,8 +24,8 @@
 //
 // `?focus=<id>` scrolls to an entry.  A focus the page does not show — every
 // link written before the split, `#/document?focus=x` — is redirected to the
-// page the entry is read on (`documentPageOf`), replacing the history entry so
-// Back does not bounce off the redirect.
+// entry's level (`documentLevelOf`), replacing the history entry so Back does
+// not bounce off the redirect.
 //
 // Size.  Even split, a page can be large (a section with hundreds of lemmas, or
 // `depth=all`), and turning prose into HTML — marked, then KaTeX, then the
@@ -75,18 +75,22 @@ export function render(root, app) {
   const pageId = app.route.id || null;
   const focus = app.route.params.get('focus');
   const href = (page, target) => docHref(kind, levels, page, target);
-  // The page that writes out the level an entry is on, scrolled to it: its
-  // parent's page, or the top level written out, which says its depth (the
-  // top page without one is the contents).
-  const levelHref = (e) => (e.parent ? href(e.parent.id, e.id)
-    : '#/document?' + docQuery(kind, levels, e.id, true).toString());
+  // The page that writes out the level an entry is on (`documentLevelOf`),
+  // scrolled to it: its parent's page, or the top level written out, which
+  // says its depth (the top page without one is the contents).  Every link to
+  // an entry leads there: its heading, a reference to it, the contents.
+  const levelPage = (id) => M.documentLevelOf(outline, id);
+  const levelHref = (id) => (levelPage(id) === null
+    ? '#/document?' + docQuery(kind, levels, id, true).toString()
+    : href(levelPage(id), id));
   // The top page with no `depth=` is the contents, which write out no level.
   const contents = pageId === null && !app.route.params.has('depth');
   const shown = contents ? 0 : levels;
 
-  // An entry this page does not write out is read somewhere else: go there.
+  // An entry this page does not write out is read somewhere else: go to its
+  // level.
   if (focus && !M.documentPageShows(outline, pageId, shown, focus)) {
-    const home = M.documentPageOf(outline, focus);
+    const home = M.documentLevelOf(outline, focus);
     if (home !== undefined) {
       // Read at the top level: written out, since the contents write nothing.
       app.go('document', home, docQuery(kind, levels, focus, home === null), { replace: true });
@@ -115,20 +119,14 @@ export function render(root, app) {
   const entries = M.documentPageEntries(outline, pageId, shown);
 
   // Cross references in the prose read "Lemma 2.3.1" in this order's numbers,
-  // and stay in the paper: they lead to the level of the entry, its own page
-  // when it has entries below it, and otherwise where it is written out, on
-  // this page if it is here.  A reader who wants
-  // the object page has the entry's title for that.  Objects the document
-  // does not number keep their slug and their object-page link.
-  const refPage = (slug) => {
-    const own = M.documentPageOf(outline, slug);
-    if (own === slug) return own;
-    return M.documentPageShows(outline, pageId, shown, slug) ? pageId : own;
-  };
+  // and stay in the paper: they lead to the level of the entry, as its heading
+  // does.  A reader who wants the object page has the "object" link beside the
+  // entry's heading for that.  Objects the document does not number keep their
+  // slug and their object-page link.
   const refs = (slug) => {
     const ref = M.referenceOf(outline, slug);
     if (!ref) return null;
-    return { ...ref, href: href(refPage(slug), slug) };
+    return { ...ref, href: levelHref(slug) };
   };
   // Depths on this page count from the first level below the page's own
   // entry, which is set as the page's title.
@@ -142,18 +140,23 @@ export function render(root, app) {
   page.appendChild(contents ? body : el('div.doc-layout', toc, body));
   root.appendChild(page);
 
-  // A reference to an entry already built on this page jumps to it instead of
-  // rebuilding the page around the same place.  A jump rather than a smooth
-  // scroll, and pinned: on the way past, bodies render and move the target,
-  // and a smooth scroll in Chromium then ends wherever the target used to be.
+  // A reference or a heading whose level is this page jumps to the entry
+  // instead of rebuilding the page around the same place.  A jump rather than
+  // a smooth scroll, and pinned: on the way past, bodies render and move the
+  // target, and a smooth scroll in Chromium then ends wherever the target
+  // used to be.
   flow.addEventListener('click', (ev) => {
-    const a = ev.target && ev.target.closest ? ev.target.closest('a.ref[data-ref]') : null;
-    if (!a || refPage(a.getAttribute('data-ref')) !== pageId) return;
-    const target = document.getElementById('doc-' + cssId(a.getAttribute('data-ref')));
+    if (ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return; // a new tab or window
+    const a = ev.target && ev.target.closest ? ev.target.closest('a.ref[data-ref], a.doc-title[data-level]') : null;
+    if (!a) return;
+    const id = a.getAttribute('data-ref') || a.getAttribute('data-level');
+    if (levelPage(id) !== pageId) return;
+    const target = document.getElementById('doc-' + cssId(id));
     if (!target) return; // not built yet: let the route build the page to it
     ev.preventDefault();
     target.scrollIntoView({ block: 'start' });
     pin(target);
+    flash(target);
   });
 
   // ----------------------------------------------------------------- header
@@ -230,19 +233,23 @@ export function render(root, app) {
 
     // Sections are headings; everything else is a numbered statement in the
     // way a paper sets one: "Definition 1.2.14 (Title)." with the kind as the
-    // lead word, and the body indented under it.  The number of an entry
-    // with a page of its own is the link to that page.
+    // lead word, and the body indented under it.  The heading, kind, number
+    // and title, is one link, to the level the entry is on (`levelHref`):
+    // Lemma 2.1 leads to 2.1, 2.2, …, and Section 2 to 1, 2, 3, …, whatever
+    // page it is clicked on.  A repeated entry leads to where it is written
+    // out.
     const isSection = M.isSectionKind(o.kind);
-    const numNode = entry.children.length && !entry.duplicate && !isHead
-      ? el('a.num', { href: href(o.id), title: 'open ' + num + ' on its own page' }, num)
-      : el('span.num', num);
+    const at = entry.duplicate ? outline.byId.get(o.id) : entry;
     const head = el('div.head',
-      isSection ? null : el('span.kindword', M.kindWord(o.kind)),
-      numNode,
-      el('h' + hLevel, el('a.objlink', { href: app.objectHref(o.id) }, M.titleOf(o))),
+      el('h' + hLevel, el('a.doc-title', { href: levelHref(at.id), 'data-level': at.id },
+        isSection ? null : [el('span.kindword', M.kindWord(o.kind)), ' '],
+        el('span.num', num), ' ',
+        el('span.doc-title-text', M.titleOf(o)))),
       // An entry whose children are on a page of their own leads on there,
       // beside its title.
       leadsOn ? el('a.doc-open', { href: href(o.id) }, 'Read ', num, ' →') : null,
+      // The heading leads into the paper; the object page is a step aside.
+      el('a.doc-object', { href: app.objectHref(o.id), title: 'the object page of ' + num }, 'object'),
       // Its Lean names, in a card of their own, so the heading keeps one word.
       // Before the badges: themes set the last of them apart.
       app.leanMark(o),
@@ -277,7 +284,7 @@ export function render(root, app) {
         ? [first.parent.number, ' ', M.titleOf(first.parent.object)]
         : ['the top level'];
       const back = el('p.muted.small', 'Written out under ',
-        el('a', { href: href(M.documentPageOf(outline, o.id), o.id) }, ...where), '.');
+        el('a', { href: levelHref(o.id) }, ...where), '.');
       app.renderMath(back);
       section.appendChild(back);
     } else {
@@ -306,7 +313,7 @@ export function render(root, app) {
     flow.appendChild(el('h2.toc-head', 'Contents'));
     const list = el('ol.doc-contents');
     for (const entry of outline.roots) {
-      if (!entry.text) list.appendChild(contentsRow(app, outline, entry, href, levelHref));
+      if (!entry.text) list.appendChild(contentsRow(app, outline, entry, levelHref));
     }
     flow.appendChild(list);
     return;
@@ -389,16 +396,15 @@ function land(target) {
  * written out, scrolled to it.  An entry repeated at the top level leads to
  * where it is written out.
  */
-function contentsRow(app, outline, entry, href, levelHref) {
+function contentsRow(app, outline, entry, levelHref) {
   const { el } = app;
   const m = app.model;
   const o = entry.object;
-  const page = M.documentPageOf(outline, o.id);
   const isSection = M.isSectionKind(o.kind);
   const prog = M.progressMixOf(m, outline.kind, o.id);
   const status = M.badgeStatusOf(m, o.id);
   const row = el('li', { class: 'kind-' + o.kind + (entry.duplicate ? ' dup' : '') },
-    el('a', { href: entry.duplicate ? href(page, page === o.id ? null : o.id) : levelHref(entry) },
+    el('a', { href: levelHref(o.id) },
       el('span.num', entry.number),
       el('span.doc-contents-title',
         isSection ? null : el('span.kindword', M.kindWord(o.kind), ' '),
@@ -666,7 +672,7 @@ function levelSidebar(app, outline, pageEntry, focus, levelHref, toc) {
   const item = (e, cls) => el('li', {
     class: cls + (kids(e).length ? ' has-kids' : '') + (e === pageEntry ? ' current' : '') +
       (e === opened ? ' open' : ''),
-  }, el('a', { href: levelHref(e), 'data-id': e.id, onclick: go(e) },
+  }, el('a', { href: levelHref(e.id), 'data-id': e.id, onclick: go(e) },
     el('span.num', e.number), ' ', M.titleOf(e.object)));
 
   const draw = () => {
