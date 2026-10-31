@@ -380,6 +380,14 @@
     "proved": 2,
     "byStatus":
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "cc3b7a00588eab59f817b9b9d0dab464888e4b2f",
+   "file": "data/cc3b7a00588eab59f817b9b9d0dab464888e4b2f.json",
+   "date": "2026-10-31"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "dc05b88703e14c19065a3510f582b5042da403ba",
    "file": "data/dc05b88703e14c19065a3510f582b5042da403ba.json",
    "date": "2026-10-31"}]}
