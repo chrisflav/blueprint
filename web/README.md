@@ -93,6 +93,25 @@ Only what the screen on it needs, and as much of it at once as can be:
 marked are still arriving, and waits for them (`DOMContentLoaded`) only before
 it draws.
 
+Then, once the page is drawn, what the reader may open next is fetched while
+they read (`prefetch.js`): the other pages' modules, ELK for the graph and the
+PDF export's code, most likely first (`prefetchTasks` in `app.js`). It is
+built to cost the page on screen nothing:
+
+* it starts only after the page is drawn — the graph laid out — and the
+  browser's own `load`, and each file waits for idle time
+  (`requestIdleCallback`);
+* one file at a time, at the lowest fetch priority: a module as a
+  `modulepreload` with `fetchpriority="low"`, ELK's two halves by a
+  `priority: 'low'` fetch into the HTTP cache, where the script tag and the
+  worker's `importScripts` find them;
+* opening a page pauses it at once: ELK's 430 kB, if on its way, is aborted
+  and fetched again later, a small module is left to finish, and nothing new
+  starts until the page opened is drawn;
+* nothing is fetched for a reader with data saving on or a 2G connection
+  (`navigator.connection`), and what has already been loaded for real is
+  skipped.
+
 ## Routes
 
 All state lives in the URL hash, so every view is a shareable link.
@@ -538,6 +557,7 @@ the pages knowing about it.
 | `checks.js` | the lint report |
 | `search.js` | the search page, after the Stacks project's: the form, the results as the document's tree, the pages, results per page and the query tips |
 | `intro.js` | the project's intro, shown over the landing page while the graph is laid out under it |
+| `prefetch.js` | fetching what the reader may open next, one file at a time, while the browser is idle |
 | `preview.js` | the card a link to an object opens while the pointer rests on it, and the document's Lean mark and its card |
 | `pdf.js` | the Export PDF button and dialog: the part, the detail, finding or making the PDF, the TeX source |
 | `export/latex.js` | **pure**: a part of the document as a LaTeX document — the request, the plan (order, shared objects, depth), the TeX. Imported by the dialog and by the command line |
