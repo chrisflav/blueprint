@@ -1111,9 +1111,13 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 /* On a section's page its statements are the first level; the rule between
    top-level parts is for parts, not for statements set one after another. */
 .doc-entry.depth-0.is-statement { border-top: 0; padding-top: 0; margin-top: 1.1rem; }
-.doc-entry .head a.num { text-decoration: none; }
-.doc-entry .head a.num:hover { text-decoration: underline; }
+/* The heading, kind, number and title, is one link to the entry's level; the
+   kind and number keep their own colours inside it. */
+.doc-entry .head a.doc-title .kindword { color: var(--fg); }
+.doc-entry .head a.doc-title .doc-title-text { font-weight: 500; }
 .doc-entry .head a.doc-open { font-size: .9rem; font-weight: 400; white-space: nowrap; }
+.doc-entry .head a.doc-object { font-size: .78rem; font-weight: 400; color: var(--muted); white-space: nowrap; }
+.doc-entry .head a.doc-object:hover { color: var(--accent); }
 
 /* The top of the document: its contents, a row per top-level entry, each a
    link to the entry's page. */

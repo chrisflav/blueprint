@@ -874,6 +874,19 @@ check('pages of the split document', () => {
   eq(M.documentPageOf(out, 'uses/sec-main/sec-foundations'), 'sec-main', 'a step');
   eq(M.documentPageOf(out, 'refines/def-compact/sec-foundations'), undefined, 'not in the document');
 
+  // Every link leads to an entry's level instead: its parent's page, the top
+  // level (null) for a chapter, whatever is below it.
+  eq(M.documentLevelOf(out, 'sec-main'), null, 'a chapter: the top level');
+  eq(M.documentLevelOf(out, 'sec-main-induction'), 'sec-main', "a section: its chapter's page");
+  eq(M.documentLevelOf(out, 'lem-finite-subcover'), 'sec-main-induction', "a lemma: its section's page");
+  eq(M.documentLevelOf(out, leaf), null, 'a top-level leaf: the top level');
+  eq(M.documentLevelOf(out, 'uses/sec-main/sec-foundations'), null, "a step: its source's level");
+  eq(M.documentLevelOf(out, 'refines/def-compact/sec-foundations'), undefined, 'not in the document');
+  for (const e of out.byId.values()) {
+    const level = M.documentLevelOf(out, e.id);
+    eq(M.documentPageShows(out, level, 1, e.id), true, `${e.id} written out on its level`);
+  }
+
   // What a page writes out, by levels.
   const ids = (page, levels) => M.documentPageEntries(out, page, levels).map((e) => e.id);
   sameSet(ids(null, 1), out.roots.map((e) => e.id), 'the top page at one level: the chapters');

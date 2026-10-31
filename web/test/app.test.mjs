@@ -657,9 +657,16 @@ await check('depth=1 on the top page writes out the top level, one level deep', 
   eq(root.querySelectorAll('.doc-entry').length, out.roots.length, 'one entry per top-level object');
   ok(entryIds().includes('doc-sec-main'), 'a chapter is on it');
   ok(!entryIds().includes('doc-thm-tychonoff'), 'its contents are not');
-  // Each chapter leads on to its own page, by its number and by a "Read" link in its head.
+  // Each chapter leads on to its own page by a "Read" link in its head.
   ok(hrefs('.doc-entry .head a.doc-open').includes('#/document/sec-main?collapse=refines'), 'a link to the chapter page');
-  ok(hrefs('.doc-entry .head a.num').includes('#/document/sec-main?collapse=refines'), 'the number links there too');
+  // Its heading is one link, to its level: the top level, this page.
+  const head = root.querySelector('#doc-sec-main .head');
+  eq(head.querySelectorAll('a.doc-title').length, 1, 'the heading is one link');
+  eq(head.querySelectorAll('a.num, a.objlink').length, 0, 'not a number and a title apart');
+  const title = head.querySelector('a.doc-title');
+  ok(title.querySelector('.num') && title.querySelector('.doc-title-text'), 'number and title inside it');
+  eq(title.getAttribute('href'), '#/document?collapse=refines&depth=1&focus=sec-main', 'to the top level');
+  eq(head.querySelector('a.doc-object').getAttribute('href'), app.objectHref('sec-main'), 'the object page beside it');
   eq(root.querySelectorAll('.doc-crumbs').length, 0, 'no breadcrumbs at the top');
   eq(root.querySelectorAll('.doc-pager').length, 0, 'no siblings at the top');
 });
@@ -679,6 +686,20 @@ await check('a chapter page: breadcrumbs, its entries, its siblings', async () =
   eq(app.route.id, 'sec-main', 'routed');
   eq(entryIds().join(' '), 'doc-sec-main doc-sec-main-induction doc-thm-tychonoff', 'the page and one level below');
   eq(root.querySelectorAll('.doc-entry.page-head .head h1').length, 1, 'the page entry is the title');
+  // Every heading leads to its level, whatever page it is on: the chapter's
+  // own title to the top level, a section to this page.
+  const level = (id) => root.querySelector('#doc-' + id + ' .head a.doc-title').getAttribute('href');
+  eq(level('sec-main'), '#/document?collapse=refines&depth=1&focus=sec-main', 'the page title leads up to the chapters');
+  eq(level('sec-main-induction'), '#/document/sec-main?collapse=refines&focus=sec-main-induction', 'a section to the sections');
+  await go('#/document/sec-main-induction');
+  eq(level('lem-finite-subcover'), '#/document/sec-main-induction?collapse=refines&focus=lem-finite-subcover',
+    'a lemma to the statements of its section');
+  eq(level('sec-main-induction'), '#/document/sec-main?collapse=refines&focus=sec-main-induction',
+    'and the section, on its own page, to the sections');
+  await go('#/document/sec-main?depth=2');
+  eq(level('lem-finite-subcover'), '#/document/sec-main-induction?collapse=refines&depth=2&focus=lem-finite-subcover',
+    'a lemma written out deeper still leads to its own level');
+  await go('#/document/sec-main');
   ok(hrefs('.doc-crumbs a').includes('#/document?collapse=refines'), 'breadcrumbs lead to the top');
   eq(root.querySelectorAll('.doc-pager').length, 2, 'neighbours above and below');
   const pager = root.querySelectorAll('.doc-pager')[0];
@@ -750,23 +771,27 @@ await check('a nested page has the whole chain in its breadcrumbs', async () => 
   ok(entryIds().includes('doc-lem-finite-subcover'), 'its statements are written out');
 });
 
-await check('an old ?focus= link opens the page the entry is read on', async () => {
+await check('an old ?focus= link opens the level the entry is on', async () => {
   await go('#/document?focus=lem-finite-subcover');
   eq(app.route.id, 'sec-main-induction', 'redirected to the section page');
   eq(global.location.hash, '#/document/sec-main-induction?collapse=refines&focus=lem-finite-subcover', 'the URL says so');
   ok(dom.document.getElementById('doc-lem-finite-subcover'), 'and the entry is on it');
   // A focus the page does show is scrolled to where it is: a chapter is on
-  // the top page written out, and on its own page from the contents.
+  // the top page written out, and the contents send it there too.
   await go('#/document?collapse=refines&depth=1&focus=sec-main');
   eq(app.route.id, null, 'a chapter is on the top page written out');
   await go('#/document?collapse=refines&focus=sec-main');
-  eq(app.route.id, 'sec-main', 'the contents send it to its own page');
+  eq(app.route.id, null, 'the contents send it to its level');
+  eq(global.location.hash, '#/document?collapse=refines&depth=1&focus=sec-main', 'the top level written out');
+  // A section on another chapter's page goes to its chapter's page, not its own.
+  await go('#/document/sec-foundations?focus=sec-main-induction');
+  eq(app.route.id, 'sec-main', 'a section opens the page with its siblings');
   // A focus the current page does show stays where it is.
   await go('#/document/sec-main?depth=2&focus=lem-diagonal');
   eq(app.route.id, 'sec-main', 'no redirect when the page shows it');
-  // A step is read with its source, which here is on the top page too.
+  // A step is read with its source, on its source's level: here the top.
   await go('#/document/sec-foundations?focus=' + encodeURIComponent('uses/sec-main/sec-foundations'));
-  eq(app.route.id, 'sec-main', 'a step opens its source page');
+  eq(app.route.id, null, 'a step opens its source\'s level');
   ok(dom.document.getElementById('doc-uses_sec-main_sec-foundations'), 'the step block is anchored');
 });
 
@@ -805,12 +830,21 @@ await check('on an object page a reference reads "Definition 1.2" and leads to i
   eq(r.text, 'Definition 1.2', 'the document number');
   eq(r.href, '#/document/sec-foundations?collapse=refines&focus=def-filter', 'the page it is read on, scrolled to it');
   const div = dom.document.createElement('div');
-  app.renderBody(div, '[sec-main-induction] and [refines/def-compact/sec-foundations]', app.knownIds());
-  const [sec, edge] = div.querySelectorAll('a.objlink');
-  eq(sec.getAttribute('href'), '#/document/sec-main-induction?collapse=refines&focus=sec-main-induction',
-    'a section: its own page');
+  app.renderBody(div, '[sec-main-induction], [sec-main] and [refines/def-compact/sec-foundations]', app.knownIds());
+  const [sec, chapter, edge] = div.querySelectorAll('a.objlink');
+  eq(sec.getAttribute('href'), '#/document/sec-main?collapse=refines&focus=sec-main-induction',
+    'a section: its chapter\'s page, with its siblings');
+  eq(chapter.getAttribute('href'), '#/document?collapse=refines&depth=1&focus=sec-main',
+    'a chapter: the top level written out');
   eq(edge.getAttribute('href'), '#/object/' + encodeURIComponent('refines/def-compact/sec-foundations'),
     'what the document does not number: its object page');
+  // "In the document" on an object page leads to its level too.
+  const inDoc = () => root.querySelectorAll('a').find((a) => a.textContent === 'In the document →').getAttribute('href');
+  await go('#/object/sec-main-induction');
+  eq(inDoc(), '#/document/sec-main?collapse=refines&focus=sec-main-induction', 'a section, in the document');
+  await go('#/object/sec-main');
+  eq(inDoc(), '#/document?collapse=refines&depth=1&focus=sec-main', 'a chapter, in the document');
+  await go('#/object/def-compact');
   // An unknown slug is a broken link exactly as before.
   await go('#/object/thm-stone-cech');
   const b = refLinks().find((x) => x.broken);
@@ -877,13 +911,13 @@ await check('in the document a reference leads to the level of the entry', async
   const other = refTo('thm-tychonoff');
   eq(other.text, 'Theorem 2.2', 'numbered');
   eq(other.href, '#/document/sec-main?collapse=refines&focus=thm-tychonoff', 'the page it is read on');
-  // A section's own page.
+  // A section: its chapter's page, with its siblings, never its own.
   await go('#/document/sec-main?depth=2');
   dom.observers.flush();
   const sec = refTo('sec-main-induction');
   eq(sec.text, 'Section 2.1', 'a section');
-  eq(sec.href, '#/document/sec-main-induction?collapse=refines&depth=2&focus=sec-main-induction',
-    'its own page, even where this page writes it out');
+  eq(sec.href, '#/document/sec-main?collapse=refines&depth=2&focus=sec-main-induction',
+    'the page with its siblings, here this one');
   // Along the other order the numbers and pages are that order's.
   await go('#/document?collapse=instance_of&depth=all');
   dom.observers.flush();

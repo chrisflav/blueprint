@@ -1587,6 +1587,21 @@ export function documentPageOf(outline, id) {
 }
 
 /**
+ * The page that writes out the level an object is on, which is where every
+ * link to it leads: its parent's page, which shows it among its siblings, or
+ * `null` for the top level (written out, since the contents write nothing).
+ * So Lemma 2.1 is on the page with 2.1, 2.2, …, and Section 2 on the one with
+ * 1, 2, 3, ….  A step is on the level of its source, a proof on its
+ * statement's.  `undefined` when the object is not in the document at all.
+ */
+export function documentLevelOf(outline, id) {
+  if (outline.stepOf.has(id)) return documentLevelOf(outline, outline.stepOf.get(id));
+  const entry = outline.byId.get(id);
+  if (!entry) return undefined;
+  return entry.parent ? entry.parent.id : null;
+}
+
+/**
  * Whether the page of `pageId` (null for the top level), inlining `levels`
  * levels below itself, writes out `id`.  `levels` 0 on the top page is its
  * contents alone, which write nothing out: text at the top level is read on

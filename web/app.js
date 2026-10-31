@@ -351,8 +351,8 @@ function pageReferences(slug) {
  * Where a reference to `id` leads: to its level.  In the graph, the level it
  * is drawn at: every section above it opened, and it too when it has
  * contents, so the reader is in it, with it selected.  Anywhere else, its
- * level in the document: its own page when it has entries below it, otherwise
- * the page it is read on, scrolled to it.
+ * level in the document (`documentLevelOf`): the page with it and its
+ * siblings, scrolled to it, as in the document itself.
  */
 function levelHref(outline, kind, id) {
   if (app.route && app.route.view === 'graph') {
@@ -365,9 +365,21 @@ function levelHref(outline, kind, id) {
     params.set('sel', id);
     return buildHash('graph', null, params);
   }
-  const page = model.documentPageOf(outline, id);
-  if (page === undefined) return objectHref(id);
-  return buildHash('document', page, new URLSearchParams({ collapse: kind, focus: id }));
+  return documentLevelHref(outline, kind, id) || objectHref(id);
+}
+
+/**
+ * The document's page for the level `id` is on, scrolled to it: the top
+ * level written out (`depth=1`, since the top page without a depth is the
+ * contents) when it is at the top.  null when the document leaves it out.
+ */
+function documentLevelHref(outline, kind, id) {
+  const page = model.documentLevelOf(outline, id);
+  if (page === undefined) return null;
+  const q = new URLSearchParams({ collapse: kind });
+  if (page === null) q.set('depth', '1');
+  q.set('focus', id);
+  return buildHash('document', page, q);
 }
 
 /**
@@ -643,6 +655,7 @@ const app = {
   objectHeadBadges,
   /** How a reference to `id` reads here: {word, number, href}, or null. */
   referenceFor: pageReferences,
+  documentLevelHref,
   /** The document's "Lean" mark for an object, or null when it has no Lean names. */
   leanMark: (o) => leanMark(app, o),
   /** A button that opens the Export PDF dialog, defaulting to the part on screen. */
