@@ -1569,6 +1569,11 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
   applyLevel(app, view);
   applyHighlight(app, st.q);
   applySelection(app, st.sel);
+  // For the intro (intro.js), which zooms into the graph once it is drawn.
+  ui.stage.classList.add('drawn');
+  if (typeof ui.stage.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+    ui.stage.dispatchEvent(new CustomEvent('graphdrawn', { bubbles: true }));
+  }
 }
 
 function cssEscape(s) {
@@ -1695,6 +1700,97 @@ function drawNode(app, box, meta, st, view) {
       .map((s) => `\n  ${M.STATUS_LABEL[s]}: ${prog.mix[s]}`).join('') : '');
   g.appendChild(svgEl('title', title2));
   wireNode(app, g, o.id, view);
+  return g;
+}
+
+// --- pictures of the intro ---------------------------------------------------
+
+// The intro (intro.js) zooms through a few small pictures on its way to the
+// graph: `{nodes: [{id, title, kind}], arrows: [[from, to]]}`.  They are laid
+// out by ELK with the graph's own options and drawn with its own shapes and
+// classes, so that a box in them is a box of the graph: a node of a section
+// kind as a collapsed section, with its expander, and every other as an
+// object of its kind.  Nothing in them is a link.
+
+/**
+ * One picture as an `<svg>` whose viewBox is the drawing, and that box as
+ * `{x, y, w, h}`.  Layouts are remembered as the graph's are.
+ */
+export async function sketch(app, layer) {
+  const { svgEl } = app;
+  const types = { _types: new Map() };
+  const nodes = (layer.nodes || []).map((n) => {
+    const type = M.nodeType(types, { id: n.id, kind: n.kind || 'section' });
+    const expandable = type.shape === 'section';
+    const node = { id: n.id, bp: { wrap: titleWrap(n.title, false), prog: null } };
+    sizeLeaf(node, expandable, false);
+    return { ...n, type, expandable, node };
+  });
+  const graph = {
+    id: 'root',
+    layoutOptions: layoutOptions(0),
+    children: nodes.map((n) => ({ id: n.id, width: n.node.width, height: n.node.height })),
+    edges: (layer.arrows || []).map(([a, b], i) => ({ id: 'a' + i, sources: [a], targets: [b] })),
+  };
+  const inputText = JSON.stringify(graph);
+  let laid = rememberedLayout(inputText);
+  if (!laid) {
+    laid = await layoutGraph(graph);
+    rememberLayout(inputText, JSON.stringify(laid));
+  }
+  const { abs } = absolutePositions(laid);
+  const box = bboxOf(abs);
+  const pad = 4; // the stroke, outside the boxes
+  const svg = svgEl('svg', {
+    xmlns: 'http://www.w3.org/2000/svg', class: 'sketch',
+    viewBox: `${box.x - pad} ${box.y - pad} ${box.w + 2 * pad} ${box.h + 2 * pad}`,
+    width: box.w + 2 * pad, height: box.h + 2 * pad,
+  });
+  // Arrowheads of its own: an id shared with the graph's would resolve to
+  // the graph's, which the intro keeps hidden.
+  const head = svgEl('marker', {
+    id: 'bp-sketch-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5,
+    markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse',
+  }, svgEl('path', { d: 'M 0 0.8 L 10 5 L 0 9.2 z', class: 'arrowhead' }));
+  svg.appendChild(svgEl('defs', head));
+  const gEdges = svgEl('g', { class: 'edges' });
+  const gNodes = svgEl('g', { class: 'nodes' });
+  svg.appendChild(gEdges);
+  svg.appendChild(gNodes);
+  for (const e of laid.edges || []) {
+    const a = abs.get(e.sources[0]);
+    const b = abs.get(e.targets[0]);
+    if (!a || !b) continue;
+    const pts = pathPoints(e, a, b, { x: 0, y: 0 });
+    gEdges.appendChild(svgEl('g', { class: 'gedge kind-uses' },
+      svgEl('path', { d: pathD(pts), 'marker-end': 'url(#bp-sketch-arrow)' })));
+  }
+  for (const n of nodes) {
+    const b = abs.get(n.id);
+    if (b) gNodes.appendChild(sketchNode(app, b, n));
+  }
+  return { svg, box: { x: box.x - pad, y: box.y - pad, w: box.w + 2 * pad, h: box.h + 2 * pad } };
+}
+
+/** A box of a picture, drawn as `drawNode` draws a leaf without progress. */
+function sketchNode(app, box, n) {
+  const { svgEl } = app;
+  const { type, expandable } = n;
+  const g = svgEl('g', {
+    class: 'gnode kind-' + (n.kind || 'section') + ' type-' + type.shape + ' status-none',
+    transform: `translate(${box.x},${box.y})`,
+  });
+  for (const s of nodeShape(svgEl, type.shape, box.w, box.h, false)) g.appendChild(s);
+  const wrap = n.node.bp.wrap;
+  const tx = box.w / 2 + (expandable ? 5 : 0);
+  const ty = box.h / 2 - wrap.height / 2 + LINE_H / 2 + 4;
+  g.appendChild(svgEl('text', { class: 'label', 'text-anchor': 'middle' },
+    ...wrap.lines.map((line, i) => svgEl('tspan', { x: tx, y: ty + i * LINE_H }, line))));
+  g.appendChild(svgEl('text', {
+    class: 'kindmark', y: 12, 'text-anchor': 'end',
+    x: box.w - (type.shape === 'remark' ? 6 + FOLD : type.shape === 'statement' ? 11 : 6),
+  }, type.mark));
+  if (expandable) g.appendChild(svgEl('text', { class: 'expander', x: 8, y: box.h / 2 + 4 }, '+'));
   return g;
 }
 

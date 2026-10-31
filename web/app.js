@@ -8,7 +8,7 @@ import * as model from './model.js';
 import { setupPreviews, closePreviews, leanMark } from './preview.js';
 import { setupExport, exportButton, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
-import { wantsIntro, showIntro } from './intro.js';
+import { wantsIntro, showIntro, earlyIntro, introDecided, proseReady } from './intro.js';
 
 // The pages, each loaded the first time it is shown: a reader who opens an
 // object page never downloads the graph.  `prepare`, where a page has one, is
@@ -1155,13 +1155,29 @@ async function boot() {
   // once both are in.  A failure here is `render`'s to report.
   const route = parseHash();
   loadPage(route.view).catch(() => {});
+  // The intro, when the site carries it on its own (intro.json, which
+  // index.html asked for), starts now and plays while the snapshot is still
+  // on its way; otherwise it waits for the snapshot below.
+  let intro = null;
+  const early = earlyIntro().then(async (project) => {
+    if (!project) return;
+    await proseReady();
+    if (!app.model && wantsIntro(project, parseHash(), location.search)) {
+      intro = showIntro(app, { project });
+    }
+  });
   try {
     await loadInto(url);
   } catch (err) {
+    await early;
+    if (intro) intro.leave();
+    introDecided();
     await scriptsReady();
     showLoadError(err, new URL(url, location.href).href);
     return;
   }
+  await early;
+  if (intro) intro.loaded();
   await scriptsReady();
   // The project's style is known only now: switch to it unless the URL or the
   // reader chose another, and draw the top bar again so its menu shows it.
@@ -1171,7 +1187,8 @@ async function boot() {
     updateChrome();
   }
   // The project's intro, over the page while the graph is laid out under it.
-  if (wantsIntro(app.model.project, parseHash(), location.search)) showIntro(app);
+  if (!intro && wantsIntro(app.model.project, parseHash(), location.search)) showIntro(app);
+  introDecided();
   // The history index matters only to the progress page's time slider, so the
   // first page does not wait for it; the progress page is drawn again when it
   // arrives, if that is where the reader is.

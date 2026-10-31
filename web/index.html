@@ -41,6 +41,29 @@
       }
     })();
   } catch (e) { /* app.js imports it anyway; graph.js starts its own worker */ }
+  // The intro, which `blueprint site` writes to intro.json beside the
+  // snapshot, so that it can play while a large snapshot is still on its way
+  // (`earlyIntro` in intro.js).  Only on the landing page, the bare graph,
+  // and not with ?intro=0 (`wantsIntro`).  Until it is known, the page shows
+  // nothing rather than the top bar the intro would then take away.
+  try {
+    (function () {
+      var h = location.hash;
+      if (new URLSearchParams(location.search).get('intro') === '0') return;
+      if (!(h === '' || h === '#' || h === '#/' || h === '#/graph')) return;
+      var root = document.documentElement;
+      var base = window.blueprintSnapshot ? window.blueprintSnapshot.url : './blueprint.json';
+      var url = new URL('intro.json', new URL(base, location.href)).href;
+      root.classList.add('intro-pending');
+      var intro = fetch(url, { cache: 'no-cache' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; });
+      var shown = function () { root.classList.remove('intro-pending'); };
+      intro.then(function (j) { if (!j || !j.intro) shown(); });
+      setTimeout(shown, 4000); // whatever happens to the scripts below
+      window.blueprintIntro = intro;
+    })();
+  } catch (e) { /* the intro plays once the snapshot is in */ }
 </script>
 <!-- What app.js imports, so it is not found only once app.js has arrived.
      Only a hint: a module missing here is still loaded, a little later. -->

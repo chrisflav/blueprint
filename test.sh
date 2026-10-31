@@ -701,6 +701,52 @@ for bad_intro in 'file = "nowhere.md"|no .*nowhere.md' \
     bad "a [site.intro] with $(printf "$conf" | tr '\n' ' ') is refused"; cat "$TMP/badintro.out"
   fi
 done
+cp -r examples/minimal "$TMP/introzoom"
+printf '# Title\n' > "$TMP/introzoom/intro.md"
+cat >> "$TMP/introzoom/blueprint.toml" <<'TOML'
+
+[site.intro]
+file = "intro.md"
+background = "assets/page.jpg"
+hold = 0.5
+step = 1.5
+
+[[site.intro.zoom]]
+nodes = ["Main theorem"]
+
+[[site.intro.zoom]]
+nodes = [{ id = "a", title = "Part A" }, { id = "b", title = "Part B", kind = "theorem" }]
+arrows = [["a", "b"]]
+TOML
+if "$BP" site --root "$TMP/introzoom" -o "$TMP/introzoom.site" > "$TMP/introzoom.out" 2>&1 \
+   && wants "$TMP/introzoom.site/blueprint.json" '"background": "assets/page.jpg"' \
+        '"holdMs": 500' '"stepMs": 1500' \
+        '"nodes": [{"title": "Main theorem", "kind": "section", "id": "Main theorem"}]' \
+        '{"title": "Part B", "kind": "theorem", "id": "b"}' '"arrows": [["a", "b"]]' \
+   && grep -q '"zoom":\[{"arrows":\[\],"nodes":\[{"id":"Main theorem"' "$TMP/introzoom.site/intro.json" \
+   && grep -q '"title":' "$TMP/introzoom.site/intro.json" \
+   && [ -f "$TMP/intro.site/intro.json" ]; then
+  ok "[[site.intro.zoom]] reaches the snapshot, and the intro intro.json"
+else
+  bad "[[site.intro.zoom]] reaches the snapshot, and the intro intro.json"
+  cat "$TMP/introzoom.out"; grep -A12 '"intro"' "$TMP/introzoom.site/blueprint.json"; cat "$TMP/introzoom.site/intro.json"
+fi
+for bad_zoom in 'nodes = []|.nodes. is empty' \
+                'arrows = [["a", "b"]]|needs .nodes.' \
+                'nodes = ["a"]\narrows = [["a", "c"]]|names .c., which is none of its nodes' \
+                'nodes = ["a"]\narrows = [["a"]]|a pair of node ids' \
+                'nodes = ["a", { title = "a" }]|two nodes are called .a.' \
+                'nodes = [{ id = "a" }]|needs a .title.'; do
+  conf="${bad_zoom%%|*}"; want="${bad_zoom#*|}"
+  rm -rf "$TMP/badzoom"; cp -r examples/minimal "$TMP/badzoom"
+  printf "\n[site.intro]\nbody = \"x\"\n\n[[site.intro.zoom]]\n$conf\n" >> "$TMP/badzoom/blueprint.toml"
+  if ! "$BP" build --root "$TMP/badzoom" -o "$TMP/badzoom.json" > "$TMP/badzoom.out" 2>&1 \
+     && grep -q "$want" "$TMP/badzoom.out"; then
+    ok "a [[site.intro.zoom]] with $(printf "$conf" | tr '\n' ' ') is refused"
+  else
+    bad "a [[site.intro.zoom]] with $(printf "$conf" | tr '\n' ' ') is refused"; cat "$TMP/badzoom.out"
+  fi
+done
 rm -rf "$TMP/badassets"; cp -r examples/minimal "$TMP/badassets"
 printf '\n[site]\nassets = "nowhere"\n' >> "$TMP/badassets/blueprint.toml"
 if ! "$BP" site --root "$TMP/badassets" -o "$TMP/badassets.site" > "$TMP/badassets.out" 2>&1 \

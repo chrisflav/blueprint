@@ -22,7 +22,15 @@ by editing this file first. Version 1.
     "theme": "outline",                          // optional, see below
     "intro": {                                   // optional, see below
       "body": "![](assets/logo.png)\n\n## Welcome …",
-      "durationMs": 4000                         // optional
+      "durationMs": 4000,                        // optional
+      "background": "assets/page.jpg",           // optional, the rest only for a zoom
+      "holdMs": 500,                             // optional
+      "stepMs": 1000,                            // optional
+      "zoom": [                                  // optional
+        { "nodes": [{ "id": "a", "title": "Preliminaries", "kind": "section" },
+                    { "id": "b", "title": "Part I", "kind": "section" }],
+          "arrows": [["a", "b"]] }
+      ]
     }
   },
 
@@ -112,6 +120,16 @@ Notes
   the directory holding the snapshot.  `durationMs` is how long it is shown,
   in milliseconds; a reader defaults it to 3000.  The key is left out when
   the project has no intro, and a reader treats an empty body as none.
+  With `zoom`, a non-empty array of pictures, the intro is a zoom instead:
+  `body` is its title, `background` the address of a picture behind it,
+  `holdMs` how long the title stays (default 500) and `stepMs` how long each
+  step of the zoom takes (default 1000); `durationMs` is then unused.  Each
+  picture has `nodes`, each with an `id` (unique in the picture), a `title`
+  and the `kind` it is drawn as, and `arrows`, pairs of their ids, drawn
+  from the first to the second.  Each optional key is left out when unset.
+  `blueprint site` also writes `{"title": …, "intro": …}`, the project's
+  title and this object, to `intro.json` beside the snapshot, for the
+  website to read before the snapshot.
 - A kind's `graph` is the website's graph alone (`docs/cli.md`): `optional`
   objects are drawn unless the reader hides them, `never` objects are read
   in the document only, and either takes what is below it in a collapse

@@ -403,6 +403,22 @@ it is still followed. With `prefers-reduced-motion` it only fades.
   `blueprint site` copies the project's `[site] assets` directory, as
   `assets/`.
 
+With `zoom` pictures it is a short zoom instead (`playZoom` in `intro.js`).
+The body is a title over the faded background; after its hold it flies into
+the top bar, where `#project-title` is, and the top bar, the graph's tools
+and the legend fade in (`intro-playing`, `intro-chrome` and `intro-landed`
+on `<html>`). Meanwhile every layer, the background, each picture and last
+the graph's own `<svg>`, grows by `ZOOM` per step out of and into the middle
+of the graph's stage, at one speed (`zoomProgress`, `zoomLayers`). The
+pictures are drawn by `sketch` in `graph.js`, with the graph's ELK options,
+shapes and classes. The zoom starts only once the graph is drawn (the
+`graphdrawn` event of `graph.js`): `blueprint site` writes the intro to
+`intro.json`, which `index.html` asks for beside the snapshot, so the title
+is up at once and a large snapshot is waited for under it, with a bar under
+the title once the wait is long; without `intro.json` it starts once the
+snapshot is in. Until `intro.json` has answered, `index.html` keeps the page
+blank (`intro-pending`). With `prefers-reduced-motion` the layers only fade.
+
 ### Cross references
 
 A `[slug]` in prose reads the way a paper's cross reference does: the lead
