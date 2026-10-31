@@ -2038,9 +2038,12 @@ export function enteredSection(view) {
 }
 
 /**
- * Entering a section leaves the level it was opened from behind: everything
- * drawn outside the section is blurred, faded and out of reach until the
- * reader goes back up, with the stage's Back button or the section's own −.
+ * Entering a section puts the level it was opened from in the background:
+ * everything drawn outside the section is faded, as a selection fades what is
+ * not its neighbourhood, but can still be clicked and reached with Tab.  An
+ * arc with one end inside the section is not faded: it says where the section
+ * leads.  The reader goes back up with the stage's Back button or the
+ * section's own −.
  */
 function applyLevel(app, view) {
   const id = enteredSection(view);
@@ -2052,11 +2055,10 @@ function applyLevel(app, view) {
     for (const g of ui.layer.querySelectorAll(sel)) {
       const out = here !== null && !inside(g.dataset.nid);
       g.classList.toggle('outside', out);
-      if (sel === '.gnode') g.setAttribute('tabindex', out ? -1 : 0);
     }
   }
   for (const g of ui.layer.querySelectorAll('.gedge')) {
-    g.classList.toggle('outside', here !== null && !(inside(g.dataset.src) && inside(g.dataset.tgt)));
+    g.classList.toggle('outside', here !== null && !inside(g.dataset.src) && !inside(g.dataset.tgt));
   }
 
   ui.back.hidden = here === null;
