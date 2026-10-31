@@ -297,8 +297,8 @@ the sidebar is the heading 1 over 1.1, with 1.1.1, 1.1.2, … under it, then
 way, so 1 goes back to the chapters. An entry of the level on screen is only
 scrolled to and opened, and the link updated, without rebuilding the page. A
 page reached otherwise — by a *Read* line, the breadcrumbs, a number — lists
-its own entries under its chain. The Outline style keeps its own sidebar, the
-whole outline opened along the way to the page. Query parameters:
+its own entries under its chain. Every style has this sidebar; the Outline
+style draws it as an outline (see below). Query parameters:
 
 * `collapse=<kind>`: the collapse order to read along (default: the
   snapshot's `defaultCollapse`). The outline, the numbers and the pages are
@@ -330,7 +330,7 @@ siblings, so the lemma after the lines that open section 2 is still 2.1.
 Text at the top level — an abstract, an introduction — is not on the contents,
 which list only the entries: it is read on the top level written out, where
 any row of the contents leads, and a link to it goes there too. It is
-not in the contents, the pager or the outline sidebar, and a `[slug]` link to
+not in the contents, the pager or the sidebar, and a `[slug]` link to
 it keeps its title rather than reading "Section 2.1".
 
 ### Proofs
@@ -371,9 +371,10 @@ Each other style is a sheet in `themes/`, loaded after `style.css`. A sheet
 lists only the rules it changes; Article and Textbook `@import` Drafting,
 Outline imports PreTeXt, and the themes that use web fonts import them
 themselves, so the default fetches none. A theme may also ask for a sidebar:
-Outline sets `data-sidebar="outline"` on `<html>`, and the document draws the
-whole outline in the sidebar, opened along the way to the page, in place of
-the list of what the page writes out. `?theme=<id>` in the page's URL picks a
+Outline sets `data-sidebar="outline"` on `<html>`, and the document marks its
+sidebar `toc-outline`, which `themes/outline.css` draws as an outline — the
+same contents one level at a time, each entry under a hairline, a blue bar
+beside the chain and the entry opened. `?theme=<id>` in the page's URL picks a
 style for a shared link; otherwise the reader's last pick is kept in
 `localStorage` (`blueprint.theme`), and a reader who has not picked one sees
 the project's style, `project.theme` (`[site] theme` in `blueprint.toml`), or

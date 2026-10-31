@@ -1082,15 +1082,6 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .toc-levels li.toc-up.has-kids > a::after { content: none; }
 .toc-levels li.on-path > a { font-weight: 600; }
 .toc-levels li.current > a { color: var(--fg); }
-/* The outline sidebar (`data-sidebar="outline"` on the page): every top-level
-   entry, the ones on the way to this page opened, this page marked. */
-.toc-outline ul { list-style: none; margin: 0; padding: 0; }
-.toc-outline li > a { display: block; padding: .25em .5em; color: var(--fg); border-radius: var(--radius); }
-.toc-outline li > a:hover { background: var(--panel-2); text-decoration: none; }
-.toc-outline li > a .num { color: var(--muted); font-variant-numeric: tabular-nums; }
-.toc-outline li > ul { margin: .1em 0 .3em .9em; padding-left: .5em; border-left: 1px solid var(--border); }
-.toc-outline li.on-path > a { font-weight: 600; }
-.toc-outline li.current > a { background: var(--accent-soft); color: var(--fg); }
 .doc-layout { display: grid; grid-template-columns: 15rem 1fr; gap: 2rem; align-items: start; }
 
 /* The split document: where a page sits, and its neighbours. */
