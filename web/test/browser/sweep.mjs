@@ -1551,10 +1551,9 @@ async function pageChecks(d, f) {
     };
   });
 
-  // Without one it is the contents: a row per top-level entry, text alone
-  // written out.
+  // Without one it is the contents: a row per top-level entry, nothing
+  // written out, not even the text at the top level.
   const rows = out.roots.filter((e) => !e.text).length;
-  const texts = out.roots.filter((e) => e.text && !e.duplicate).length;
   await check(d, 'document/top-page-is-the-contents', async () => {
     await route(d, '#/document');
     await waitFor(d, `return document.querySelectorAll('.doc-contents li, .doc-entry').length > 0`,
@@ -1562,8 +1561,8 @@ async function pageChecks(d, f) {
     await sleep(500);
     const s = await d.js(PAGE_STATE);
     return {
-      ok: s.rows === rows && s.entries === texts && s.toc === 0 && !s.pageHead && s.crumbs === 0 && s.pagers === 0,
-      evidence: `#/document: ${s.rows} contents rows (top-level entries ${rows}), ${s.entries} .doc-entry (top-level text ${texts}), `
+      ok: s.rows === rows && s.entries === 0 && s.toc === 0 && !s.pageHead && s.crumbs === 0 && s.pagers === 0,
+      evidence: `#/document: ${s.rows} contents rows (top-level entries ${rows}), ${s.entries} .doc-entry (want 0), `
         + `${s.toc} sidebar links, page head ${j(s.pageHead)}, ${s.crumbs} breadcrumbs, ${s.pagers} pagers`,
     };
   });

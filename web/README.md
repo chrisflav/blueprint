@@ -268,8 +268,8 @@ server makes PDFs on demand for the Export PDF dialog (`POST api/export`,
 The document is the reading order of DESIGN.md §6, numbered as a paper is
 ("Definition 1.2.14"), and split into pages along the collapse order.
 `#/document` is the contents: a row per top-level entry — usually the
-chapters — with its number, title and progress, each a link to that entry's
-page; nothing is written out there but text at the top level (see below).
+chapters — with its number, title and progress, each a link to its level
+(below); nothing is written out there, not even text at the top level (see below).
 `#/document/<id>` writes out one entry and the levels below it. An entry whose
 children are not on the page links on to its own page, by its number and by a
 *Read 1.2 →* link beside its title. Each page has breadcrumbs up its chain, back to the
@@ -320,7 +320,9 @@ it: the lines that open a section, or a paragraph between two lemmas, that
 belong to no statement. It is set where its `order` puts it, as bare prose with
 no heading, no kind word and no number, and takes no number from its
 siblings, so the lemma after the lines that open section 2 is still 2.1.
-Text at the top level is written out on the contents, between the rows. It is
+Text at the top level — an abstract, an introduction — is not on the contents,
+which list only the entries: it is read on the top level written out, where
+any row of the contents leads, and a link to it goes there too. It is
 not in the contents, the pager or the outline sidebar, and a `[slug]` link to
 it keeps its title rather than reading "Section 2.1".
 
