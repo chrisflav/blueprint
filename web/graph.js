@@ -27,6 +27,7 @@
 //     "Expand all" button says so up front.
 
 import * as M from './model.js';
+import { prefetchFile } from './prefetch.js';
 
 // ---------------------------------------------------------------------------
 // persistent render state (survives route changes within the graph page)
@@ -154,7 +155,9 @@ export function render(root, app) {
   ui.quot = quot;
 
   renderSide(app, st, view, quot);
-  scheduleLayout(app, st, view, quot);
+  // Settles once the graph is drawn, or has said why not: until then the
+  // page is not done, and nothing is fetched in the background (prefetch.js).
+  return scheduleLayout(app, st, view, quot);
 }
 
 function mount(root, app) {
@@ -1287,6 +1290,46 @@ export function prepare() {
   ensureWorkerElk().catch(() => { /* the first layout says what went wrong */ });
 }
 
+/** Whether ELK is still to be fetched: not here, not on its way, no worker begun. */
+export function elkNeeded() {
+  return !(window.ELK || elkApiLoad || elkBundleLoad || workerElk || workerBroken ||
+    window.blueprintElkWorker);
+}
+
+/**
+ * ELK's worker started while the reader is on another page, once its files
+ * are in the cache (prefetch.js): compiling 1.6 MB of layouter, and its first
+ * run, slow until the engine has warmed to it, then happen on the worker's
+ * own thread while they read, and opening the graph pays for its layout
+ * alone.  A small graph, laid out with the graph's own options, warms it.
+ */
+export async function warmElk() {
+  const inst = await ensureWorkerElk();
+  if (!inst) return;
+  const box = (id) => ({ id, width: 120, height: NODE_H });
+  const children = [box('a'), box('b'), box('c'), { ...box('s'), children: [box('d'), box('e')] }];
+  const edges = [['a', 'b'], ['a', 'c'], ['b', 'd'], ['c', 'e'], ['d', 'e']]
+    .map(([s, t], i) => ({ id: 'w' + i, sources: [s], targets: [t] }));
+  try {
+    await inst.layout({ id: 'warm', layoutOptions: layoutOptions(children.length + edges.length), children, edges });
+  } catch (e) {
+    /* the graph's own first layout says what is wrong */
+  }
+}
+
+/**
+ * ELK's two halves into the browser's cache while the reader is on another
+ * page (prefetch.js), so that opening the graph fetches neither: the page
+ * half the script tag asks for, and the worker half its `importScripts` does.
+ * Nothing when ELK is here already or on its way.
+ */
+export async function prefetchElk(signal) {
+  if (!elkNeeded()) return;
+  await prefetchFile(ELK_API.src, signal);
+  if (!elkNeeded()) return;
+  await prefetchFile(ELK_WORKER, signal);
+}
+
 /**
  * ELK in elkjs's own worker mode.
  *
@@ -2038,9 +2081,12 @@ export function enteredSection(view) {
 }
 
 /**
- * Entering a section leaves the level it was opened from behind: everything
- * drawn outside the section is blurred, faded and out of reach until the
- * reader goes back up, with the stage's Back button or the section's own −.
+ * Entering a section puts the level it was opened from in the background:
+ * everything drawn outside the section is faded, as a selection fades what is
+ * not its neighbourhood, but can still be clicked and reached with Tab.  An
+ * arc with one end inside the section is not faded: it says where the section
+ * leads.  The reader goes back up with the stage's Back button or the
+ * section's own −.
  */
 function applyLevel(app, view) {
   const id = enteredSection(view);
@@ -2052,11 +2098,10 @@ function applyLevel(app, view) {
     for (const g of ui.layer.querySelectorAll(sel)) {
       const out = here !== null && !inside(g.dataset.nid);
       g.classList.toggle('outside', out);
-      if (sel === '.gnode') g.setAttribute('tabindex', out ? -1 : 0);
     }
   }
   for (const g of ui.layer.querySelectorAll('.gedge')) {
-    g.classList.toggle('outside', here !== null && !(inside(g.dataset.src) && inside(g.dataset.tgt)));
+    g.classList.toggle('outside', here !== null && !inside(g.dataset.src) && !inside(g.dataset.tgt));
   }
 
   ui.back.hidden = here === null;

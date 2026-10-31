@@ -1588,7 +1588,7 @@ await check('the section entered is the innermost of a nest of open ones, and no
   eq(graphMod.enteredSection(view(['sec-main', 'sec-foundations'])), null, 'two side by side');
 });
 
-await check('inside a section the level it was opened from is unreadable until the reader goes back up', async () => {
+await check('inside a section the level it was opened from is faded but in reach, and arcs across its edge are kept', async () => {
   const w = dom.workers.created[dom.workers.created.length - 1];
   const layout = async (hash) => {
     await go(hash);
@@ -1603,21 +1603,24 @@ await check('inside a section the level it was opened from is unreadable until t
 
   await layout('#/graph?collapse=refines&expand=sec-main');
   ok(layer.classList.contains('entered'), 'the layer is not marked as entered');
-  ok(!nodeAt('sec-main').classList.contains('outside'), 'the section itself is unreadable');
-  ok(!nodeAt('thm-tychonoff').classList.contains('outside'), 'what is inside it is unreadable');
-  ok(nodeAt('sec-foundations').classList.contains('outside'), 'the level it was opened from is readable');
-  eq(nodeAt('sec-foundations').getAttribute('tabindex'), '-1', 'and still reached with Tab');
+  ok(!nodeAt('sec-main').classList.contains('outside'), 'the section itself is faded');
+  ok(!nodeAt('thm-tychonoff').classList.contains('outside'), 'what is inside it is faded');
+  ok(nodeAt('sec-foundations').classList.contains('outside'), 'the level it was opened from is not faded');
+  eq(nodeAt('sec-foundations').getAttribute('tabindex'), '0', 'and out of reach of Tab');
   for (const e of root.querySelectorAll('.gedge')) {
     const inside = (nid) => nid === 'sec-main' || nid === 'thm-tychonoff' || nid === 'sec-main-induction';
-    eq(e.classList.contains('outside'), !(inside(e.dataset.src) && inside(e.dataset.tgt)),
+    eq(e.classList.contains('outside'), !inside(e.dataset.src) && !inside(e.dataset.tgt),
       `${e.dataset.src} -> ${e.dataset.tgt}`);
   }
+  const inSec = (nid) => nid === 'sec-main' || nid === 'thm-tychonoff' || nid === 'sec-main-induction';
+  ok(root.querySelectorAll('.gedge').some((e) => inSec(e.dataset.src) !== inSec(e.dataset.tgt)),
+    'the sample has no arc across the section\'s edge to test');
   eq(back.hidden, false, 'no way back');
   eq(back.textContent, '↑ Back to the top level', 'the way back');
 
   await layout('#/graph?collapse=refines&expand=sec-main,sec-main-induction');
-  ok(nodeAt('sec-main').classList.contains('outside'), 'one level down, the section above is unreadable');
-  ok(!nodeAt('lem-finite-subcover').classList.contains('outside'), 'and the new level readable');
+  ok(nodeAt('sec-main').classList.contains('outside'), 'one level down, the section above is not faded');
+  ok(!nodeAt('lem-finite-subcover').classList.contains('outside'), 'and the new level faded');
   ok(back.textContent.endsWith('Back to ' + M.titleOf(app.model.byId.get('sec-main'))), back.textContent);
 
   fire(back, 'click');
@@ -1625,11 +1628,11 @@ await check('inside a section the level it was opened from is unreadable until t
   w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
   await tick(5);
   eq(new URLSearchParams(app.route.params).get('expand'), 'sec-main', 'Back closes the section');
-  ok(!nodeAt('sec-main').classList.contains('outside'), 'the level above is readable again');
+  ok(!nodeAt('sec-main').classList.contains('outside'), 'the level above is still faded');
 
   await layout('#/graph?collapse=refines');
   ok(!layer.classList.contains('entered'), 'at the top nothing is entered');
-  eq(outside('.gnode').length + outside('.gtitle').length + outside('.gedge').length, 0, 'and nothing unreadable');
+  eq(outside('.gnode').length + outside('.gtitle').length + outside('.gedge').length, 0, 'and something faded');
   eq(back.hidden, true, 'nor a way back');
 });
 
@@ -1927,6 +1930,232 @@ await check('index.html starts the early worker on the URL graph.js pins', () =>
   ok(m, 'index.html starts no early ELK worker');
   eq(m[1], graphMod.ELK_WORKER, 'index.html and graph.js pin different elk-worker.min.js');
   ok(!/<script[^>]+elk(\.bundled|-api)?[.-]/.test(html), 'index.html loads ELK on every page again');
+});
+
+// --- fetching what the reader may open next, while they read ----------------
+
+/** requestIdleCallback under the test's control: `idle.run()` is the browser going idle. */
+function stubIdle() {
+  const idle = { queue: [], cancelled: 0 };
+  global.requestIdleCallback = (fn) => { idle.queue.push(fn); return idle.queue.length; };
+  global.cancelIdleCallback = () => { idle.cancelled += 1; idle.queue.length = 0; };
+  idle.run = async () => { const q = idle.queue.splice(0); for (const fn of q) fn(); await tick(1); };
+  return idle;
+}
+function unstubIdle() {
+  delete global.requestIdleCallback;
+  delete global.cancelIdleCallback;
+}
+/** A task the test settles by hand. */
+function handTask(name, { big = false, needed = () => true } = {}) {
+  const t = { name, big, needed, runs: 0, signals: [] };
+  t.run = (signal) => {
+    t.runs += 1;
+    t.signals.push(signal);
+    return new Promise((resolve, reject) => {
+      t.finish = resolve;
+      t.fail = reject;
+      signal.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+  };
+  return t;
+}
+
+// The app's own prefetcher is held for these tests: they make the page idle
+// and loaded by hand, which it would otherwise act on too.
+const appPrefetch = await import(path.join(webDir, 'prefetch.js'));
+appPrefetch.pausePrefetch();
+
+await check('background fetching waits for the drawn page and idle time, one file at a time', async () => {
+  const P = await import(path.join(webDir, 'prefetch.js') + '?scheduler');
+  const idle = stubIdle();
+  dom.document.readyState = 'complete';
+  try {
+    const a = handTask('a');
+    const b = handTask('b', { big: true });
+    const c = handTask('c');
+    P.setupPrefetch([a, b, c]);
+    await idle.run();
+    eq(a.runs, 0, 'a file was fetched before the page was drawn');
+
+    P.resumePrefetch();
+    eq(a.runs, 0, 'a file was fetched before the browser was idle');
+    await idle.run();
+    eq(a.runs, 1, 'nothing was fetched once idle');
+    eq(b.runs, 0, 'two files at once');
+
+    // Done: the next waits for idle time again.
+    a.finish();
+    await tick(1);
+    eq(b.runs, 0, 'the next file did not wait for idle time');
+    await idle.run();
+    eq(b.runs, 1, 'the next file was not fetched');
+
+    // The reader opens a page: the large download goes, and nothing starts.
+    P.pausePrefetch();
+    ok(b.signals[0].aborted, 'the large download went on beside the page asked for');
+    await tick(1);
+    await idle.run();
+    eq(c.runs, 0, 'a file was fetched while a page was being opened');
+    // That page is drawn: the aborted file is fetched again, then the rest.
+    P.resumePrefetch();
+    await idle.run();
+    eq(b.runs, 2, 'the aborted file was not fetched again');
+    b.finish();
+    await tick(1);
+    await idle.run();
+    eq(c.runs, 1, 'the last file was not fetched');
+
+    // A small file is left to finish across a page change.
+    P.pausePrefetch();
+    ok(!c.signals[0].aborted, 'a small file was aborted');
+    c.finish();
+    await tick(1);
+    eq(P.pendingPrefetch().length, 0, `left over: ${P.pendingPrefetch()}`);
+  } finally {
+    P.setupPrefetch([]);
+    delete dom.document.readyState;
+    unstubIdle();
+  }
+});
+
+await check('background fetching skips what is loaded, gives up on a failure, and waits for the page’s own load', async () => {
+  const P = await import(path.join(webDir, 'prefetch.js') + '?rules');
+  const idle = stubIdle();
+  try {
+    let wanted = true;
+    const a = handTask('a', { needed: () => wanted });
+    const b = handTask('b');
+    P.setupPrefetch([a, b]);
+    // index.html's own resources still loading: not yet.
+    dom.document.readyState = 'interactive';
+    P.resumePrefetch();
+    await idle.run();
+    eq(a.runs, 0, 'a file was fetched before the page’s own load');
+    dom.document.readyState = 'complete';
+    global.window.dispatch('load', {});
+    wanted = false; // meanwhile loaded for real
+    await idle.run();
+    eq(a.runs, 0, 'a file already loaded was fetched');
+    eq(b.runs, 1, 'the next file was not fetched');
+    b.fail(new Error('404'));
+    await tick(1);
+    await idle.run();
+    eq(b.runs, 1, 'a failed file was fetched again');
+  } finally {
+    P.setupPrefetch([]);
+    delete dom.document.readyState;
+    unstubIdle();
+  }
+});
+
+await check('a reader saving data gets no background fetching at all', async () => {
+  const P = await import(path.join(webDir, 'prefetch.js') + '?save-data');
+  const idle = stubIdle();
+  dom.document.readyState = 'complete';
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  try {
+    for (const connection of [{ saveData: true }, { effectiveType: '2g' }, { effectiveType: 'slow-2g' }]) {
+      Object.defineProperty(globalThis, 'navigator', { value: { connection }, configurable: true });
+      ok(P.saveData(), `${JSON.stringify(connection)} is not left alone`);
+      const a = handTask('a');
+      P.setupPrefetch([a]);
+      P.resumePrefetch();
+      await idle.run();
+      eq(a.runs, 0, `fetched on ${JSON.stringify(connection)}`);
+    }
+    Object.defineProperty(globalThis, 'navigator', { value: { connection: { effectiveType: '4g' } }, configurable: true });
+    ok(!P.saveData(), 'a 4g connection is left alone');
+  } finally {
+    if (saved) Object.defineProperty(globalThis, 'navigator', saved);
+    P.setupPrefetch([]);
+    delete dom.document.readyState;
+    unstubIdle();
+  }
+});
+
+await check('the graph prefetches both halves of ELK, at low priority, and only while ELK is not here', async () => {
+  const savedELK = global.window.ELK;
+  const savedFetch = global.fetch;
+  const asked = [];
+  global.fetch = async (url, init) => {
+    asked.push({ url: String(url), init });
+    return { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(8) };
+  };
+  try {
+    global.window.ELK = null;
+    global.window.blueprintElkWorker = null;
+    const g = await freshGraph('prefetch-elk');
+    ok(g.elkNeeded(), 'ELK counts as here before anything was fetched');
+    await g.prefetchElk(new AbortController().signal);
+    eq(asked.map((a) => a.url).join(' '),
+      'https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk-api.js ' + g.ELK_WORKER, 'not the two halves');
+    for (const a of asked) {
+      eq(a.init.priority, 'low', `${a.url} at priority ${a.init.priority}`);
+      eq(a.init.credentials, 'omit', `${a.url} with credentials`);
+    }
+    // ELK here, or the early worker started by index.html: nothing to fetch.
+    asked.length = 0;
+    global.window.ELK = function ELK() {};
+    ok(!g.elkNeeded(), 'ELK on the page still counts as needed');
+    await g.prefetchElk(new AbortController().signal);
+    global.window.ELK = null;
+    global.window.blueprintElkWorker = { src: g.ELK_WORKER, worker: {}, failed: false };
+    ok(!g.elkNeeded(), 'the early worker still counts as needed');
+    await g.prefetchElk(new AbortController().signal);
+    eq(asked.length, 0, 'ELK was fetched again');
+  } finally {
+    global.fetch = savedFetch;
+    global.window.ELK = savedELK;
+    global.window.blueprintElkWorker = null;
+  }
+});
+
+await check('ELK warmed up in the background is the worker the graph then lays out in', async () => {
+  const saved = global.window.ELK;
+  try {
+    const state = installFakeELK();
+    global.window.blueprintElkWorker = null;
+    dom.workers.created.length = 0;
+    const g = await freshGraph('warm');
+    const warming = g.warmElk();
+    await tick(5);
+    eq(dom.workers.created.length, 1, 'warming up did not start the worker');
+    const w = dom.workers.created[0];
+    const req = lastLayoutMessage(w);
+    ok(req && req.graph.id === 'warm', 'no warm-up layout was asked of the worker');
+    eq(req.graph.layoutOptions['elk.algorithm'], 'layered', 'not with the graph’s own options');
+    w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await warming;
+    // The graph opened afterwards: the same worker, no second one.
+    g.render(root, app);
+    await tick(5);
+    eq(dom.workers.created.length, 1, 'the graph started a second worker');
+    const real = lastLayoutMessage(w);
+    ok(real && real.id !== req.id && real.graph.id !== 'warm', 'the graph did not lay out in the warmed worker');
+    eq(state.instances.filter((i) => i.mode === 'worker').length, 1, 'ELK was constructed twice');
+    w.reply({ id: real.id, data: fakeLayout(JSON.parse(JSON.stringify(real.graph))) });
+    await tick(5);
+    ok(root.querySelectorAll('.gnode').length > 0, 'nothing was drawn');
+  } finally {
+    global.window.ELK = saved;
+  }
+});
+
+await check('every module app.js imports is preloaded by index.html', () => {
+  const html = fs.readFileSync(path.join(webDir, 'index.html'), 'utf8');
+  const src = fs.readFileSync(path.join(webDir, 'app.js'), 'latin1');
+  const imports = [...src.matchAll(/^import\b[^;]*?from '\.\/([^']+)';/gm)].map((m) => m[1]);
+  ok(imports.length >= 5, `found only ${imports}`);
+  for (const f of imports) {
+    ok(html.includes(`<link rel="modulepreload" href="${f}">`),
+      `${f} is not preloaded: app.js cannot run until it is found, after app.js itself has arrived`);
+  }
+});
+
+await check('the app hands over the pages, ELK and the export, most likely first', async () => {
+  eq(appPrefetch.pendingPrefetch().join(' '), 'graph document object elk elk-worker search progress checks export',
+    'the tasks app.js set up');
 });
 
 // --- the real thing, when a copy of elkjs is at hand -------------------------

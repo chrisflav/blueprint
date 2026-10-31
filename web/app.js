@@ -8,6 +8,7 @@ import * as model from './model.js';
 import { setupPreviews, closePreviews, leanMark } from './preview.js';
 import { setupExport, exportButton, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
+import { setupPrefetch, pausePrefetch, resumePrefetch, prefetchModule } from './prefetch.js';
 import { wantsIntro, showIntro, earlyIntro, introDecided, proseReady } from './intro.js';
 
 // The pages, each loaded the first time it is shown: a reader who opens an
@@ -1095,22 +1096,30 @@ function render() {
   }
   const view = PAGES[app.route.view] ? app.route.view : 'graph';
   const token = ++renderToken;
+  // Nothing is fetched in the background while a page is being opened; it
+  // goes on once that page is drawn (the graph: laid out), when idle.
+  pausePrefetch();
+  const drawn = (result) => {
+    Promise.resolve(result).catch(() => {}).then(() => {
+      if (token === renderToken) resumePrefetch();
+    });
+  };
   // A page already loaded is drawn at once, as every page was before they
   // were loaded on demand: a page that patches its own DOM after a route
   // change expects it drawn when `render` returns.
   const loaded = loadedPages.get(view);
   if (loaded) {
-    drawPage(() => loaded.render(root, app));
+    drawn(drawPage(() => loaded.render(root, app)));
     app.rendered = Promise.resolve();
     return app.rendered;
   }
   app.rendered = loadPage(view).then(
     (page) => {
       // A later route won while this page's module was on its way.
-      if (token === renderToken) drawPage(() => page.render(root, app));
+      if (token === renderToken) drawn(drawPage(() => page.render(root, app)));
     },
     (e) => {
-      if (token === renderToken) drawPage(() => { throw e; });
+      if (token === renderToken) drawn(drawPage(() => { throw e; }));
     });
   return app.rendered;
 }
@@ -1118,9 +1127,10 @@ function render() {
 // Counts the calls to `render`, so only the latest draws once its page is in.
 let renderToken = 0;
 
+/** Draw a page; what its `render` returns (a Promise of "drawn", or nothing) is passed on. */
 function drawPage(draw) {
   try {
-    draw();
+    return draw();
   } catch (e) {
     console.error(e);
     clear(root);
@@ -1211,6 +1221,7 @@ async function boot() {
   setupGlobalSearch();
   setupPreviews(app);
   setupExport(app);
+  setupPrefetch(prefetchTasks());
   window.addEventListener('hashchange', () => {
     if (suppressRoute > 0) {
       suppressRoute -= 1;
@@ -1220,6 +1231,44 @@ async function boot() {
     render();
   });
   render();
+}
+
+/**
+ * What the reader may open next, for prefetch.js to fetch while they read,
+ * most likely first: the other pages' modules, ELK for the graph (the one
+ * large download, which a page change aborts) and its worker, warmed up, and
+ * the PDF export's code.
+ * A page already opened, or ELK already here, is skipped.
+ */
+function lowMemory() {
+  const gb = typeof navigator !== 'undefined' && navigator.deviceMemory;
+  return typeof gb === 'number' && gb < 4;
+}
+
+function prefetchTasks() {
+  const page = (view) => ({
+    name: view,
+    needed: () => !pageModules.has(view),
+    run: () => prefetchModule(`./${view}.js`),
+  });
+  return [
+    page('graph'), page('document'), page('object'),
+    {
+      name: 'elk',
+      big: true,
+      needed: () => !loadedPages.has('graph') || loadedPages.get('graph').elkNeeded(),
+      run: async (signal) => (await import('./graph.js')).prefetchElk(signal),
+    },
+    {
+      // Its worker, started and warmed up, on a thread of its own; not on a
+      // device short of memory, where it would sit idle in what little there is.
+      name: 'elk-worker',
+      needed: () => !loadedPages.has('graph') && !lowMemory(),
+      run: async () => (await import('./graph.js')).warmElk(),
+    },
+    page('search'), page('progress'), page('checks'),
+    { name: 'export', needed: () => true, run: () => prefetchModule('./export/latex.js') },
+  ];
 }
 
 boot();

@@ -93,6 +93,25 @@ Only what the screen on it needs, and as much of it at once as can be:
 marked are still arriving, and waits for them (`DOMContentLoaded`) only before
 it draws.
 
+Then, once the page is drawn, what the reader may open next is fetched while
+they read (`prefetch.js`): the other pages' modules, ELK for the graph and the
+PDF export's code, most likely first (`prefetchTasks` in `app.js`). It is
+built to cost the page on screen nothing:
+
+* it starts only after the page is drawn — the graph laid out — and the
+  browser's own `load`, and each file waits for idle time
+  (`requestIdleCallback`);
+* one file at a time, at the lowest fetch priority: a module as a
+  `modulepreload` with `fetchpriority="low"`, ELK's two halves by a
+  `priority: 'low'` fetch into the HTTP cache, where the script tag and the
+  worker's `importScripts` find them;
+* opening a page pauses it at once: ELK's 430 kB, if on its way, is aborted
+  and fetched again later, a small module is left to finish, and nothing new
+  starts until the page opened is drawn;
+* nothing is fetched for a reader with data saving on or a 2G connection
+  (`navigator.connection`), and what has already been loaded for real is
+  skipped.
+
 ## Routes
 
 All state lives in the URL hash, so every view is a shareable link.
@@ -160,13 +179,15 @@ Hiding everything it says loses no reachability. The status line counts the
 arcs it hid.
 
 Expanding a section enters it: the level it was opened from — every node,
-title and arc drawn outside it — is blurred, faded and out of reach (no
-clicks, no Tab) until the reader goes back up, with *↑ Back to …* at the top
-left of the stage or the section's own −. Going down another level does the
-same again, one level at a time. The section entered is the innermost of the
-open ones when they nest one inside the next (`enteredSection` in
-`graph.js`); with sections open side by side, as after *Expand all*, there is
-no one level to be in and nothing is blurred.
+title and arc drawn outside it — is faded, as selecting a node fades what is
+not its neighbourhood, but stays clickable and reachable with Tab. Arcs with
+one end inside the section are not faded, so the arrows across its boundary
+still show. The reader goes back up with *↑ Back to …* at the top left of the
+stage or the section's own −. Going down another level does the same again,
+one level at a time. The section entered is the innermost of the open ones
+when they nest one inside the next (`enteredSection` in `graph.js`); with
+sections open side by side, as after *Expand all*, there is no one level to
+be in and nothing is faded.
 
 The graph opens on the graph alone. Of the toolbar only *Collapse all*, the
 highlight search, Fit, `+` and `−` show; the collapse kind, *Expand all*, and
@@ -537,6 +558,7 @@ the pages knowing about it.
 | `checks.js` | the lint report |
 | `search.js` | the search page, after the Stacks project's: the form, the results as the document's tree, the pages, results per page and the query tips |
 | `intro.js` | the project's intro, shown over the landing page while the graph is laid out under it |
+| `prefetch.js` | fetching what the reader may open next, one file at a time, while the browser is idle |
 | `preview.js` | the card a link to an object opens while the pointer rests on it, and the document's Lean mark and its card |
 | `pdf.js` | the Export PDF button and dialog: the part, the detail, finding or making the PDF, the TeX source |
 | `export/latex.js` | **pure**: a part of the document as a LaTeX document — the request, the plan (order, shared objects, depth), the TeX. Imported by the dialog and by the command line |
