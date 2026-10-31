@@ -196,7 +196,8 @@ await check('every theme has its stylesheet, and picking one loads it', async ()
   eq(dom.document.getElementById('theme-css').getAttribute('href'), 'themes/outline.css', 'the theme is loaded');
   eq(dom.document.documentElement.getAttribute('data-sidebar'), 'outline', 'and asks for its sidebar');
   await go('#/document/sec-applications');
-  ok(root.querySelector('nav.toc.toc-outline'), 'the document draws the outline sidebar');
+  ok(root.querySelector('nav.toc.toc-outline'), 'the document marks its sidebar for the outline style');
+  ok(root.querySelector('nav.toc-outline ul.toc-levels'), 'the contents one level at a time, as in every style');
   ok(root.querySelector('nav.toc-outline li.current'), 'with this page marked');
   applyTheme('article');
   eq(dom.document.documentElement.getAttribute('data-sidebar'), null, 'another theme drops the sidebar');
