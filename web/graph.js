@@ -243,6 +243,10 @@ function legend(app, progress) {
     el('div.row', sample(line('hollow'), head(true)), 'declared, unwitnessed'),
     // Only the contents of collapsed objects draw these (`arcs of contents`).
     el('div.row.lg-derived', sample(line('dashed'), head(false)), 'derived, undeclared'),
+    // Only while the graph is searched (`applyHighlight`).
+    el('b.lg-search', { style: { marginTop: '.3em' } }, 'search'),
+    el('div.row.lg-search', el('span.shp.hit'), el('span', 'matches')),
+    el('div.row.lg-search', el('span.lg-badge', '2'), el('span', 'matches inside')),
     progress ? [
       el('b', { style: { marginTop: '.3em' } }, 'fill'),
       swatch('proved', 'proved'),
@@ -1604,6 +1608,9 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
 
   ui.bbox = bboxOf(abs);
   if (!ui.fitted) { fitToView(app); ui.fitted = true; } else applyTransform();
+  // The view this drawing is of: `render` moves `ui.view` on as soon as the
+  // state changes, before the new layout is drawn.
+  ui.drawnView = view;
   applyLevel(app, view);
   applyHighlight(app, st.q);
   applySelection(app, st.sel);
@@ -2192,18 +2199,38 @@ function focusArrowhead(g, on) {
   p.setAttribute('marker-end', on ? base.replace(/\)$/, '-focus)') : base);
 }
 
+// A box's own match is its outline; matches hidden inside it (in a collapsed
+// object, or in the proof of a statement) are the count in the badge on its
+// top left corner, so that a box that does both shows both.
 function applyHighlight(app, q) {
   const hasQ = !!(q && q.trim());
   const ids = hasQ ? M.searchIds(app.model, q) : null;
+  const view = ui.drawnView || ui.view;
+  const inside = hasQ && view ? M.hiddenHits(view, ids) : new Map();
   ui.layer.classList.toggle('searching', hasQ);
+  ui.stage.classList.toggle('searching', hasQ);
+  for (const b of ui.layer.querySelectorAll('.search-inside')) b.remove();
   for (const g of ui.layer.querySelectorAll('.gnode')) {
     const hit = hasQ && ids.has(g.dataset.id);
+    const n = hasQ && !g.classList.contains('junction') ? inside.get(g.dataset.id) || 0 : 0;
     g.classList.toggle('match', !!hit);
-    g.classList.toggle('dim', hasQ && !hit);
+    g.classList.toggle('match-inside', n > 0);
+    g.classList.toggle('dim', hasQ && !hit && !n);
+    if (n) g.appendChild(insideBadge(app, n));
   }
   for (const g of ui.layer.querySelectorAll('.gedge')) {
     g.classList.toggle('dim', hasQ);
   }
+}
+
+function insideBadge(app, n) {
+  const { svgEl } = app;
+  const text = n > 99 ? '99+' : String(n);
+  const w = 10 + 7 * text.length;
+  return svgEl('g', { class: 'search-inside' },
+    svgEl('rect', { x: -w / 2 + 2, y: -8, width: w, height: 16, rx: 8 }),
+    svgEl('text', { x: 2, y: 4, 'text-anchor': 'middle' }, text),
+    svgEl('title', n === 1 ? '1 match of the search inside' : `${n} matches of the search inside`));
 }
 
 // --- pan / zoom ------------------------------------------------------------

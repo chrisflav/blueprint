@@ -654,6 +654,27 @@ check('search finds Lean declaration names', () => {
   eq(M.leanNamesOf({ attrs: { lean: 'X.y' } })[0], 'X.y', 'a single name');
 });
 
+check('hiddenHits counts the matches hidden inside each visible object', () => {
+  const counts = (view, ids) => Object.fromEntries([...M.hiddenHits(view, new Set(ids))].sort());
+  // "tube lemma" is in the body of lem-finite-subcover, in sec-main-induction, in sec-main.
+  const tube = M.searchIds(model, 'tube lemma');
+  eq(JSON.stringify(counts(M.makeView(model, 'refines', []), tube)), '{"sec-main":1}', 'collapsed');
+  eq(JSON.stringify(counts(M.makeView(model, 'refines', ['sec-main']), tube)),
+    '{"sec-main-induction":1}', 'one level down');
+  eq(M.hiddenHits(M.makeView(model, 'refines', ['sec-main', 'sec-main-induction']), tube).size, 0,
+    'nothing hidden once the match is drawn');
+  // An object in two sections counts for both.
+  eq(JSON.stringify(counts(M.makeView(model, 'refines', []), ['lem-diagonal'])),
+    '{"sec-applications":1,"sec-main":1}', 'two parents');
+  // A proof counts for its statement, drawn or collapsed.
+  eq(JSON.stringify(counts(M.makeView(model, 'refines', ['sec-applications']), [PROOF])),
+    '{"thm-heine-borel":1}', 'a proof, with its statement drawn');
+  eq(JSON.stringify(counts(M.makeView(model, 'refines', []), [PROOF])),
+    '{"sec-applications":1}', 'a proof, with its statement collapsed');
+  // Arcs are not inside anything.
+  eq(M.hiddenHits(M.makeView(model, 'refines', []), new Set(['uses/lem-ultrafilter/def-filter'])).size, 0, 'an arc');
+});
+
 check('search limits, and filters candidates with accept', () => {
   const all = M.search(model, 'e', Infinity);
   if (all.length <= 3) throw new Error('"e" should match most of the sample');

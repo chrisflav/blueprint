@@ -770,8 +770,11 @@ table.grid tr:last-child td { border-bottom: 0; }
 .gnode { cursor: pointer; }
 .gnode:hover .shape { stroke-width: 2.2; }
 .gnode.selected .shape { stroke: var(--accent); stroke-width: 2.6; }
-.gnode.match .shape { stroke: var(--graph-hl); stroke-width: 2.6; }
 .gnode.dim { opacity: .22; }
+/* What is hidden inside a box matches: a count on its top left corner
+   (graph.js, `insideBadge`); the box's own match is its outline. */
+.gnode .search-inside rect { fill: var(--graph-hl); stroke: var(--panel); stroke-width: 1.5; }
+.gnode .search-inside text { fill: #1b1d1e; font-size: 11px; font-weight: 650; pointer-events: none; }
 
 .gnode .statusbar { stroke: none; }
 .gnode .junction-dot { fill: var(--graph-junction); stroke: var(--panel); stroke-width: 1.5; }
@@ -1484,11 +1487,26 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .gnode .fold, .gnode .frame2 { fill: none; stroke: var(--node-stroke); stroke-width: 1; pointer-events: none; }
 .gnode.type-section > .shape { stroke-width: 2; }
 .gnode.compound.type-section > .shape { stroke-dasharray: none; }
+
+/* A box that matches the search itself: its outline, over the status and
+   shape outlines above, which would otherwise keep it grey, and a glow, which
+   tells it from a stated box when the progress is shown. */
+.gnode.match { --node-stroke: var(--graph-hl); }
+.gnode.match > .shape {
+  stroke: var(--graph-hl); stroke-width: 2.6;
+  filter: drop-shadow(0 0 4px var(--graph-hl));
+}
 .legend .shp { width: 1.6em; height: .9em; flex: none; border: 1.5px solid currentColor; color: var(--muted); }
 .legend .shp.definition { border-radius: 1px; }
 .legend .shp.statement { border-radius: 999px; }
 .legend .shp.remark { border-radius: 0; clip-path: polygon(0 0, 70% 0, 100% 35%, 100% 100%, 0 100%); }
 .graph-stage:not(.inner-arcs) .legend .lg-derived { display: none; }
+.graph-stage:not(.searching) .legend .lg-search { display: none; }
+.legend .shp.hit { color: var(--graph-hl); border-width: 2.5px; border-radius: 2px; box-shadow: 0 0 4px var(--graph-hl); }
+.legend .lg-badge {
+  min-width: 1.6em; flex: none; border-radius: 999px; text-align: center;
+  background: var(--graph-hl); color: #1b1d1e; font-size: .78em; font-weight: 650; line-height: 1.35;
+}
 .legend .shp.section { border-radius: 3px; border-width: 1px; box-shadow: inset 0 0 0 1.5px var(--panel), inset 0 0 0 2.5px currentColor; }
 
 /* A title with maths: KaTeX's HTML in a <foreignObject> (see graph.js,
