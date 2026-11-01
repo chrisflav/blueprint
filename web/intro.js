@@ -37,7 +37,8 @@
 // Only on the way in: when the site is opened at its landing page, the bare
 // graph.  A link to anything else (an object, the document, a graph with a
 // selection) is something the reader asked for and opens straight on it, and
-// `?intro=0` in the page's URL leaves the intro out anywhere.
+// `?intro=0` in the page's URL leaves the intro out anywhere.  The top bar
+// has a button to see it again (`replayIntro`), from any page.
 
 export const DEFAULT_MS = 3000;
 export const FADE_MS = 700; // the `.intro.leaving` transition in style.css
@@ -190,7 +191,7 @@ export function showIntro(app, { host = document.body, project = app.model && ap
     el('div.intro-timer', { 'aria-hidden': 'true', style: { animationDuration: intro.durationMs + 'ms' } }));
   const layer = el('div.intro', {
     role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Introduction', tabindex: '-1',
-  }, node, el('button.intro-skip', { type: 'button' }, 'Skip'));
+  }, node);
 
   let left = false;
   const timer = setTimeout(leave, intro.durationMs);
@@ -210,13 +211,31 @@ export function showIntro(app, { host = document.body, project = app.model && ap
     layer.classList.add('leaving');
     setTimeout(() => { if (layer.parentNode) layer.parentNode.removeChild(layer); }, FADE_MS);
   }
-  // The skip button is inside the layer, so this is its click too.
   layer.addEventListener('click', leave);
   window.addEventListener('keydown', onKey, true);
 
   host.appendChild(layer);
   try { layer.focus({ preventScroll: true }); } catch (e) { /* an old browser */ }
   return { layer, leave, loaded() {} };
+}
+
+/**
+ * The intro again, as the reader asked for it from the top bar: on the
+ * landing page, the bare graph, which is where it ends.  From anywhere else
+ * the page goes there first and the intro starts with it, after the route
+ * change (which would otherwise end it).  Returns what `showIntro` does, or a
+ * Promise of it when the page had to change.
+ */
+export function replayIntro(app, { atLanding, host = document.body, landing = '#/graph' } = {}) {
+  if (!introOf(app.model && app.model.project)) return null;
+  // Not over itself: the top bar, and so this button, is there while it plays.
+  for (const n of host.children) if (n.classList.contains('intro') && !n.classList.contains('leaving')) return null;
+  if (atLanding) return showIntro(app, { host });
+  return new Promise((resolve) => {
+    // Listened for after app.js's own hashchange, which draws the page.
+    window.addEventListener('hashchange', () => resolve(showIntro(app, { host })), { once: true });
+    location.hash = landing;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +316,6 @@ function playZoom(app, intro, { host }) {
     words.textContent = intro.body.replace(/^\s*#+\s*/gm, '').trim();
   }
   const title = el('div.intro-title', el('div.intro-line', words), el('div.intro-wait', { 'aria-hidden': 'true' }));
-  const skip = el('button.intro-skip.zoom', { type: 'button' }, 'Skip');
   // The title is set in the top bar's, which it becomes.
   const brandText = document.getElementById('project-title');
   if (brandText) {
@@ -311,7 +329,6 @@ function playZoom(app, intro, { host }) {
   root.classList.add('intro-playing');
   host.appendChild(layer);
   host.appendChild(title);
-  host.appendChild(skip);
   try { layer.focus({ preventScroll: true }); } catch (e) { /* an old browser */ }
 
   const t0 = performance.now();
@@ -418,15 +435,15 @@ function playZoom(app, intro, { host }) {
   function finish() {
     if (left) return;
     end();
-    remove(layer, title, skip);
+    remove(layer, title);
   }
 
   // A reader who has seen enough: the intro fades out over whatever is there.
   function leave() {
     if (left) return;
     end();
-    for (const n of [layer, title, skip]) n.classList.add('leaving');
-    setTimeout(() => remove(layer, title, skip), 320);
+    for (const n of [layer, title]) n.classList.add('leaving');
+    setTimeout(() => remove(layer, title), 320);
   }
 
   function end() {
@@ -454,7 +471,6 @@ function playZoom(app, intro, { host }) {
   }
   layer.addEventListener('click', leave);
   title.addEventListener('click', leave);
-  skip.addEventListener('click', leave);
   window.addEventListener('keydown', onKey, true);
   window.addEventListener('hashchange', leave);
 

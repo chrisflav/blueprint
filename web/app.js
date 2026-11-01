@@ -9,7 +9,7 @@ import { setupPreviews, closePreviews, leanMark } from './preview.js';
 import { setupExport, exportButton, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
 import { setupPrefetch, pausePrefetch, resumePrefetch, prefetchModule } from './prefetch.js';
-import { wantsIntro, showIntro, earlyIntro, introDecided, proseReady } from './intro.js';
+import { introOf, wantsIntro, showIntro, replayIntro, earlyIntro, introDecided, proseReady } from './intro.js';
 
 // The pages, each loaded the first time it is shown: a reader who opens an
 // object page never downloads the graph.  `prepare`, where a page has one, is
@@ -929,6 +929,15 @@ function progressToggle() {
   }, shown ? 'Hide progress' : 'Show progress');
 }
 
+/** See the project's intro again, on the landing page where it ends. */
+function introButton() {
+  return el('button.intro-replay', {
+    type: 'button',
+    title: 'Play the introduction again',
+    onclick: () => replayIntro(app, { atLanding: parseHash().raw === '/graph' }),
+  }, 'Replay intro');
+}
+
 function themeMenu() {
   return el('select.theme-select', {
     title: 'The style of the site (experimental: to try the candidates)',
@@ -948,6 +957,7 @@ function updateChrome() {
 
   const aside = document.getElementById('topbar-aside');
   clear(aside);
+  if (app.model && introOf(app.model.project)) aside.appendChild(introButton());
   aside.appendChild(themeMenu());
   aside.appendChild(progressToggle());
   if (app.model && app.showProgress) {

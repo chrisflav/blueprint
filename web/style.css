@@ -215,6 +215,8 @@ label.chk input { margin: 0; }
 
 /* Hide progress / Show progress (app.js).  The Progress tab stays either way. */
 .topbar-aside .progress-toggle { font-size: .8rem; padding: .15em .45em; }
+/* Replay intro (app.js, intro.js `replayIntro`), when the project has one. */
+.topbar-aside .intro-replay { font-size: .8rem; padding: .15em .45em; }
 
 /* Export PDF: the one filled button of the top bar, so it is found without
    looking for it (pdf.js).  Text and icon, never the icon alone. */
@@ -1693,29 +1695,18 @@ details.proof > summary:hover > :is(h1, h2, h3, h4, h5, h6) { color: var(--accen
   transform-origin: left;
   animation: intro-timer linear both;
 }
-.intro-skip {
-  font-size: .82rem;
-  color: var(--muted);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: .2rem .9rem;
-  cursor: pointer;
-  animation: intro-in .5s .3s ease backwards;
-}
-.intro-skip:hover { color: var(--fg); border-color: var(--border-strong); }
 @keyframes intro-in { from { opacity: 0; transform: scale(.94); } }
 @keyframes intro-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) {
   .intro { transition-duration: .2s; }
-  .intro-node, .intro-skip { animation: none; }
+  .intro-node { animation: none; }
   .intro.leaving .intro-node { transform: none; }
   .intro-timer { display: none; }
 }
 
-/* The zooming intro (`playZoom` in intro.js).  The title, its flight into
-   the top bar and the skip button sit above the top bar; the background and
-   the pictures below it, so the top bar fades in over them.  The page itself
+/* The zooming intro (`playZoom` in intro.js).  The title and its flight
+   into the top bar sit above the top bar; the background and the pictures
+   below it, so the top bar fades in over them.  The page itself
    is there all along: what the intro has not yet shown is transparent. */
 html.intro-pending .topbar,
 html.intro-pending .banner,
@@ -1798,24 +1789,13 @@ html.intro-playing .graph-stage > svg { opacity: 0; }
   transition: opacity .6s ease;
 }
 .intro-title.waiting .intro-wait { opacity: .8; animation: intro-wait 1.4s ease-in-out infinite; }
-.intro-skip.zoom {
-  position: fixed;
-  left: 50%;
-  bottom: 1.4rem;
-  z-index: 40;
-  transform: translateX(-50%);
-  background: color-mix(in srgb, var(--bg) 85%, transparent);
-  transition: opacity .3s ease;
-  animation: intro-fade .5s .3s ease backwards;
-}
-.intro.zoom.leaving, .intro-title.leaving, .intro-skip.leaving { opacity: 0; pointer-events: none; }
+.intro.zoom.leaving, .intro-title.leaving { opacity: 0; pointer-events: none; }
 @keyframes intro-title-in { from { opacity: 0; transform: scale(.55); } }
-@keyframes intro-fade { from { opacity: 0; } }
 @keyframes intro-wait { from { background-position: -100% 0, 0 0; } to { background-position: 200% 0, 0 0; } }
 @media (prefers-color-scheme: dark) {
   .intro-bg img { filter: grayscale(1) invert(1) contrast(1.1); mix-blend-mode: screen; opacity: .12; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .intro-line, .intro-skip.zoom { animation: none; }
+  .intro-line { animation: none; }
   .intro-title.waiting .intro-wait { animation: none; }
 }

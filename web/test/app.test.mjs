@@ -2553,7 +2553,7 @@ await check('the intro is drawn over the page, and goes by itself', async () => 
     ok(layer, 'no layer');
     eq(layer.getAttribute('role'), 'dialog', 'it is a dialog');
     ok(layer.querySelector('.intro-node .intro-body').textContent.includes('Welcome'), 'the body is rendered');
-    ok(layer.querySelector('button.intro-skip'), 'a skip button');
+    eq(layer.querySelector('button'), null, 'no skip button: a click or a key ends it');
     eq(layer.querySelector('.intro-timer').style.animationDuration, '10ms', 'the timer runs its duration');
     await tick(30);
     ok(layer.classList.contains('leaving'), 'it did not start to leave');
@@ -2582,6 +2582,25 @@ await check('a click or a key ends the intro at once', async () => {
     ok(prevented, 'Escape is taken from the page');
     app.model.project = { ...project };
     eq(intro.showIntro(app, { host }), null, 'no intro, nothing shown');
+  } finally {
+    app.model.project = project;
+  }
+});
+
+await check('the top bar replays the intro, once at a time', async () => {
+  const host = dom.document.createElement('div');
+  const project = app.model.project;
+  app.model.project = { ...project, intro: { body: 'Welcome', durationMs: 60000 } };
+  try {
+    const a = intro.replayIntro(app, { atLanding: true, host });
+    ok(a && host.querySelector('.intro'), 'on the landing page it plays at once');
+    eq(intro.replayIntro(app, { atLanding: true, host }), null, 'not over itself');
+    a.leave();
+    const b = intro.replayIntro(app, { atLanding: true, host });
+    ok(b && b.layer !== a.layer, 'again once the first is leaving');
+    b.leave();
+    app.model.project = { ...project };
+    eq(intro.replayIntro(app, { atLanding: true, host }), null, 'no intro, nothing to replay');
   } finally {
     app.model.project = project;
   }
