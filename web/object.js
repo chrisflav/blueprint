@@ -117,17 +117,6 @@ export function render(root, app) {
       el('dl.kv', ...progs.flatMap(([k, p]) => [el('dt', k), el('dd', app.progressBar(p))]))));
   }
 
-  // ---------------------------------------------------------------- checks
-  const checks = M.checksFor(m, o.id);
-  if (checks.length) {
-    page.appendChild(foldPanel(app, 'checks', `Checks mentioning this object (${checks.length})`,
-      ...checks.map((c) => el('div', { class: 'check level-' + c.level },
-        app.levelBadge(c.level),
-        el('span.code', c.code),
-        el('div.msg', c.message),
-        el('div.objs', ...(c.objects || []).filter((x) => x !== o.id).map((x) => app.objLink(m, x)))))));
-  }
-
   // ---------------------------------------------------------------- source
   if (o.source && o.source.file) {
     page.appendChild(el('p.muted.small',
@@ -299,7 +288,7 @@ const STARTS_OPEN = new Set(['lean']);
 /**
  * A panel behind a disclosure, shut until the reader opens it: the long and
  * secondary listings (incident objects, attributes, the positions in the
- * collapse orders, checks), so that what the object says comes first and the
+ * collapse orders), so that what the object says comes first and the
  * page is not a scroll through hundreds of rows to reach it.  The Lean
  * declarations fold the same way but start open (`STARTS_OPEN`).
  */

@@ -2461,19 +2461,12 @@ function renderSide(app, st, view, quot) {
         ' (', String(M.childrenOf(view.order, id).length), ' children)')));
   }
 
-  // What the object says comes first, then what is wrong with it; only then
-  // its neighbourhood, which on a real project easily runs to dozens of rows.
+  // What the object says comes first; only then its neighbourhood, which on
+  // a real project easily runs to dozens of rows.
   if (o.body && o.body.trim()) {
     const box = el('div.excerpt.body-prose');
     side.appendChild(el('section', el('h3', 'Prose'), box));
     app.renderBody(box, excerpt(o.body, 700), app.knownIds());
-  }
-
-  const checks = M.checksFor(m, id);
-  if (checks.length) {
-    side.appendChild(el('section', el('h3', 'Checks'),
-      el('ul', ...checks.map((c) =>
-        el('li', app.levelBadge(c.level), ' ', el('span.small', c.message))))));
   }
 
   // A relation's boundary is what the relation is, and only a few rows long,

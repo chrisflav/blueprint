@@ -619,12 +619,18 @@ def assembleSite (root : System.FilePath) (out : System.FilePath) (args : Args) 
   let facts ← loadFactsIfPresent factsPath
   let l ← load root
   let a := analyse l.blueprint l.checks facts none
-  let snap := a.snapshot facts
+  -- The website shows no checks, so its snapshot carries none and the reader
+  -- does not download them: the errors are printed below, as `build` prints
+  -- them, and `blueprint check` lists them all.  `derived.checks` is still
+  -- there, empty.
+  let snap := { a.snapshot facts with checks := #[] }
   IO.FS.createDirAll out
   let copied ← copyDir web out siteExcludes
   IO.FS.writeFile (out / "blueprint.json") snap.render
   IO.println s!"site: {out} ({copied} file(s) from {web}, \
     {snap.objects.size} objects; {summarise a.checks})"
+  for c in a.checks do
+    if c.level == "error" then IO.eprintln c.render
   -- The intro on its own as well, a few hundred bytes the website reads
   -- before the snapshot, so that the intro plays while a large snapshot is
   -- still on its way.  A site without it plays the intro once the snapshot

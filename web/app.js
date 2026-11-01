@@ -5,11 +5,11 @@
 // to import each other.
 
 import * as model from './model.js';
-import { setupPreviews, closePreviews, leanMark } from './preview.js';
+import { setupPreviews, closePreviews } from './preview.js';
 import { setupExport, exportButton, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
 import { setupPrefetch, pausePrefetch, resumePrefetch, prefetchModule } from './prefetch.js';
-import { wantsIntro, showIntro, earlyIntro, introDecided, proseReady } from './intro.js';
+import { introOf, wantsIntro, showIntro, replayIntro, earlyIntro, introDecided, proseReady } from './intro.js';
 
 // The pages, each loaded the first time it is shown: a reader who opens an
 // object page never downloads the graph.  `prepare`, where a page has one, is
@@ -18,9 +18,9 @@ import { wantsIntro, showIntro, earlyIntro, introDecided, proseReady } from './i
 const PAGES = {
   graph: () => import('./graph.js'),
   object: () => import('./object.js'),
+  contents: () => import('./contents.js'),
   document: () => import('./document.js'),
   progress: () => import('./progress.js'),
-  checks: () => import('./checks.js'),
   search: () => import('./search.js'),
 };
 const pageModules = new Map(); // view -> Promise of its module
@@ -370,15 +370,13 @@ function levelHref(outline, kind, id) {
 }
 
 /**
- * The document's page for the level `id` is on, scrolled to it: the top
- * level written out (`depth=1`, since the top page without a depth is the
- * contents) when it is at the top.  null when the document leaves it out.
+ * The document's page for the level `id` is on, scrolled to it: the top of
+ * the document when it is at the top.  null when the document leaves it out.
  */
 function documentLevelHref(outline, kind, id) {
   const page = model.documentLevelOf(outline, id);
   if (page === undefined) return null;
   const q = new URLSearchParams({ collapse: kind });
-  if (page === null) q.set('depth', '1');
   q.set('focus', id);
   return buildHash('document', page, q);
 }
@@ -517,7 +515,7 @@ export function linkifySlugs(root, known, refs) {
           'a',
           {
             class: 'objlink' + (ok ? '' : ' broken') + (ref ? ' ref' : ''),
-            href: ok ? (ref && ref.href) || objectHref(slug) : '#/checks?code=bad-link',
+            href: ok ? (ref && ref.href) || objectHref(slug) : null,
             title: ok ? slug : `${slug} does not resolve to an object`,
             'data-ref': ref ? slug : null,
           },
@@ -546,8 +544,9 @@ export function objLink(m, id, extra) {
   return el('a.objlink', { href: objectHref(id), title: id }, model.titleOf(o), extra);
 }
 
+/** A status badge; none while the progress is hidden, unless `opts.always` (the Progress page). */
 export function statusBadge(status, opts = {}) {
-  if (!app.showProgress) return null;
+  if (!app.showProgress && !opts.always) return null;
   const s = status || 'none';
   const label = status ? model.STATUS_LABEL[status] || status : opts.noneLabel || 'no Lean ref';
   return el('span', { class: 'badge status-' + s, title: 'derived status: ' + label },
@@ -558,12 +557,9 @@ export function kindBadge(kind) {
   return el('span.badge.kind', kind);
 }
 
-export function levelBadge(level) {
-  return el('span', { class: 'badge level-' + level }, level);
-}
-
+/** A progress bar; none while the progress is hidden, unless `opts.always` (the Progress page). */
 export function progressBar(p, opts = {}) {
-  if (!app.showProgress) return null;
+  if (!app.showProgress && !opts.always) return null;
   if (!p || !p.total) return el('span.muted.small', '—');
   const pct = Math.round((100 * p.proved) / p.total);
   if (p.mix) {
@@ -651,14 +647,11 @@ const app = {
   objectHref,
   statusBadge,
   kindBadge,
-  levelBadge,
   progressBar,
   objectHeadBadges,
   /** How a reference to `id` reads here: {word, number, href}, or null. */
   referenceFor: pageReferences,
   documentLevelHref,
-  /** The document's "Lean" mark for an object, or null when it has no Lean names. */
-  leanMark: (o) => leanMark(app, o),
   /** A button that opens the Export PDF dialog, defaulting to the part on screen. */
   exportButton: (label) => exportButton(app, label),
   /**
@@ -886,10 +879,12 @@ function setTheme(id) {
 // formalization progress, shown or hidden
 // ---------------------------------------------------------------------------
 
-// Everything that says how far the formalization has got — the statuses and
-// their badges, the colours of the graph's nodes, the progress bars and the
-// Progress tab — starts hidden, so the site opens on the mathematics alone; a
-// reader who wants it shows it with the top bar's button.  The choice is the
+// Everything that says how far the formalization has got in the graph and the
+// document — the statuses and their badges, the colours of the graph's nodes,
+// the progress bars — starts hidden, so the site opens on the mathematics
+// alone; a reader who wants it shows it with the top bar's button.  The
+// Progress tab, and its page with all it says, stay either way: that page is
+// what a reader opens to see the progress.  The choice is the
 // reader's, kept in localStorage; `data-progress="hidden"` on <html> is for
 // the stylesheet.
 const PROGRESS_KEY = 'blueprint.progress';
@@ -925,10 +920,19 @@ function progressToggle() {
     type: 'button',
     'aria-pressed': shown ? 'false' : 'true',
     title: shown
-      ? 'Hide the formalization progress: statuses, progress bars and the Progress tab'
-      : 'Show the formalization progress again',
+      ? 'Hide the formalization progress in the graph and the document (the Progress tab keeps it)'
+      : 'Show the formalization progress in the graph and the document',
     onclick: () => setShowProgress(!shown),
   }, shown ? 'Hide progress' : 'Show progress');
+}
+
+/** See the project's intro again, on the landing page where it ends. */
+function introButton() {
+  return el('button.intro-replay', {
+    type: 'button',
+    title: 'Play the introduction again',
+    onclick: () => replayIntro(app, { atLanding: parseHash().raw === '/graph' }),
+  }, 'Replay intro');
 }
 
 function themeMenu() {
@@ -950,6 +954,7 @@ function updateChrome() {
 
   const aside = document.getElementById('topbar-aside');
   clear(aside);
+  if (app.model && introOf(app.model.project)) aside.appendChild(introButton());
   aside.appendChild(themeMenu());
   aside.appendChild(progressToggle());
   if (app.model && app.showProgress) {
@@ -959,12 +964,6 @@ function updateChrome() {
       el('a.row', { href: '#/progress', title: `${counts.proved} of ${total} countable objects proved` },
         el('span.bar', { style: { width: '70px' } }, el('span', { style: { width: pct + '%' } })),
         el('span.small', `${pct}%`)));
-  }
-  if (app.model) {
-    const errs = app.model.checks.filter((c) => c.level === 'error').length;
-    if (errs) {
-      aside.appendChild(el('a', { href: '#/checks?level=error' }, levelBadge('error'), ' ' + errs));
-    }
   }
 
   const banner = document.getElementById('banner');
@@ -1076,7 +1075,7 @@ const root = document.getElementById('app');
 // clicking "Progress" landed a third of the way down the progress page, which
 // is neither where the reader asked to be nor anywhere obvious.  Changes that
 // only rewrite the query of the page you are already on — the graph's
-// selection, a checks filter, `?focus=` — leave the scroll position alone, and
+// selection, the progress listing's filters, `?focus=` — leave the scroll position alone, and
 // a page that scrolls somewhere itself still wins, because it does so from
 // `render` below and in the frame after it.
 let lastPageKey = null;
@@ -1252,7 +1251,7 @@ function prefetchTasks() {
     run: () => prefetchModule(`./${view}.js`),
   });
   return [
-    page('graph'), page('document'), page('object'),
+    page('graph'), page('document'), page('contents'), page('object'),
     {
       name: 'elk',
       big: true,
@@ -1266,7 +1265,7 @@ function prefetchTasks() {
       needed: () => !loadedPages.has('graph') && !lowMemory(),
       run: async () => (await import('./graph.js')).warmElk(),
     },
-    page('search'), page('progress'), page('checks'),
+    page('search'), page('progress'),
     { name: 'export', needed: () => true, run: () => prefetchModule('./export/latex.js') },
   ];
 }

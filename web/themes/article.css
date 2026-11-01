@@ -159,7 +159,7 @@ details.panel > summary > h3 { font-size: 1.1rem; }
 .doc-entry .head .num { color: var(--fg); }
 .doc-entry .head :is(h1, h2, h3, h4, h5) .num { font-size: 1em; }
 .doc-entry .head .num { margin-right: .4em; }
-.doc-entry .head a:not(.num):not(.lean-mark):not(.doc-open):not(.doc-object) { color: var(--fg); }
+.doc-entry .head a:not(.num):not(.doc-open):not(.doc-object) { color: var(--fg); }
 .doc-entry.depth-0 { border-top: 0; padding-top: 0; margin-top: 2.6rem; }
 
 /* Prose is justified and hyphenated, paragraphs indented, not spaced. */
@@ -179,7 +179,7 @@ details.panel > summary > h3 { font-size: 1.1rem; }
 .doc-entry.is-statement { border-left: 0; padding-left: 0; margin: 1.3rem 0; }
 .doc-entry.is-statement .head { gap: .3em; }
 .doc-entry.is-statement .head .kindword,
-.doc-entry.is-statement .head .num { font-size: 1.06rem; font-weight: 700; color: var(--fg); }
+.doc-entry.is-statement .head .num { font-size: 1em; font-weight: 700; color: var(--fg); }
 .doc-entry.is-statement .head :is(h2, h3, h4, h5) { font-size: 1.06rem; font-weight: 400; }
 .doc-entry.is-statement .head :is(h2, h3, h4, h5) .doc-title-text::before { content: "("; }
 .doc-entry.is-statement .head :is(h2, h3, h4, h5) .doc-title-text::after { content: ")."; }
@@ -222,7 +222,7 @@ details.panel > summary > h3 { font-size: 1.1rem; }
 .gnode.selected .shape { stroke: var(--accent); stroke-width: 2; }
 .gedge path { stroke-width: 1.1; }
 
-/* ------------------------------------------------------- progress, checks */
+/* -------------------------------------------------------------- progress */
 
 .stat { border-top: 1.5px solid var(--st-none); }
 .stat .n { font-weight: 400; font-size: 2.1rem; }
@@ -230,8 +230,6 @@ details.panel > summary > h3 { font-size: 1.1rem; }
 .chart { border: 0; border-radius: 0; background: none; }
 .chart .axis { stroke: var(--fg); }
 
-.check { border: 0; border-left: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: none; padding: .7rem 0; }
-.check .code { font-family: var(--mono); }
 .toolbar { font-size: .92rem; }
 
 /* The statement head runs in as LaTeX's does: one line of text that wraps

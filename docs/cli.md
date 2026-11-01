@@ -382,7 +382,9 @@ Assembles the static website:
   `test` and `README.md`, which are fixtures of the frontend and not part of
   the deployed site;
 * writes the freshly built snapshot to `<dir>/blueprint.json`, which is where
-  `index.html` looks for it;
+  `index.html` looks for it.  Its `derived.checks` is empty: the website shows
+  no checks, so the reader does not download them.  The errors are printed
+  instead, as `build` prints them, and `blueprint check` lists them all;
 * with `--history dir`, copies that directory to `<dir>/data/` and makes sure
   `data/index.json` lists the snapshot that was just built — as
   `data/<sha>.json` when `history add` already filed it, and otherwise as an
@@ -635,6 +637,8 @@ as an object's prose is, so it may hold maths, `[slug]` references, pictures
 float, default 3); a click, Escape, Enter or Space skips it.  It reaches the
 snapshot as `project.intro`.  A link to any other page of the site opens
 straight on that page, and `?intro=0` in the page's URL leaves the intro out.
+The top bar's *Replay intro* button plays it again, from any page: it goes to
+the landing page first.
 
 With one or more `[[site.intro.zoom]]` tables the intro is a short zoom
 instead of the single node.  The Markdown is a title, large in the middle of

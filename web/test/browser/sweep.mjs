@@ -36,7 +36,7 @@ const ONLY = args.get('only') || null;
 // Which groups of checks to run at all — the A/B of a single fix does not need
 // to lay out 1,068 nodes on the way past.
 const SECTIONS = new Set((args.get('sections')
-  || 'boot,graph,layout,object,document,references,progress,search,checks,nav,export,sample').split(',').map((s) => s.trim()));
+  || 'boot,graph,layout,object,document,references,progress,search,nav,export,sample').split(',').map((s) => s.trim()));
 const WIDTH = Number(args.get('width') || 1400);
 const HEIGHT = Number(args.get('height') || 900);
 const LAUNCH = args.get('no-launch') !== 'true';
@@ -362,8 +362,11 @@ async function loadFixtures(origin) {
     if (ref && refFar && refNear) break;
   }
   // A link that resolves nowhere, as the tool reported it: a bracket found by
-  // a regex over the body might be maths (`F[1]`), which is not a link.
-  const badLink = m.checks.find((c) => c.code === 'bad-link' && c.objects && c.objects.length
+  // a regex over the body might be maths (`F[1]`), which is not a link.  The
+  // site's own snapshot carries no checks (`blueprint site`), one that
+  // `blueprint build` wrote does.
+  const checks = (snapshot.derived && snapshot.derived.checks) || [];
+  const badLink = checks.find((c) => c.code === 'bad-link' && c.objects && c.objects.length
     && /`\[([^\]`]+)\]`/.test(c.message || ''));
   const brokenRef = badLink && { id: badLink.objects[0], target: badLink.message.match(/`\[([^\]`]+)\]`/)[1] };
 
@@ -404,9 +407,6 @@ async function loadFixtures(origin) {
     defaultNodeCount: visibleNodeIds.length,
     defaultEdgeCount: quot.edges.length,
     visibleNodeIds,
-    checkCodes: [...new Set(m.checks.map((c) => c.code))].sort(),
-    checkLevels: [...new Set(m.checks.map((c) => c.level))],
-    nChecks: m.checks.length,
   };
 }
 
@@ -1191,7 +1191,7 @@ async function layoutChecks(d, f) {
     // its tallest child on every page taller than the window: all but the
     // graph.  The tall pages are scrolled, too, so the bar is measured stuck.
     const heights = {};
-    for (const hash of ['#/graph', '#/document', '#/progress', '#/checks', '#/object/' + encodeURIComponent((f.withFacts || f.section))]) {
+    for (const hash of ['#/graph', '#/document', '#/progress', '#/object/' + encodeURIComponent((f.withFacts || f.section))]) {
       await route(d, hash);
       await sleep(900);
       heights[hash.split('/')[1]] = await d.js(`window.scrollTo(0, 600);
@@ -1260,7 +1260,7 @@ async function layoutChecks(d, f) {
   await check(d, 'layout/no-horizontal-overflow-on-any-route', async () => {
     const out = [];
     let ok = true;
-    for (const hash of ['#/graph', '#/document', '#/progress', '#/checks', '#/object/' + encodeURIComponent(f.withFacts || f.section)]) {
+    for (const hash of ['#/graph', '#/document', '#/progress', '#/object/' + encodeURIComponent(f.withFacts || f.section)]) {
       await route(d, hash);
       if (hash === '#/graph') await waitFor(d, GRAPH_IDLE, { timeout: 90000, interval: 200, label: 'graph' }).catch(() => {});
       await sleep(900);
@@ -1385,14 +1385,14 @@ async function objectChecks(d, f) {
   }));
 
   await check(d, 'object/long-listings-are-folded', async () => {
-    // Incident objects, attributes, the positions in the collapse orders and
-    // the checks start shut, one line each; a real click opens one, and it is
+    // Incident objects, attributes and the positions in the collapse orders
+    // start shut, one line each; a real click opens one, and it is
     // still open on the next object page, until it is shut again.
     const id = f.panel || f.section || f.withFacts;
     if (!id) return { skip: true, evidence: 'no object with incident objects' };
     const state = `
       return Array.prototype.slice.call(document.querySelectorAll('details.panel')).map(function (p) {
-        var row = p.querySelector('ul.objlist li, dl.kv dt, .check, .chain');
+        var row = p.querySelector('ul.objlist li, dl.kv dt, .chain');
         return { key: p.getAttribute('data-fold'), open: p.open, h: Math.round(p.getBoundingClientRect().height),
                  shown: row ? row.checkVisibility() : null };
       });`;
@@ -1508,7 +1508,7 @@ const PAGE_STATE = `
     crumbs: document.querySelectorAll('.doc-crumbs a').length,
     pagers: document.querySelectorAll('.doc-pager').length,
     opens: document.querySelectorAll('a.doc-open').length,
-    rows: document.querySelectorAll('.doc-contents li').length,
+    rows: document.querySelectorAll('.contents-tree > li').length,
     toc: document.querySelectorAll('nav.toc a').length,
     scrollY: Math.round(window.scrollY),
     errorBox: !!document.querySelector('.error-box')
@@ -1551,19 +1551,62 @@ async function pageChecks(d, f) {
     };
   });
 
-  // Without one it is the contents: a row per top-level entry, nothing
-  // written out, not even the text at the top level.
-  const rows = out.roots.filter((e) => !e.text).length;
-  await check(d, 'document/top-page-is-the-contents', async () => {
+  // Without one too: the top of the document is the top level written out.
+  await check(d, 'document/top-page-writes-out-the-top-level', async () => {
     await route(d, '#/document');
-    await waitFor(d, `return document.querySelectorAll('.doc-contents li, .doc-entry').length > 0`,
-      { timeout: 30000, label: 'contents' }).catch(() => null);
+    await waitFor(d, `return document.querySelectorAll('.doc-entry').length > 0`,
+      { timeout: 30000, label: 'top level' }).catch(() => null);
     await sleep(500);
     const s = await d.js(PAGE_STATE);
     return {
-      ok: s.rows === rows && s.entries === 0 && s.toc === 0 && !s.pageHead && s.crumbs === 0 && s.pagers === 0,
-      evidence: `#/document: ${s.rows} contents rows (top-level entries ${rows}), ${s.entries} .doc-entry (want 0), `
+      ok: s.entries === out.roots.length && s.rows === 0 && s.toc > 0 && !s.pageHead && s.crumbs === 0 && s.pagers === 0,
+      evidence: `#/document: ${s.entries} .doc-entry (outline roots ${out.roots.length}), ${s.rows} contents rows (want 0), `
         + `${s.toc} sidebar links, page head ${j(s.pageHead)}, ${s.crumbs} breadcrumbs, ${s.pagers} pagers`,
+    };
+  });
+
+  // The contents are a page of their own: a row per top-level entry, folded,
+  // nothing written out, not even the text at the top level.
+  const rows = out.roots.filter((e) => !e.text).length;
+  await check(d, 'contents/a-row-per-top-level-entry', async () => {
+    await route(d, '#/contents');
+    await waitFor(d, `return document.querySelectorAll('.contents-tree > li').length > 0`,
+      { timeout: 30000, label: 'contents' }).catch(() => null);
+    const s = await d.js(PAGE_STATE);
+    return {
+      ok: s.rows === rows && s.entries === 0 && s.toc === 0,
+      evidence: `#/contents: ${s.rows} rows (top-level entries ${rows}), ${s.entries} .doc-entry (want 0), ${s.toc} sidebar links`,
+    };
+  });
+
+  // The triangle beside a row unfolds its entries, and folds them again.
+  const TREE_ROW = (id) => `
+    var li = Array.prototype.slice.call(document.querySelectorAll('.contents-tree li')).filter(function (x) {
+      var a = x.querySelector('a.contents-link');
+      return a && new URLSearchParams(a.getAttribute('href').split('?')[1]).get('focus') === ${j(id)}; })[0];
+    if (!li) return null;
+    var t = li.querySelector('.contents-row > button.contents-toggle');
+    var sub = li.querySelector(':scope > ol');
+    var r = t ? t.getBoundingClientRect() : null;
+    return { expanded: t ? t.getAttribute('aria-expanded') : null, kids: sub ? sub.children.length : 0,
+             x: r ? r.left + r.width / 2 : 0, y: r ? r.top + r.height / 2 : 0, w: r ? Math.round(r.width) : 0 };
+  `;
+  await check(d, 'contents/triangle-unfolds-an-entry', async () => {
+    if (!f.chapter) return { skip: true, evidence: 'no top-level entry with children' };
+    const want = out.byId.get(f.chapter).children.filter((c) => !c.text).length;
+    const before = await d.js(TREE_ROW(f.chapter));
+    if (!before || !before.w) return { ok: false, evidence: `no triangle beside ${f.chapter}: ${j(before)}` };
+    await d.click(before.x, before.y);
+    await sleep(300);
+    const open = await d.js(TREE_ROW(f.chapter));
+    await d.click(open.x, open.y);
+    await sleep(300);
+    const shut = await d.js(TREE_ROW(f.chapter));
+    return {
+      ok: before.expanded === 'false' && before.kids === 0 && open.expanded === 'true' && open.kids === want
+        && shut.expanded === 'false' && shut.kids === 0,
+      evidence: `${f.chapter}: folded ${before.expanded}/${before.kids} rows, after a click ${open.expanded}/${open.kids} (want ${want}), `
+        + `after another ${shut.expanded}/${shut.kids}`,
     };
   });
 
@@ -1580,14 +1623,14 @@ async function pageChecks(d, f) {
     const entry = out.byId.get(f.chapter);
     await d.js('window.scrollTo(0, 0); return 0;');
     const box = await d.js(`
-      var a = Array.prototype.slice.call(document.querySelectorAll('.doc-contents a')).filter(function (x) {
+      var a = Array.prototype.slice.call(document.querySelectorAll('.contents-tree a.contents-link')).filter(function (x) {
         return decodeURIComponent(x.getAttribute('href')).indexOf(${j('focus=' + f.chapter)}) >= 0; })[0];
       if (!a) return null;
       var r = inView(a);
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: (a.textContent || '').trim() };
       ${IN_VIEW}
     `);
-    if (!box) return { ok: false, evidence: `no contents row for ${f.chapter} on the top page` };
+    if (!box) return { ok: false, evidence: `no contents row for ${f.chapter} on the contents page` };
     await clickAndWait(d, box, `return document.querySelectorAll('.doc-entry').length > 0 && !!document.querySelector('nav.toc li.open')`, 'the top level');
     await sleep(900);
     const s = await d.js(PAGE_STATE);
@@ -1595,7 +1638,7 @@ async function pageChecks(d, f) {
     const r = await d.js(ENTRY_IN_VIEW(f.chapter));
     const kids = entry.children.filter((c) => !c.duplicate && !c.text).map((c) => c.id);
     return {
-      ok: s.hash.startsWith('#/document?') && /depth=1/.test(s.hash) && s.entries === out.roots.length && !s.pageHead
+      ok: s.hash.startsWith('#/document?') && s.entries === out.roots.length && !s.pageHead
         && side.ups.length === 0 && side.opened.join() === f.chapter && kids.every((k) => side.links.includes(k)) && r.inView,
       evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (top level ${out.roots.length}), ${entry.number} in view=${r.inView}; `
         + `sidebar chain ${j(side.ups)}, opened ${j(side.opened)}, its ${kids.length} entries listed=${kids.every((k) => side.links.includes(k))}`,
@@ -1647,9 +1690,9 @@ async function pageChecks(d, f) {
     const box = await d.js(elBox('.doc-crumbs a'));
     if (!box) return { ok: false, evidence: 'no breadcrumb link' };
     await clickAndWait(d, box, `return location.hash.indexOf('#/document?') === 0 && !document.querySelector('.doc-entry.page-head')
-      && document.querySelectorAll('.doc-contents li').length > 0`, 'top page');
+      && document.querySelectorAll('.doc-entry').length > 0`, 'top page');
     const s = await d.js(PAGE_STATE);
-    return { ok: s.rows === rows, evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.rows} contents rows` };
+    return { ok: s.entries === out.roots.length, evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (top level ${out.roots.length})` };
   });
 
   await check(d, 'document/depth-control-inlines-a-level', async () => {
@@ -1928,7 +1971,7 @@ async function referenceChecks(d, f) {
   });
 
   await check(d, 'references/broken-link-unchanged', async () => {
-    if (!f.brokenRef) return { skip: true, evidence: 'no bad-link check in this snapshot: every [slug] resolves' };
+    if (!f.brokenRef) return { skip: true, evidence: 'no bad-link check in this snapshot: every [slug] resolves, or it is a site\'s snapshot, which has no checks' };
     await openObject(d, f.brokenRef.id);
     const a = await d.js(`
       var a = Array.prototype.slice.call(document.querySelectorAll('.body-prose a.objlink.broken'))
@@ -1936,7 +1979,8 @@ async function referenceChecks(d, f) {
       return a ? { text: a.textContent, href: a.getAttribute('href') } : null;
     `);
     return {
-      ok: !!a && a.href === '#/checks?code=bad-link',
+      // Marked, and leading nowhere: there is no Checks page to send it to.
+      ok: !!a && a.href === null,
       evidence: a ? `[${f.brokenRef.target}] in ${j(f.brokenRef.id)}: text=${j(a.text)}, href=${j(a.href)}` : `no broken link ${j(f.brokenRef.target)} in ${j(f.brokenRef.id)}`,
     };
   });
@@ -2116,8 +2160,8 @@ async function referenceChecks(d, f) {
     };
   });
 
-  // The document's Lean mark: a statement with Lean names on the page it is
-  // read on, its mark beside the heading, and the card it opens.
+  // The document's "object" link beside the heading of a statement with Lean
+  // names, on the page it is read on, and the card of those names it opens.
   const leanFixture = (() => {
     for (const e of f.outline.entries) {
       const names = M.leanNamesOf(e.object);
@@ -2125,7 +2169,7 @@ async function referenceChecks(d, f) {
     }
     return null;
   })();
-  const LEAN_MARK = (id) => `var b = document.querySelector('#' + CSS.escape(${j(anchorOf(id))}) + ' > .head a.lean-mark');
+  const LEAN_MARK = (id) => `var b = document.querySelector('#' + CSS.escape(${j(anchorOf(id))}) + ' > .head a.doc-object[data-lean]');
     if (!b) return null; var r = inView(b);
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, top: r.top, bottom: r.bottom, text: b.textContent };
     ${IN_VIEW}`;
@@ -2136,16 +2180,16 @@ async function referenceChecks(d, f) {
              left: r.left, top: r.top, right: r.right, bottom: r.bottom, onTop: !!hit && c.contains(hit),
              vw: window.innerWidth, vh: window.innerHeight };`;
 
-  await check(d, 'references/lean-mark-shows-the-lean-names', async () => {
+  await check(d, 'references/object-link-shows-the-lean-names', async () => {
     if (!leanFixture) return { skip: true, evidence: 'no object with Lean names in the document' };
     const { id, names, page } = leanFixture;
     await route(d, docPage(page, id));
     await d.move(away.x, away.y);
     const b = await steadyLink(d, LEAN_MARK(id));
-    if (!b) return { ok: false, evidence: `no Lean mark in the heading of ${j(id)} on ${docPage(page, id)}` };
+    if (!b) return { ok: false, evidence: `no object link showing Lean names in the heading of ${j(id)} on ${docPage(page, id)}` };
     await d.move(b.x, b.y);
     const c = await waitFor(d, LEAN_CARD, { timeout: 4000, label: 'Lean card' }).catch(() => null);
-    if (!c) return { ok: false, evidence: `resting on the Lean mark of ${j(id)} opened no card` };
+    if (!c) return { ok: false, evidence: `resting on the object link of ${j(id)} opened no card` };
     await sleep(300); // past the fade-in
     await d.shot(`${SHOTS}/${d.name}-lean-card.png`);
     const inside = c.left >= 0 && c.top >= 0 && c.right <= c.vw && c.bottom <= c.vh;
@@ -2155,16 +2199,16 @@ async function referenceChecks(d, f) {
     const after = await d.js(LEAN_CARD);
     return {
       ok: c.id === id && j(c.names) === j(names) && inside && clear && c.onTop && !after,
-      evidence: `mark ${j(b.text)} of ${j(id)}: card ${j(c.lead)} lists ${j(c.names)} (want ${j(names)}), inside the window=${inside}, clear of the mark=${clear}, on top=${c.onTop}; moved away: ${after ? 'still open' : 'closed'}`,
+      evidence: `link ${j(b.text)} of ${j(id)}: card ${j(c.lead)} lists ${j(c.names)} (want ${j(names)}), inside the window=${inside}, clear of the link=${clear}, on top=${c.onTop}; moved away: ${after ? 'still open' : 'closed'}`,
     };
   });
 
-  await check(d, 'references/lean-mark-leads-to-the-object-page', async () => {
+  await check(d, 'references/object-link-leads-to-the-object-page', async () => {
     if (!leanFixture) return { skip: true, evidence: 'no object with Lean names in the document' };
     const { id, page } = leanFixture;
     await route(d, docPage(page, id));
     const b = await steadyLink(d, LEAN_MARK(id));
-    if (!b) return { ok: false, evidence: `no Lean mark for ${j(id)}` };
+    if (!b) return { ok: false, evidence: `no object link showing Lean names for ${j(id)}` };
     const want = '#/object/' + encodeURIComponent(id);
     await d.click(b.x, b.y);
     const there = await waitFor(d, `return location.hash === ${j(want)} && !!document.querySelector('.obj-head')`,
@@ -2174,7 +2218,7 @@ async function referenceChecks(d, f) {
     const hash = await d.js('return location.hash');
     return {
       ok: !!there && !card,
-      evidence: `clicked the mark of ${j(id)}: at ${j(hash)} (want ${j(want)}), card ${card ? 'still open' : 'closed'}`,
+      evidence: `clicked the object link of ${j(id)}: at ${j(hash)} (want ${j(want)}), card ${card ? 'still open' : 'closed'}`,
     };
   });
 
@@ -2418,7 +2462,7 @@ async function searchChecks(d, f) {
 
   // --- the top bar's search box ---------------------------------------------
   // Start from a page where focus is on nothing in particular.
-  await route(d, '#/checks');
+  await route(d, '#/progress');
   await sleep(700);
   await d.js(`if (document.activeElement) document.activeElement.blur(); return true;`);
 
@@ -2549,99 +2593,6 @@ async function searchChecks(d, f) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. checks page
-// ---------------------------------------------------------------------------
-
-async function checksChecks(d, f) {
-  await route(d, '#/checks');
-  await waitFor(d, `return document.querySelectorAll('.check').length > 0 || !!document.querySelector('.page p.muted')`, { timeout: 40000, label: 'checks page' });
-  await sleep(400);
-
-  await check(d, 'checks/initial-render', async () => {
-    const s = await d.js(`
-      return { cards: document.querySelectorAll('.check').length,
-               rows: document.querySelectorAll('.filter-row').length,
-               chips: document.querySelectorAll('.filter-row button').length,
-               h2: Array.prototype.map.call(document.querySelectorAll('.page h2'), function (h) { return h.textContent; }) };
-    `);
-    return { ok: s.cards === f.nChecks && s.rows === 2, evidence: `${s.cards} .check cards (model says ${f.nChecks}), ${s.chips} filter chips, groups=${j(s.h2)}` };
-  });
-
-  await check(d, 'checks/level-filter', async () => {
-    const lv = f.checkLevels.includes('error') ? 'error' : f.checkLevels[0];
-    const b = await d.js(elBoxByText('.filter-row button', lv + ' ('));
-    if (!b) return { ok: false, evidence: `no chip for level ${lv}` };
-    await d.click(b.x, b.y);
-    await sleep(800);
-    const s = await d.js(`
-      var cards = document.querySelectorAll('.check');
-      var levels = {};
-      for (var i = 0; i < cards.length; i++) { var m = cards[i].className.match(/level-(\\w+)/); levels[m[1]] = (levels[m[1]] || 0) + 1; }
-      return { n: cards.length, levels: levels, hash: location.hash,
-               active: (document.querySelector('.filter-row button.active') || {}).textContent };
-    `);
-    const expect = f.m.checks.filter((c) => c.level === lv).length;
-    await d.js(`location.hash = '#/checks'; return true;`);
-    await sleep(600);
-    return {
-      ok: s.n === expect && Object.keys(s.levels).length === 1 && s.levels[lv] === expect && s.hash.includes('level=' + lv),
-      evidence: `clicked ${j(b.text)}: ${s.n} cards, by level=${j(s.levels)} (model says ${expect}), hash=${j(s.hash)}`,
-    };
-  });
-
-  await check(d, 'checks/code-filter', async () => {
-    const code = f.checkCodes[0];
-    const b = await d.js(elBoxByText('.filter-row button', code + ' ('));
-    if (!b) return { ok: false, evidence: `no chip for code ${code}` };
-    await d.click(b.x, b.y);
-    await sleep(800);
-    const s = await d.js(`
-      var cards = document.querySelectorAll('.check');
-      var codes = {};
-      for (var i = 0; i < cards.length; i++) { var c = cards[i].querySelector('.code').textContent; codes[c] = (codes[c] || 0) + 1; }
-      return { n: cards.length, codes: codes, hash: location.hash };
-    `);
-    const expect = f.m.checks.filter((c) => c.code === code).length;
-    return {
-      ok: s.n === expect && Object.keys(s.codes).length === 1,
-      evidence: `clicked ${j(b.text)}: ${s.n} cards, codes=${j(s.codes)} (model says ${expect}), hash=${j(s.hash)}`,
-    };
-  });
-
-  await check(d, 'checks/object-links-navigate', async () => {
-    const a = await d.js(`
-      var a = document.querySelector('.check .objs a.objlink');
-      if (!a) return null;
-      var r = inView(a);
-      return { href: a.getAttribute('href'), text: a.textContent, x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      ${IN_VIEW}
-    `);
-    if (!a) return { ok: false, evidence: 'no object links on any check card' };
-    await d.click(a.x, a.y);
-    await sleep(700);
-    const s = await d.js(OBJECT_STATE);
-    return {
-      ok: !!s && !s.errorBox && !!s.h1,
-      evidence: `clicked ${j(a.text)} (${j(a.href)}): .obj-id=${j(s && s.objId)}, errorBox=${s && s.errorBox}`,
-    };
-  });
-
-  await check(d, 'checks/unknown-object-chips-are-really-unknown', async () => {
-    await route(d, '#/checks');
-    await sleep(900);
-    const s = await d.js(`
-      return Array.prototype.slice.call(document.querySelectorAll('.check .objs .chip[title="unknown object"]'))
-        .map(function (e) { return e.textContent.trim(); }).slice(0, 40);
-    `);
-    const wrong = s.filter((x) => f.m.byId.has(x));
-    return { ok: wrong.length === 0, evidence: `${s.length} "unknown object" chips sampled; naming ids that do exist: ${wrong.length ? j(wrong) : 'none'}` };
-  });
-
-  await d.shot(`${SHOTS}/${d.name}-checks.png`);
-  await consoleCheck(d, 'checks');
-}
-
-// ---------------------------------------------------------------------------
 // 6. navigation
 // ---------------------------------------------------------------------------
 
@@ -2649,7 +2600,9 @@ async function navChecks(d, f) {
   await check(d, 'nav/top-bar-tabs', async () => {
     const log = [];
     let ok = true;
-    for (const view of ['graph', 'document', 'progress', 'checks']) {
+    const tabs = await d.js(`return Array.prototype.map.call(document.querySelectorAll('#tabs a'), function (a) { return a.dataset.view; })`);
+    if (j(tabs) !== j(['graph', 'contents', 'document', 'progress'])) { ok = false; log.push(`tabs=${j(tabs)}`); }
+    for (const view of ['graph', 'contents', 'document', 'progress']) {
       const a = await d.js(elBox(`#tabs a[data-view="${view}"]`));
       await d.click(a.x, a.y);
       await sleep(view === 'graph' ? 1200 : 900);
@@ -2658,7 +2611,8 @@ async function navChecks(d, f) {
         return { hash: location.hash, active: (document.querySelector('#tabs a.active') || {}).dataset.view,
                  mounted: !!document.querySelector('#app').firstElementChild,
                  kind: document.querySelector('.graph-page') ? 'graph' : document.querySelector('.doc-layout') ? 'document'
-                     : document.querySelector('input[type=range]') ? 'progress' : document.querySelector('.filter-row') ? 'checks' : '?' };
+                     : document.querySelector('.contents-tree') ? 'contents'
+                     : document.querySelector('input[type=range]') ? 'progress' : '?' };
       `);
       const good = s.hash.startsWith('#/' + view) && s.mounted;
       if (!good) ok = false;
@@ -2668,7 +2622,7 @@ async function navChecks(d, f) {
   });
 
   await check(d, 'nav/back-and-forward', async () => {
-    await route(d, '#/checks');
+    await route(d, '#/document?depth=1');
     await sleep(700);
     await route(d, '#/progress');
     await sleep(700);
@@ -2678,11 +2632,11 @@ async function navChecks(d, f) {
     await d.back(); await sleep(900);
     trail.push(await d.js(`return location.hash + '/' + (document.querySelector('input[type=range]') ? 'progress-dom' : '?')`));
     await d.back(); await sleep(900);
-    trail.push(await d.js(`return location.hash + '/' + (document.querySelector('.filter-row') ? 'checks-dom' : '?')`));
+    trail.push(await d.js(`return location.hash + '/' + (document.querySelector('.doc-entry') ? 'document-dom' : '?')`));
     await d.forward(); await sleep(900);
     trail.push(await d.js(`return location.hash + '/' + (document.querySelector('input[type=range]') ? 'progress-dom' : '?')`));
     return {
-      ok: trail[0].startsWith('#/progress') && trail[1].startsWith('#/checks') && trail[2].startsWith('#/progress')
+      ok: trail[0].startsWith('#/progress') && trail[1].startsWith('#/document?depth=1') && trail[2].startsWith('#/progress')
         && trail.every((t) => !t.endsWith('/?')),
       evidence: `back, back, forward -> ${j(trail)}`,
     };
@@ -2702,18 +2656,19 @@ async function navChecks(d, f) {
     await sleep(700);
     const afterTab = await d.js(`return { y: Math.round(window.scrollY), hash: location.hash, sh: document.documentElement.scrollHeight }`);
 
-    // A query change on the page you are already on must NOT jump to the top.
-    await route(d, '#/checks');
-    await waitFor(d, `return document.querySelectorAll('.check').length > 0`, { timeout: 40000, label: 'checks' });
+    // A query change on the page you are already on must NOT jump to the top:
+    // the whole document again, then the same with its collapse kind spelt out.
+    await route(d, '#/document?depth=all');
+    await waitFor(d, `return document.querySelectorAll('.doc-entry').length > 0`, { timeout: 30000, label: 'document' });
     await sleep(500);
     await d.js(`window.scrollTo(0, 3000); return window.scrollY;`);
     await sleep(300);
-    await route(d, '#/checks?level=warning');
+    await route(d, '#/document?depth=all&collapse=' + encodeURIComponent(f.kind));
     await sleep(1200);
     const afterFilter = await d.js(`return Math.round(window.scrollY)`);
     return {
       ok: deep > 1000 && afterTab.y === 0 && afterFilter > 0,
-      evidence: `document scrolled to ${deep}px, then the Progress tab -> scrollY=${afterTab.y} (page ${afterTab.sh}px tall); a checks filter at 3000px kept scrollY=${afterFilter}`,
+      evidence: `document scrolled to ${deep}px, then the Progress tab -> scrollY=${afterTab.y} (page ${afterTab.sh}px tall); a query change at 3000px kept scrollY=${afterFilter}`,
     };
   });
 
@@ -2944,13 +2899,14 @@ async function runBrowser(name, f) {
     ? await firefox({ width: WIDTH, height: HEIGHT, launch: LAUNCH, ...(GECKO_PORT ? { port: GECKO_PORT } : {}) })
     : await chromium({ width: WIDTH, height: HEIGHT, launch: LAUNCH, ...(CDP_PORT ? { port: CDP_PORT } : {}) });
   try {
-    await d.open(`${ORIGIN}/#/checks`);
+    await d.open(`${ORIGIN}/#/progress`);
     // Past index.html's own "Loading blueprint…" placeholder: a large
     // snapshot takes long enough to arrive that the boot check otherwise ran
     // before the data, and the deferred CDN scripts, were there.
     const firstPaint = () => waitFor(d, `var a = document.querySelector('#app'); return !!a.firstElementChild && !a.querySelector('.loading');`, { timeout: 60000, label: 'first paint' });
     await firstPaint();
-    // The progress starts hidden for a reader who has not chosen (app.js).
+    // The progress starts hidden for a reader who has not chosen (app.js),
+    // from the graph and the document; the Progress tab and page keep it.
     // The profile may remember an earlier run's choice: forget it first.
     await d.js(`try { ['blueprint.progress', 'blueprint.graph.tools', 'blueprint.graph.side']
       .forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {} return true;`);
@@ -2962,11 +2918,13 @@ async function runBrowser(name, f) {
         var tab = document.querySelector('#tabs a[data-view=progress]');
         return { attr: document.documentElement.getAttribute('data-progress'), button: b && b.textContent,
                  tab: tab ? getComputedStyle(tab).display : null,
+                 tables: document.querySelectorAll('#app table.grid').length,
                  badges: document.querySelectorAll('#app .badge[class*="status-"]').length };
       `);
       return {
-        ok: s.attr === 'hidden' && s.button === 'Show progress' && s.tab === 'none',
-        evidence: `data-progress=${j(s.attr)}, button=${j(s.button)}, Progress tab display=${j(s.tab)}, status badges=${s.badges}`,
+        ok: s.attr === 'hidden' && s.button === 'Show progress' && s.tab !== null && s.tab !== 'none'
+          && s.tables > 0 && s.badges > 0,
+        evidence: `data-progress=${j(s.attr)}, button=${j(s.button)}, Progress tab display=${j(s.tab)}, on the Progress page ${s.tables} tables, status badges=${s.badges}`,
       };
     });
     // The graph starts bare too (graph.js, `renderToolbar`): of the toolbar
@@ -2993,7 +2951,7 @@ async function runBrowser(name, f) {
     });
     // Everything after covers the progress, the filters and the side panel
     // too: show them, as a reader would.
-    await d.open(`${ORIGIN}/#/checks`);
+    await d.open(`${ORIGIN}/#/progress`);
     await firstPaint();
     await d.js(`['blueprint.progress', 'blueprint.graph.tools', 'blueprint.graph.side']
       .forEach(function (k) { localStorage.setItem(k, 'shown'); }); return true;`);
@@ -3011,7 +2969,7 @@ async function runBrowser(name, f) {
       `);
       return {
         // ELK is the graph's own, fetched when the graph is first shown; the
-        // checks page this opens on must not have paid for it.
+        // progress page this opens on must not have paid for it.
         ok: !s.errorBox && s.marked && s.katex === 'object' && s.render === 'function' && s.elk === 'undefined',
         evidence: `title=${j(s.title)} brand=${j(s.brand)} topbar=${j(s.aside)}; CDN: katex=${s.katex} autorender=${s.render} marked=${s.marked} ELK (not wanted yet)=${s.elk}; viewport=${j(s.viewport)}; recorder=${hooked}`,
       };
@@ -3024,7 +2982,6 @@ async function runBrowser(name, f) {
     if (SECTIONS.has('references')) await referenceChecks(d, f);
     if (SECTIONS.has('progress')) await progressChecks(d, f);
     if (SECTIONS.has('search')) await searchChecks(d, f);
-    if (SECTIONS.has('checks')) await checksChecks(d, f);
     if (SECTIONS.has('nav')) await navChecks(d, f);
     if (SECTIONS.has('export')) await exportChecks(d, f);
     if (SECTIONS.has('sample')) await sampleChecks(d);
@@ -3036,7 +2993,7 @@ async function runBrowser(name, f) {
 async function main() {
   console.log(`# blueprint browser sweep\n# origin   ${ORIGIN}\n# browsers ${BROWSERS.join(', ')}\n# viewport ${WIDTH}x${HEIGHT}\n# shots    ${SHOTS}\n`);
   const f = await loadFixtures(ORIGIN);
-  console.log(`# snapshot ${f.m.objects.length} objects, collapse kind ${j(f.kind)}, ${f.nChecks} checks`);
+  console.log(`# snapshot ${f.m.objects.length} objects, collapse kind ${j(f.kind)}`);
   console.log(`# fixtures ${j({
     withFacts: f.withFacts, withoutFacts: f.withoutFacts, section: f.section, sugar: f.sugar,
     twoParents: f.twoParents, katex: f.katex, slug: f.slug, bench: f.bench,

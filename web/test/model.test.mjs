@@ -325,11 +325,13 @@ check('collapsed quotient: consistency states (DESIGN 3 table)', () => {
 });
 
 check('collapsed quotient: the lint list agrees with the computed states', () => {
-  const codes = model.checks.map((c) => c.code);
+  // The website no longer reads the checks; the snapshot still has them.
+  const checks = snapshot.derived.checks;
+  const codes = checks.map((c) => c.code);
   has(codes, 'undeclared-edge', 'check codes');
   has(codes, 'unwitnessed-edge', 'check codes');
   // unwitnessed-edge names the declared-only pair
-  const unwitnessed = model.checks.find((c) => c.code === 'unwitnessed-edge');
+  const unwitnessed = checks.find((c) => c.code === 'unwitnessed-edge');
   has(unwitnessed.objects, 'uses/sec-main/sec-applications', 'unwitnessed check objects');
   eq(stateOf(qCollapsed, 'sec-main', 'sec-applications', 'uses'), 'declared-only', 'agrees');
 });
@@ -760,19 +762,9 @@ check('body links', () => {
 
 // --- checks ----------------------------------------------------------------
 
-check('checks by level and by object', () => {
-  const byLevel = M.checksByLevel(model);
-  eq(byLevel.get('error').length, 1, 'one error');
-  eq(byLevel.get('warning').length, 3, 'three warnings');
-  eq(byLevel.get('info').length, 4, 'four infos');
-  const forDiagonal = M.checksFor(model, 'lem-diagonal');
-  eq(forDiagonal.length, 1, 'lem-diagonal is flagged');
-  eq(forDiagonal[0].code, 'multi-parent', 'multi-parent lint');
-  for (const c of model.checks) {
-    for (const id of c.objects || []) {
-      if (!model.byId.has(id)) throw new Error(`check ${c.code} names unknown object ${id}`);
-    }
-  }
+check('the website leaves the checks out of its model', () => {
+  ok(snapshot.derived.checks.length > 0, 'the sample has checks to leave out');
+  eq(model.checks, undefined, 'the model keeps them');
 });
 
 // --- lean facts -------------------------------------------------------------

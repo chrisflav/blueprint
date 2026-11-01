@@ -213,9 +213,10 @@ label.chk input { margin: 0; }
    wrap as wholes (below). */
 .topbar-aside, .topbar-aside > * { flex: none; white-space: nowrap; }
 
-/* Hide progress / Show progress (app.js): with the progress hidden, so is its tab. */
+/* Hide progress / Show progress (app.js).  The Progress tab stays either way. */
 .topbar-aside .progress-toggle { font-size: .8rem; padding: .15em .45em; }
-:root[data-progress="hidden"] .tabs a[data-view="progress"] { display: none; }
+/* Replay intro (app.js, intro.js `replayIntro`), when the project has one. */
+.topbar-aside .intro-replay { font-size: .8rem; padding: .15em .45em; }
 
 /* Export PDF: the one filled button of the top bar, so it is found without
    looking for it (pdf.js).  Text and icon, never the icon alone. */
@@ -526,9 +527,6 @@ body { display: flex; flex-direction: column; }
   font-family: var(--mono);
   font-weight: 500;
 }
-.badge.level-error { color: var(--lv-error); border-color: var(--lv-error); }
-.badge.level-warning { color: var(--lv-warning); border-color: var(--lv-warning); }
-.badge.level-info { color: var(--lv-info); border-color: var(--lv-info); }
 
 .chip {
   display: inline-block;
@@ -912,23 +910,8 @@ a.objlink.broken { color: var(--lv-missing, var(--st-missing)); text-decoration:
 .preview-id { font-family: var(--mono); font-size: .8rem; overflow-wrap: anywhere; }
 .preview-open { margin-left: auto; white-space: nowrap; }
 
-/* The document's "Lean" mark beside a heading, a link to the object page,
-   and the card of Lean names it opens (preview.js). */
-a.lean-mark {
-  display: inline-block;
-  align-self: center;
-  margin: 0;
-  padding: .05em .45em;
-  font: 600 .72rem/1.4 var(--mono);
-  letter-spacing: .02em;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  vertical-align: .15em;
-}
-a.lean-mark:hover, a.lean-mark:focus-visible { border-color: var(--accent); background: var(--accent-soft); text-decoration: none; }
-.lean-count { margin-left: .3em; font-weight: 400; color: var(--muted); }
+/* The card of Lean names that the document's "object" link beside a heading
+   opens (preview.js). */
 .preview.lean-card { width: max-content; min-width: min(18rem, calc(100vw - 16px)); max-width: min(32rem, calc(100vw - 16px)); }
 ul.lean-names { list-style: none; margin: 0; padding: 0; }
 ul.lean-names li {
@@ -1023,7 +1006,8 @@ ul.objlist .role {
 .doc-entry { margin: 0 0 1.6rem; scroll-margin-top: calc(var(--topbar-h) + 1rem); }
 .doc-entry .head { display: flex; align-items: baseline; gap: .55rem; flex-wrap: wrap; }
 .doc-entry .head h2, .doc-entry .head h3, .doc-entry .head h4, .doc-entry .head h5 { margin: 0; }
-.doc-entry .head .num { color: var(--faint); font-family: var(--mono); font-size: .85em; }
+/* The number is the size of the title it leads, as a statement's is (below). */
+.doc-entry .head .num { color: var(--faint); font-family: var(--mono); font-size: 1em; }
 .doc-entry.depth-0 { border-top: 2px solid var(--border-strong); padding-top: 1.2rem; margin-top: 2.2rem; }
 .doc-entry.depth-0:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
 .doc-entry .prose { margin-top: .5rem; }
@@ -1109,25 +1093,67 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .doc-entry .head a.doc-object { font-size: .78rem; font-weight: 400; color: var(--muted); white-space: nowrap; }
 .doc-entry .head a.doc-object:hover { color: var(--accent); }
 
-/* The top of the document: its contents, a row per top-level entry, each a
-   link to the entry's page. */
-.doc-contents { list-style: none; margin: .4rem 0 1.6rem; padding: 0; border-top: 1px solid var(--border); }
-.doc-contents > li { border-bottom: 1px solid var(--border); }
-.doc-contents > li > a {
-  display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) minmax(0, 14rem);
-  gap: .9rem; align-items: baseline; padding: .65rem .5rem; color: var(--fg);
+/* The table of contents, a page of its own (contents.js): the document as a
+   tree, a row per entry, a link to where it is read, and beside a row with
+   entries below it a triangle that unfolds them. */
+.contents-tree, .contents-tree ol { list-style: none; margin: 0; padding: 0; }
+.contents-tree { margin: .4rem 0 1.6rem; border-top: 1px solid var(--border); }
+.contents-tree > li { border-bottom: 1px solid var(--border); }
+.contents-tree ol { margin: 0 0 .4rem 1.05rem; padding-left: .6rem; border-left: 1px solid var(--border); }
+.contents-row { display: flex; align-items: baseline; gap: .15rem; }
+.contents-toggle {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
 }
-.doc-contents > li > a:hover { background: var(--panel-2); text-decoration: none; }
-.doc-contents .num { color: var(--faint); font-family: var(--mono); font-size: .85em; text-align: right; }
-.doc-contents-title { font-size: 1.08rem; color: var(--accent); }
-.doc-contents-title .kindword { font-weight: 700; }
-.doc-contents-meta { justify-self: end; width: 100%; display: flex; justify-content: flex-end; }
-.doc-contents-meta .bar-row { width: 100%; }
-.doc-contents-meta:empty { display: none; }
-.doc-contents > li.dup { opacity: .75; }
+.contents-toggle:hover { color: var(--fg); background: var(--panel-2); }
+.contents-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The triangle: pointing right when folded, down when unfolded. */
+.contents-toggle::before {
+  content: "";
+  border-style: solid;
+  border-width: .3rem 0 .3rem .45rem;
+  border-color: transparent transparent transparent currentColor;
+  transition: transform .15s ease;
+}
+.contents-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+.contents-toggle.none { cursor: default; }
+.contents-toggle.none::before { content: none; }
+.contents-link {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) minmax(0, 12rem);
+  gap: .6rem;
+  align-items: baseline;
+  padding: .45rem .5rem .45rem .2rem;
+  color: var(--fg);
+  border-radius: var(--radius);
+}
+.contents-tree > li > .contents-row > .contents-link { padding-top: .65rem; padding-bottom: .65rem; }
+.contents-link:hover { background: var(--panel-2); text-decoration: none; }
+.contents-link .num { color: var(--faint); font-family: var(--mono); font-size: .85em; }
+.contents-title { color: var(--accent); }
+.contents-tree > li > .contents-row .contents-title { font-size: 1.08rem; }
+.contents-title .kindword { font-weight: 700; color: var(--fg); }
+.contents-meta { justify-self: end; width: 100%; display: flex; justify-content: flex-end; }
+.contents-meta .bar-row { width: 100%; }
+.contents-meta:empty { display: none; }
+.contents-tree li.dup > .contents-row { opacity: .75; }
 @media (max-width: 640px) {
-  .doc-contents > li > a { grid-template-columns: 2.2rem minmax(0, 1fr); }
-  .doc-contents-meta { grid-column: 2; justify-content: flex-start; }
+  .contents-link { grid-template-columns: max-content minmax(0, 1fr); gap: .5rem; }
+  .contents-meta { grid-column: 2; justify-content: flex-start; }
+  .contents-tree ol { margin-left: .8rem; padding-left: .4rem; }
 }
 
 /* -------------------------------------------------------- progress page */
@@ -1168,28 +1194,6 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 
 .slider-row { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin: .8rem 0; }
 .slider-row input[type="range"] { flex: 1; min-width: 12rem; }
-
-/* ---------------------------------------------------------- checks page */
-
-.check {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: .3rem .8rem;
-  padding: .6rem .8rem;
-  border: 1px solid var(--border);
-  border-left-width: 3px;
-  border-radius: var(--radius);
-  background: var(--panel);
-  margin: .5rem 0;
-}
-.check.level-error { border-left-color: var(--lv-error); }
-.check.level-warning { border-left-color: var(--lv-warning); }
-.check.level-info { border-left-color: var(--lv-info); }
-.check .code { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
-.check .msg { grid-column: 2; }
-.check .objs { grid-column: 2; font-size: .85rem; display: flex; gap: .5rem; flex-wrap: wrap; }
-
-.filter-row { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; margin: 1rem 0; }
 
 /* The progress listing's search and filters. */
 .listing-filters { display: flex; gap: .5rem .9rem; flex-wrap: wrap; align-items: center; margin: .6rem 0 .4rem; }
@@ -1561,7 +1565,10 @@ label.chk.st-chip.status-proved_with_axioms { border-color: var(--st-proved_with
   font-size: 1rem; font-weight: 600;
 }
 .doc-entry .head .kindword { font-weight: 700; }
-.doc-entry.is-statement .head .num { font-family: inherit; font-size: 1rem; font-weight: 700; color: var(--fg); }
+/* The kind and number are the size of the title they lead ("Definition 3.1
+   Relative Picard functor"), whatever the heading's level, as a section's
+   number is; so in every theme. */
+.doc-entry.is-statement .head .num { font-family: inherit; font-size: 1em; font-weight: 700; color: var(--fg); }
 .doc-entry.is-statement .head .badge { font-size: .72rem; }
 /* Headings inside a body ("## Proof") are run-in labels, never larger than
    the statement they belong to. */
@@ -1710,29 +1717,18 @@ details.proof > summary:hover > :is(h1, h2, h3, h4, h5, h6) { color: var(--accen
   transform-origin: left;
   animation: intro-timer linear both;
 }
-.intro-skip {
-  font-size: .82rem;
-  color: var(--muted);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: .2rem .9rem;
-  cursor: pointer;
-  animation: intro-in .5s .3s ease backwards;
-}
-.intro-skip:hover { color: var(--fg); border-color: var(--border-strong); }
 @keyframes intro-in { from { opacity: 0; transform: scale(.94); } }
 @keyframes intro-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) {
   .intro { transition-duration: .2s; }
-  .intro-node, .intro-skip { animation: none; }
+  .intro-node { animation: none; }
   .intro.leaving .intro-node { transform: none; }
   .intro-timer { display: none; }
 }
 
-/* The zooming intro (`playZoom` in intro.js).  The title, its flight into
-   the top bar and the skip button sit above the top bar; the background and
-   the pictures below it, so the top bar fades in over them.  The page itself
+/* The zooming intro (`playZoom` in intro.js).  The title and its flight
+   into the top bar sit above the top bar; the background and the pictures
+   below it, so the top bar fades in over them.  The page itself
    is there all along: what the intro has not yet shown is transparent. */
 html.intro-pending .topbar,
 html.intro-pending .banner,
@@ -1815,24 +1811,13 @@ html.intro-playing .graph-stage > svg { opacity: 0; }
   transition: opacity .6s ease;
 }
 .intro-title.waiting .intro-wait { opacity: .8; animation: intro-wait 1.4s ease-in-out infinite; }
-.intro-skip.zoom {
-  position: fixed;
-  left: 50%;
-  bottom: 1.4rem;
-  z-index: 40;
-  transform: translateX(-50%);
-  background: color-mix(in srgb, var(--bg) 85%, transparent);
-  transition: opacity .3s ease;
-  animation: intro-fade .5s .3s ease backwards;
-}
-.intro.zoom.leaving, .intro-title.leaving, .intro-skip.leaving { opacity: 0; pointer-events: none; }
+.intro.zoom.leaving, .intro-title.leaving { opacity: 0; pointer-events: none; }
 @keyframes intro-title-in { from { opacity: 0; transform: scale(.55); } }
-@keyframes intro-fade { from { opacity: 0; } }
 @keyframes intro-wait { from { background-position: -100% 0, 0 0; } to { background-position: 200% 0, 0 0; } }
 @media (prefers-color-scheme: dark) {
   .intro-bg img { filter: grayscale(1) invert(1) contrast(1.1); mix-blend-mode: screen; opacity: .12; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .intro-line, .intro-skip.zoom { animation: none; }
+  .intro-line { animation: none; }
   .intro-title.waiting .intro-wait { animation: none; }
 }

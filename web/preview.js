@@ -4,9 +4,9 @@
 // Every link to an object (`a.objlink`: a `[slug]` reference in prose, a title
 // in a listing) previews what it leads to: the reference ("Lemma 2.3") and
 // title, the status, the prose with its maths, a link on to the object page.
-// The document's "Lean" mark beside a heading (`leanMark`) opens a card of the
-// same kind with the object's Lean declarations; like a link, a click or a tap
-// on it goes to the object page.  The pointer can move into the card, to scroll it, open a
+// The document's "object" link beside a heading, when the object has Lean
+// names (`data-lean`), opens a card of the same kind with its Lean
+// declarations instead; a click or a tap on it still goes to the object page.  The pointer can move into the card, to scroll it, open a
 // folded proof or follow a link, and a link in the card opens a card of its
 // own beside it, so a chain of references can be read without leaving the
 // page.  Moving off the link and its cards closes them after a moment; so do
@@ -27,7 +27,7 @@ const MARGIN = 8; // between a card and the edge of the window, px
 let app = null;
 // The open cards, outermost first: `stack[i + 1]` was opened from a link in
 // `stack[i].card`.  Each entry is {anchor, id, build, card, keyboard}, `anchor`
-// being the link or Lean mark it was opened from.
+// being the link it was opened from.
 const stack = [];
 let pending = null; // {anchor, id, build, level, keyboard}: waiting out SHOW_MS
 let showTimer = null;
@@ -89,8 +89,8 @@ export function previewCard(ctx, id) {
   // The statement is what a preview is for: a proof in it starts folded.
   for (const d of body.querySelectorAll('details.proof')) d.open = false;
 
-  // The Lean names are left to the document's Lean mark: a statement with
-  // many of them would leave its prose no room.
+  // The Lean names are left to the document's "object" link: a statement
+  // with many of them would leave its prose no room.
   const foot = el('div.preview-foot',
     el('code.preview-id', o.id),
     el('a.preview-open', { href: ctx.objectHref(id) }, 'Open →'));
@@ -100,21 +100,6 @@ export function previewCard(ctx, id) {
   ctx.renderMath(head);
   if (ends) ctx.renderMath(ends); // titles carry maths
   return card;
-}
-
-/**
- * The mark the document sets beside the heading of an object with Lean
- * declarations; resting on it or focusing it opens `leanCard`, and it is a
- * link to the object page, where the declarations are set out in full.
- * null for an object with none.
- */
-export function leanMark(ctx, o) {
-  const n = M.leanNamesOf(o).length;
-  if (!n) return null;
-  return ctx.el('a.lean-mark', {
-    href: ctx.objectHref(o.id), 'data-lean': o.id,
-    'aria-label': n === 1 ? 'Its Lean declaration' : `Its ${n} Lean declarations`,
-  }, 'Lean', n > 1 ? ctx.el('span.lean-count', String(n)) : null);
 }
 
 /**
@@ -191,7 +176,6 @@ export function setupPreviews(ctx) {
   on('pointerdown', (ev) => { if (levelOf(ev.target) < 0) closePreviews(); }, true);
   on('click', (ev) => {
     const t = triggerOf(ev.target);
-    // The Lean mark is a link like any other: a click follows it.
     if (t && levelOf(t) >= 0) {
       setTimeout(closePreviews, 0);
     }
@@ -334,26 +318,30 @@ function levelOf(node) {
   return -1;
 }
 
-/** The link or Lean mark `node` is in, or null. */
+/** The link `node` is in, or null. */
 function triggerOf(node) {
   for (let p = node; p && p.nodeType; p = p.parentNode) {
-    if (p.nodeType === 1 && (p.tagName === 'A' || isLeanMark(p))) return p;
+    if (p.nodeType === 1 && p.tagName === 'A') return p;
   }
   return null;
 }
 
-function isLeanMark(node) {
-  return !!(node && node.classList && node.classList.contains('lean-mark'));
+/**
+ * The object whose Lean declarations link `a` shows, or null: the document's
+ * "object" link beside the heading of an object with Lean names says it in
+ * `data-lean`.  (The object page's declarations carry a `data-lean` of their
+ * own, a Lean name, on a `div`.)
+ */
+function leanTarget(a) {
+  return a && a.tagName === 'A' && a.getAttribute ? a.getAttribute('data-lean') : null;
 }
 
-/** The card a link or Lean mark opens, as {id, build}, or null for none. */
+/** The card a link opens, as {id, build}, or null for none. */
 function cardOf(t) {
   const m = app && app.model;
   if (!m || !t) return null;
-  if (isLeanMark(t)) {
-    const id = t.getAttribute('data-lean');
-    return m.byId.has(id) ? { id, build: () => leanCard(app, id) } : null;
-  }
+  const lean = leanTarget(t);
+  if (lean) return m.byId.has(lean) ? { id: lean, build: () => leanCard(app, lean) } : null;
   const id = previewTarget(m, t);
   return id ? { id, build: () => previewCard(app, id) } : null;
 }
