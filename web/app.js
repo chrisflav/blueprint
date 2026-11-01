@@ -545,8 +545,9 @@ export function objLink(m, id, extra) {
   return el('a.objlink', { href: objectHref(id), title: id }, model.titleOf(o), extra);
 }
 
+/** A status badge; none while the progress is hidden, unless `opts.always` (the Progress page). */
 export function statusBadge(status, opts = {}) {
-  if (!app.showProgress) return null;
+  if (!app.showProgress && !opts.always) return null;
   const s = status || 'none';
   const label = status ? model.STATUS_LABEL[status] || status : opts.noneLabel || 'no Lean ref';
   return el('span', { class: 'badge status-' + s, title: 'derived status: ' + label },
@@ -557,8 +558,9 @@ export function kindBadge(kind) {
   return el('span.badge.kind', kind);
 }
 
+/** A progress bar; none while the progress is hidden, unless `opts.always` (the Progress page). */
 export function progressBar(p, opts = {}) {
-  if (!app.showProgress) return null;
+  if (!app.showProgress && !opts.always) return null;
   if (!p || !p.total) return el('span.muted.small', '—');
   const pct = Math.round((100 * p.proved) / p.total);
   if (p.mix) {
@@ -880,10 +882,12 @@ function setTheme(id) {
 // formalization progress, shown or hidden
 // ---------------------------------------------------------------------------
 
-// Everything that says how far the formalization has got — the statuses and
-// their badges, the colours of the graph's nodes, the progress bars and the
-// Progress tab — starts hidden, so the site opens on the mathematics alone; a
-// reader who wants it shows it with the top bar's button.  The choice is the
+// Everything that says how far the formalization has got in the graph and the
+// document — the statuses and their badges, the colours of the graph's nodes,
+// the progress bars — starts hidden, so the site opens on the mathematics
+// alone; a reader who wants it shows it with the top bar's button.  The
+// Progress tab, and its page with all it says, stay either way: that page is
+// what a reader opens to see the progress.  The choice is the
 // reader's, kept in localStorage; `data-progress="hidden"` on <html> is for
 // the stylesheet.
 const PROGRESS_KEY = 'blueprint.progress';
@@ -919,8 +923,8 @@ function progressToggle() {
     type: 'button',
     'aria-pressed': shown ? 'false' : 'true',
     title: shown
-      ? 'Hide the formalization progress: statuses, progress bars and the Progress tab'
-      : 'Show the formalization progress again',
+      ? 'Hide the formalization progress in the graph and the document (the Progress tab keeps it)'
+      : 'Show the formalization progress in the graph and the document',
     onclick: () => setShowProgress(!shown),
   }, shown ? 'Hide progress' : 'Show progress');
 }

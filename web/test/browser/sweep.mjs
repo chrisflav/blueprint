@@ -2578,7 +2578,7 @@ async function navChecks(d, f) {
   });
 
   await check(d, 'nav/back-and-forward', async () => {
-    await route(d, '#/object/' + encodeURIComponent(f.withFacts || f.section));
+    await route(d, '#/document?depth=1');
     await sleep(700);
     await route(d, '#/progress');
     await sleep(700);
@@ -2588,11 +2588,11 @@ async function navChecks(d, f) {
     await d.back(); await sleep(900);
     trail.push(await d.js(`return location.hash + '/' + (document.querySelector('input[type=range]') ? 'progress-dom' : '?')`));
     await d.back(); await sleep(900);
-    trail.push(await d.js(`return location.hash + '/' + (document.querySelector('.obj-id') ? 'object-dom' : '?')`));
+    trail.push(await d.js(`return location.hash + '/' + (document.querySelector('.doc-entry') ? 'document-dom' : '?')`));
     await d.forward(); await sleep(900);
     trail.push(await d.js(`return location.hash + '/' + (document.querySelector('input[type=range]') ? 'progress-dom' : '?')`));
     return {
-      ok: trail[0].startsWith('#/progress') && trail[1].startsWith('#/object/') && trail[2].startsWith('#/progress')
+      ok: trail[0].startsWith('#/progress') && trail[1].startsWith('#/document?depth=1') && trail[2].startsWith('#/progress')
         && trail.every((t) => !t.endsWith('/?')),
       evidence: `back, back, forward -> ${j(trail)}`,
     };
@@ -2861,7 +2861,8 @@ async function runBrowser(name, f) {
     // before the data, and the deferred CDN scripts, were there.
     const firstPaint = () => waitFor(d, `var a = document.querySelector('#app'); return !!a.firstElementChild && !a.querySelector('.loading');`, { timeout: 60000, label: 'first paint' });
     await firstPaint();
-    // The progress starts hidden for a reader who has not chosen (app.js).
+    // The progress starts hidden for a reader who has not chosen (app.js),
+    // from the graph and the document; the Progress tab and page keep it.
     // The profile may remember an earlier run's choice: forget it first.
     await d.js(`try { ['blueprint.progress', 'blueprint.graph.tools', 'blueprint.graph.side']
       .forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {} return true;`);
@@ -2873,11 +2874,13 @@ async function runBrowser(name, f) {
         var tab = document.querySelector('#tabs a[data-view=progress]');
         return { attr: document.documentElement.getAttribute('data-progress'), button: b && b.textContent,
                  tab: tab ? getComputedStyle(tab).display : null,
+                 tables: document.querySelectorAll('#app table.grid').length,
                  badges: document.querySelectorAll('#app .badge[class*="status-"]').length };
       `);
       return {
-        ok: s.attr === 'hidden' && s.button === 'Show progress' && s.tab === 'none',
-        evidence: `data-progress=${j(s.attr)}, button=${j(s.button)}, Progress tab display=${j(s.tab)}, status badges=${s.badges}`,
+        ok: s.attr === 'hidden' && s.button === 'Show progress' && s.tab !== null && s.tab !== 'none'
+          && s.tables > 0 && s.badges > 0,
+        evidence: `data-progress=${j(s.attr)}, button=${j(s.button)}, Progress tab display=${j(s.tab)}, on the Progress page ${s.tables} tables, status badges=${s.badges}`,
       };
     });
     // The graph starts bare too (graph.js, `renderToolbar`): of the toolbar

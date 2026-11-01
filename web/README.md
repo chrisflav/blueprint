@@ -408,11 +408,14 @@ else the default. The registry is `THEMES` in `app.js`.
 ### Hiding the progress
 
 The site opens with everything that says how far the formalization has got
-hidden, so a reader sees the mathematics alone: the status badges (and
-whether a Lean declaration exists), the progress bars, the top bar's
-percentage, the Progress tab, and in the graph the status colours of the
-nodes, the status filter and the fills of the key. *Show progress* in the top
-bar brings it all back, and *Hide progress* takes it away again. A status
+hidden from the graph and the document, so a reader sees the mathematics
+alone: the status badges (and whether a Lean declaration exists), the
+progress bars, the top bar's percentage, and in the graph the status colours
+of the nodes, the status filter and the fills of the key. Object pages and
+preview cards follow the same choice. *Show progress* in the top bar brings it
+all back, and *Hide progress* takes it away again. The Progress tab and its
+page are not affected: the page shows its counts, chart, time slider and
+tables, with their bars and badges, whichever the reader chose. A status
 filter in a graph link waits until the progress is shown. The choice is the
 reader's, kept in `localStorage` (`blueprint.progress`, `shown` or `hidden`;
 no choice is hidden); while it is hidden `<html>` carries

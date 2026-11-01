@@ -213,9 +213,8 @@ label.chk input { margin: 0; }
    wrap as wholes (below). */
 .topbar-aside, .topbar-aside > * { flex: none; white-space: nowrap; }
 
-/* Hide progress / Show progress (app.js): with the progress hidden, so is its tab. */
+/* Hide progress / Show progress (app.js).  The Progress tab stays either way. */
 .topbar-aside .progress-toggle { font-size: .8rem; padding: .15em .45em; }
-:root[data-progress="hidden"] .tabs a[data-view="progress"] { display: none; }
 
 /* Export PDF: the one filled button of the top bar, so it is found without
    looking for it (pdf.js).  Text and icon, never the icon alone. */

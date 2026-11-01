@@ -102,7 +102,7 @@ await check('the app loaded the snapshot', () => {
 
 await check('the progress starts hidden until the reader shows it', () => {
   eq(app.showProgress, false, 'shown to a reader who has not asked for it');
-  eq(dom.document.documentElement.getAttribute('data-progress'), 'hidden', 'the Progress tab is not hidden');
+  eq(dom.document.documentElement.getAttribute('data-progress'), 'hidden', 'the page is not marked as hiding it');
   const toggle = dom.document.getElementById('topbar-aside').querySelector('button.progress-toggle');
   eq(toggle && toggle.textContent, 'Show progress', 'the top bar offers to show it');
   const store = new Map();
@@ -1419,7 +1419,7 @@ await check('the graph opens with its toolbar folded and no sidebar, until the r
   }
 });
 
-await check('Hide progress takes the statuses, bars and Progress tab away; Show brings them back', async () => {
+await check('Hide progress takes the statuses and bars from the graph and the document, not the Progress page; Show brings them back', async () => {
   const aside = dom.document.getElementById('topbar-aside');
   const toggle = () => aside.querySelector('button.progress-toggle');
   const html = dom.document.documentElement;
@@ -1438,7 +1438,9 @@ await check('Hide progress takes the statuses, bars and Progress tab away; Show 
   await tick(5);
   try {
     eq(app.showProgress, false, 'the progress is hidden');
-    eq(html.getAttribute('data-progress'), 'hidden', 'for the stylesheet too, which drops the tab');
+    eq(html.getAttribute('data-progress'), 'hidden', 'for the stylesheet too');
+    const css = fs.readFileSync(path.join(webDir, 'style.css'), 'utf8');
+    ok(!/data-progress="hidden"\][^{]*data-view="progress"/.test(css), 'the stylesheet drops the Progress tab');
     eq(toggle().textContent, 'Show progress', 'the button offers to show');
     eq(aside.querySelector('a.row'), null, 'no progress figure in the top bar');
     eq(root.querySelectorAll('.doc-progress').length, 0, 'no progress bars in the document');
@@ -1452,14 +1454,17 @@ await check('Hide progress takes the statuses, bars and Progress tab away; Show 
     ok(lbls.includes('edges') && !lbls.includes('status'), 'the graph offers no status filter');
     ok(!root.querySelector('.legend').textContent.includes('no Lean ref'), 'and its key no fills');
     await go('#/progress');
-    ok(root.querySelector('button'), 'the Progress page offers to show the progress');
-    eq(root.querySelectorAll('table').length, 0, 'and shows none');
+    ok(root.querySelectorAll('table').length > 0, 'the Progress page lost its tables');
+    ok(root.querySelectorAll('.stat').length > 0, 'and its counts');
+    ok(root.querySelectorAll('table .bar').length > 0, 'and the bars in its tables');
+    ok(badges().length > 0, 'and the statuses in its listing');
+    ok(!root.textContent.includes('progress is hidden'), 'it says the progress is hidden');
   } finally {
     fire(toggle(), 'click');
     await tick(5);
   }
   eq(app.showProgress, true, 'shown again');
-  eq(html.getAttribute('data-progress'), null, 'the tab is back');
+  eq(html.getAttribute('data-progress'), null, 'still marked as hidden');
   ok(root.querySelectorAll('table').length > 0, 'the Progress page is drawn again');
   await go('#/graph?collapse=refines');
   ok(root.querySelector('.legend').textContent.includes('no Lean ref'), 'the graph key has its fills again');

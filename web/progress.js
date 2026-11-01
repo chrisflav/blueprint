@@ -14,13 +14,8 @@ export function render(root, app) {
 
   page.appendChild(el('h1', 'Progress'));
 
-  // The reader hid the progress (the top bar's button), and the tab with it;
-  // a link may still lead here.
-  if (!app.showProgress) {
-    page.appendChild(el('p.muted', 'The formalization progress is hidden.'));
-    page.appendChild(el('button', { type: 'button', onclick: () => app.setShowProgress(true) }, 'Show progress'));
-    return;
-  }
+  // The top bar's Hide progress is for the graph and the document: this page
+  // is the progress, and shows it whatever the reader chose there.
 
   // ------------------------------------------------------------- overall
   const { counts, total } = M.statusCounts(m);
@@ -91,7 +86,7 @@ function sectionTable(app, kind) {
     const p = M.progressMixOf(m, kind, o.id);
     return el('tr',
       el('td', app.objLink(m, o.id), ' ', app.kindBadge(o.kind)),
-      el('td', { style: { minWidth: '14rem' } }, p ? app.progressBar(p) : el('span.muted', '—')),
+      el('td', { style: { minWidth: '14rem' } }, p ? app.progressBar(p, { always: true }) : el('span.muted', '—')),
       el('td.nowrap', String(M.descendantsOf(order, o.id).length)));
   });
 
@@ -212,9 +207,9 @@ function objectTable(app, kind) {
     return el('tr',
       el('td', app.objLink(m, o.id)),
       el('td', app.kindBadge(o.kind)),
-      el('td', s === null ? el('span.muted', '—') : app.statusBadge(s)),
+      el('td', s === null ? el('span.muted', '—') : app.statusBadge(s, { always: true })),
       el('td', where ? app.objLink(m, where) : el('span.muted', '—')),
-      el('td', p ? app.progressBar(p) : el('span.muted', '—')));
+      el('td', p ? app.progressBar(p, { always: true }) : el('span.muted', '—')));
   };
 
   const count = el('p.muted.small.listing-count', { 'aria-live': 'polite' });
