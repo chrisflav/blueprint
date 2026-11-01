@@ -203,6 +203,12 @@ toolbar brings it back, and *Hide sidebar* hides it again. Both choices are
 the reader's, kept in `localStorage` (`blueprint.graph.tools` and
 `blueprint.graph.side`, `shown` or `hidden`; no choice is hidden).
 
+The side panel of a selected node heads with its title and, beside it, *Open
+object page →*; under them its kind and status, but not its id. Its prose
+comes next, open, and folds like the listings after it (*Incident objects*,
+*Hidden inside*), which start shut. Whether each is open is kept while the
+reader clicks from node to node.
+
 The progress route carries the "All countable objects" listing's search and
 filters, so a filtered listing is a link too: `q=<search>`, `kind=<kind>`,
 `status=<derived status, or none, or unproved>`, `under=<id>` (objects that id
@@ -220,8 +226,8 @@ nothing changes on a wider screen:
   behind *Filters* is a row of its own below;
 * the side panel is a sheet over the bottom of the graph, there only while
   something is selected, whatever *Show sidebar* was set to on a wide screen
-  (the button is not offered). Its bar minimises it to the title and the
-  *Expand/Collapse* button, or closes it, which deselects. A node tapped under
+  (the button is not offered). Its bar minimises it to the title, with
+  *Open object page →*, and the *Expand/Collapse* button, or closes it, which deselects. A node tapped under
   the sheet is panned up into view;
 * two fingers pinch to zoom about their midpoint and pan; one finger pans;
 * a double tap on a node expands or collapses it. It is counted by the page

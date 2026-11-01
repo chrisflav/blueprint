@@ -113,7 +113,7 @@ const GRAPH_COUNTS = `
     hash: location.hash,
     transform: (document.querySelector('.glayer') || {}).getAttribute ? document.querySelector('.glayer').getAttribute('transform') : null,
     sidePanel: (document.querySelector('aside.side h2') || {}).textContent || null,
-    selId: (document.querySelector('aside.side .obj-id') || {}).textContent || null
+    selId: (document.querySelector('aside.side .side-head') || { dataset: {} }).dataset.id || null
   };
 `;
 
@@ -487,12 +487,12 @@ async function graphChecks(d, f) {
     const c = await d.js(GRAPH_COUNTS);
     const sel = await d.js(`
       var s = document.querySelector('aside.side');
-      return { head: (s.querySelector('h2') || {}).textContent, id: (s.querySelector('.obj-id') || {}).textContent,
+      return { head: (s.querySelector('h2') || {}).textContent, id: (s.querySelector('.side-head') || { dataset: {} }).dataset.id,
                sections: s.querySelectorAll('section').length, selected: document.querySelectorAll('.gnode.selected').length };
     `);
     return {
       ok: sel.id === box.id && sel.selected > 0 && /sel=/.test(c.hash),
-      evidence: `clicked ${j(box.id)} at (${Math.round(box.x)},${Math.round(box.y)}); side .obj-id=${j(sel.id)}, h2=${j(sel.head)}, ${sel.sections} sections, ${sel.selected} .selected, hash=${j(c.hash)}`,
+      evidence: `clicked ${j(box.id)} at (${Math.round(box.x)},${Math.round(box.y)}); side data-id=${j(sel.id)}, h2=${j(sel.head)}, ${sel.sections} sections, ${sel.selected} .selected, hash=${j(c.hash)}`,
     };
   });
 
@@ -566,7 +566,7 @@ async function graphChecks(d, f) {
     const c = await d.js(GRAPH_COUNTS);
     return {
       ok: c.selId === focused.id && /sel=/.test(c.hash),
-      evidence: `focused ${j(focused)}; after Space side .obj-id=${j(c.selId)}, hash=${j(c.hash)}`,
+      evidence: `focused ${j(focused)}; after Space side data-id=${j(c.selId)}, hash=${j(c.hash)}`,
     };
   });
 
@@ -1046,13 +1046,13 @@ async function graphChecks(d, f) {
     await settle();
     const r = await d.js(`
       var compound = Array.prototype.slice.call(document.querySelectorAll('.gnode.compound')).map(function (g) { return g.dataset.id; });
-      return { selId: (document.querySelector('aside.side .obj-id') || {}).textContent,
+      return { selId: (document.querySelector('aside.side .side-head') || { dataset: {} }).dataset.id,
                selected: document.querySelectorAll('.gnode.selected').length,
                compound: compound, nodes: document.querySelectorAll('.gnode').length };
     `);
     return {
       ok: r.selId === id && r.compound.includes(id) && r.selected > 0,
-      evidence: `reloaded ${j(hash)}: side .obj-id=${j(r.selId)}, ${r.selected} .selected, compounds=${j(r.compound)}, ${r.nodes} nodes, status=${j(status)}`,
+      evidence: `reloaded ${j(hash)}: side data-id=${j(r.selId)}, ${r.selected} .selected, compounds=${j(r.compound)}, ${r.nodes} nodes, status=${j(status)}`,
     };
   });
 
@@ -1085,11 +1085,11 @@ async function graphChecks(d, f) {
     `;
     const before = await d.js(LAYOUT);
     if (before.proseIdx === undefined) return { ok: false, evidence: `sections ${j(before.names)}: no Prose or no Incident objects` };
-    const sum = await d.js(elBox('aside.side section.fold summary'));
+    const sum = await d.js(elBox('aside.side section.fold[data-fold="incident"] summary'));
     await d.click(sum.x, sum.y);
     await sleep(250);
     const opened = await d.js(LAYOUT);
-    const sum2 = await d.js(elBox('aside.side section.fold summary'));
+    const sum2 = await d.js(elBox('aside.side section.fold[data-fold="incident"] summary'));
     await d.click(sum2.x, sum2.y);
     await sleep(250);
     const shut = await d.js(LAYOUT);
@@ -1105,7 +1105,8 @@ async function graphChecks(d, f) {
   });
 
   await check(d, 'graph/side-panel-open-object-link', async () => {
-    const a = await d.js(elBoxByText('aside.side a', 'Open object page'));
+    // Beside the title, at the top of the panel.
+    const a = await d.js(elBoxByText('aside.side .side-head a', 'Open object page'));
     if (!a) return { ok: false, evidence: 'no "Open object page" link (is anything selected?)' };
     await d.click(a.x, a.y);
     await sleep(700);
@@ -2878,13 +2879,13 @@ async function sampleChecks(d) {
     await d.click(box.x, box.y);
     await sleep(500);
     const s = await d.js(`
-      return { objId: (document.querySelector('aside.side .obj-id') || {}).textContent,
+      return { objId: (document.querySelector('aside.side .side-head') || { dataset: {} }).dataset.id,
                head: (document.querySelector('aside.side h2') || {}).textContent,
                boundary: document.querySelectorAll('aside.side ul.objlist li').length, hash: location.hash };
     `);
     return {
       ok: hovered > 0 && s.objId === box.id,
-      evidence: `junction ${j(box.id)} title=${j((box.title || '').replace(/\n/g, ' / '))}: hovered=${hovered}, side .obj-id=${j(s.objId)}, h2=${j(s.head)}, ${s.boundary} boundary/incident rows`,
+      evidence: `junction ${j(box.id)} title=${j((box.title || '').replace(/\n/g, ' / '))}: hovered=${hovered}, side data-id=${j(s.objId)}, h2=${j(s.head)}, ${s.boundary} boundary/incident rows`,
     };
   });
 

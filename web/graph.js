@@ -188,7 +188,7 @@ function mount(root, app) {
   // `folded`: the side panel's listings the reader has opened (see `fold`).
   // `toolbarOpen`, `sideShown`: the reader's choices (`shownPref`).
   ui = { page, toolbar, stage, svg, layer, side, back, transform: { x: 40, y: 40, k: 1 }, fitted: false,
-    folded: new Set(), entered: null, legend: key, legendProgress: app.showProgress,
+    folded: new Map(), entered: null, legend: key, legendProgress: app.showProgress,
     toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY) };
   page.classList.toggle('side-hidden', !ui.sideShown);
   installPanZoom(app);
@@ -2479,10 +2479,13 @@ function renderSide(app, st, view, quot) {
       onclick: () => select(app, null),
     }, '\u2715')));
 
+  // The title, and beside it the way to the object's own page.
   const status = M.badgeStatusOf(m, id);
-  const heading = side.appendChild(el('h2', M.titleOf(o)));
+  const heading = el('h2', M.titleOf(o));
+  side.appendChild(el('div.side-head', { 'data-id': id },
+    heading,
+    el('a.side-open', { href: app.objectHref(id) }, 'Open object page \u2192')));
   side.appendChild(el('div.meta', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status)));
-  side.appendChild(el('div.obj-id', id));
 
   const prog = st.progress ? M.progressMixOf(app.model, st.collapse, id) : null;
   if (prog) {
@@ -2496,11 +2499,12 @@ function renderSide(app, st, view, quot) {
         ' (', String(M.childrenOf(view.order, id).length), ' children)')));
   }
 
-  // What the object says comes first; only then its neighbourhood, which on
-  // a real project easily runs to dozens of rows.
+  // What the object says comes first, open, though the reader may fold it
+  // away; only then its neighbourhood, which on a real project easily runs to
+  // dozens of rows.
   if (o.body && o.body.trim()) {
     const box = el('div.excerpt.body-prose');
-    side.appendChild(el('section', el('h3', 'Prose'), box));
+    side.appendChild(fold(el, 'prose', 'Prose', box));
     app.renderBody(box, excerpt(o.body, 700), app.knownIds());
   }
 
@@ -2529,27 +2533,24 @@ function renderSide(app, st, view, quot) {
         hidden.length > 10 ? el('li.muted.small', `+${hidden.length - 10} more`) : null)));
   }
 
-  side.appendChild(el('section',
-    el('a', { href: app.objectHref(id) }, 'Open object page \u2192')));
-
   // Titles carry maths, the heading's and the listed objects' alike.  After
   // the prose, which `renderBody` has rendered already.
   app.renderMath(heading);
   for (const list of side.querySelectorAll('ul.objlist')) app.renderMath(list);
 }
 
-// A listing behind a disclosure: shut until the reader opens it, the count in
-// the summary saying what is there. The panel is rebuilt on every route change
-// (a checkbox, an expand, the next selection), so whether it is open is kept in
-// `ui.folded` under `key` rather than snapping shut each time.
+// A section behind a disclosure: the long listings shut until the reader opens
+// them, the count in the summary saying what is there, and the prose open until
+// the reader folds it (`FOLD_STARTS_OPEN`). The panel is rebuilt on every route
+// change (a checkbox, an expand, the next selection), so whether it is open is
+// kept in `ui.folded` under `key` rather than snapping back each time.
+const FOLD_STARTS_OPEN = new Set(['prose']);
+
 function fold(el, key, title, ...children) {
-  return el('section.fold',
+  return el('section.fold', { 'data-fold': key },
     el('details', {
-      open: ui.folded.has(key),
-      ontoggle: (ev) => {
-        if (ev.target.open) ui.folded.add(key);
-        else ui.folded.delete(key);
-      },
+      open: ui.folded.has(key) ? ui.folded.get(key) : FOLD_STARTS_OPEN.has(key),
+      ontoggle: (ev) => { ui.folded.set(key, ev.target.open); },
     }, el('summary', title), ...children));
 }
 
