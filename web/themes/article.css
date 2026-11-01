@@ -179,7 +179,7 @@ details.panel > summary > h3 { font-size: 1.1rem; }
 .doc-entry.is-statement { border-left: 0; padding-left: 0; margin: 1.3rem 0; }
 .doc-entry.is-statement .head { gap: .3em; }
 .doc-entry.is-statement .head .kindword,
-.doc-entry.is-statement .head .num { font-size: 1.06rem; font-weight: 700; color: var(--fg); }
+.doc-entry.is-statement .head .num { font-size: 1em; font-weight: 700; color: var(--fg); }
 .doc-entry.is-statement .head :is(h2, h3, h4, h5) { font-size: 1.06rem; font-weight: 400; }
 .doc-entry.is-statement .head :is(h2, h3, h4, h5) .doc-title-text::before { content: "("; }
 .doc-entry.is-statement .head :is(h2, h3, h4, h5) .doc-title-text::after { content: ")."; }

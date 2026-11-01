@@ -159,7 +159,7 @@ table.grid td { border-bottom-color: var(--border); }
 .doc-entry.is-statement.kind-definition { --env: var(--env-def); --env-bg: var(--env-def-bg); }
 .doc-entry.is-statement.kind-remark { --env: var(--env-rem); --env-bg: transparent; padding-top: .3rem; padding-bottom: .2rem; }
 .doc-entry.is-statement .head .kindword,
-.doc-entry.is-statement .head .num { font-family: var(--ui); font-size: 1rem; font-weight: 700; color: var(--env); }
+.doc-entry.is-statement .head .num { font-family: var(--ui); font-size: 1em; font-weight: 700; color: var(--env); }
 .doc-entry.is-statement .head :is(h2, h3, h4, h5) { font-family: var(--ui); font-size: 1rem; font-weight: 400; color: var(--fg); }
 .doc-entry.is-statement .head :is(h2, h3, h4, h5) .doc-title-text::before { content: "("; }
 .doc-entry.is-statement .head :is(h2, h3, h4, h5) .doc-title-text::after { content: ")"; }

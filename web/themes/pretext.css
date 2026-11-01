@@ -124,7 +124,7 @@ button, select, input[type="text"], input[type="search"] { border-radius: 0; }
    ("Definition 4.1.1."), the title after it, the text upright. */
 .doc-entry.is-statement { border-left: 1px solid var(--fg); padding-left: .8rem; }
 .doc-entry.is-statement .head .kindword,
-.doc-entry.is-statement .head .num { font-family: var(--serif); font-size: 1.15rem; font-weight: 700; color: var(--fg); }
+.doc-entry.is-statement .head .num { font-family: var(--serif); font-size: 1em; font-weight: 700; color: var(--fg); }
 .doc-entry.is-statement .head .num::after { content: "."; }
 .doc-entry.is-statement .head :is(h2, h3, h4, h5) { font-family: var(--sans); font-size: 1rem; font-weight: 600; }
 .doc-entry.is-statement .head .badge.kind { display: none; }

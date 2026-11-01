@@ -1006,7 +1006,8 @@ ul.objlist .role {
 .doc-entry { margin: 0 0 1.6rem; scroll-margin-top: calc(var(--topbar-h) + 1rem); }
 .doc-entry .head { display: flex; align-items: baseline; gap: .55rem; flex-wrap: wrap; }
 .doc-entry .head h2, .doc-entry .head h3, .doc-entry .head h4, .doc-entry .head h5 { margin: 0; }
-.doc-entry .head .num { color: var(--faint); font-family: var(--mono); font-size: .85em; }
+/* The number is the size of the title it leads, as a statement's is (below). */
+.doc-entry .head .num { color: var(--faint); font-family: var(--mono); font-size: 1em; }
 .doc-entry.depth-0 { border-top: 2px solid var(--border-strong); padding-top: 1.2rem; margin-top: 2.2rem; }
 .doc-entry.depth-0:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
 .doc-entry .prose { margin-top: .5rem; }
@@ -1531,7 +1532,10 @@ label.chk.st-chip.status-proved_with_axioms { border-color: var(--st-proved_with
   font-size: 1rem; font-weight: 600;
 }
 .doc-entry .head .kindword { font-weight: 700; }
-.doc-entry.is-statement .head .num { font-family: inherit; font-size: 1rem; font-weight: 700; color: var(--fg); }
+/* The kind and number are the size of the title they lead ("Definition 3.1
+   Relative Picard functor"), whatever the heading's level, as a section's
+   number is; so in every theme. */
+.doc-entry.is-statement .head .num { font-family: inherit; font-size: 1em; font-weight: 700; color: var(--fg); }
 .doc-entry.is-statement .head .badge { font-size: .72rem; }
 /* Headings inside a body ("## Proof") are run-in labels, never larger than
    the statement they belong to. */
