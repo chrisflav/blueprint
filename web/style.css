@@ -158,10 +158,16 @@ label.chk input { margin: 0; }
    Nothing shares the first row with the title, and every row wraps rather
    than overlaps, so a long title, a narrow window or text made larger
    (Ctrl +) moves things down instead of covering the title: the tabs go
-   under the title, the title itself onto a second line. */
+   under the title, the title itself onto a second line.
+   Fixed to the top of the window, however far the page is scrolled; the
+   body makes room for it (`padding-top`, below).  Sticky would not do: it
+   sticks only within the body, which is one window tall (the graph fills
+   it), so on a longer page the bar left with the body's foot. */
 .topbar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 30;
   display: flex;
   flex-direction: column;
@@ -475,8 +481,9 @@ button.linklike:hover { background: none; text-decoration: underline; }
 
 /* -------------------------------------------------------------- app frame */
 
-/* The shell is a column — top bar, the banner when there is one, then the
-   page filling exactly what is left.  Pages that measure themselves from the
+/* The shell is a column — room for the top bar (fixed to the window, above:
+   the body's `padding-top`), the banner when there is one, then the page
+   filling exactly what is left.  Pages that measure themselves from the
    viewport instead (the graph did: `calc(100vh - var(--topbar-h))`) cannot
    know whether the banner is there, and while a historical snapshot was on
    screen the graph ran 47px off the bottom, taking the status line and the
@@ -485,7 +492,7 @@ button.linklike:hover { background: none; text-decoration: underline; }
    default, and on any page taller than the window the column squeezed the
    52px top bar to the 33px of its tallest child, so the tabs sat cramped on
    every page but the graph, the one page that fits the window exactly. */
-body { display: flex; flex-direction: column; }
+body { display: flex; flex-direction: column; padding-top: var(--topbar-h); }
 .topbar, .banner { flex: none; }
 .app { flex: 1 1 auto; min-height: 0; }
 
