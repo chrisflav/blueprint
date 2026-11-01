@@ -1205,6 +1205,43 @@ async function layoutChecks(d, f) {
       evidence: `top bar ${j(Object.fromEntries(Object.entries(heights).map(([k, v]) => [k, v.h])))}, --topbar-h ${hs[0].want}px`,
     };
   });
+
+  // The title shares its row with the tabs alone, and every row wraps, so
+  // text made larger (Ctrl +, a larger default font) moves things down
+  // rather than over the title or off the screen.
+  await check(d, 'layout/top-bar-title-is-never-covered', async () => {
+    await route(d, '#/document');
+    await sleep(600);
+    const seen = [];
+    let ok = true;
+    for (const k of [1, 1.5, 2]) {
+      await d.js(`document.documentElement.style.fontSize = ${k === 1 ? "''" : `'${16 * k}px'`}; return 1`);
+      await sleep(250);
+      const s = await d.js(`
+        var box = function (e) { return e.getBoundingClientRect(); };
+        var brand = document.querySelector('.brand'), text = document.getElementById('project-title');
+        var b = box(brand), t = box(text), bar = box(document.querySelector('.topbar'));
+        var items = document.querySelectorAll('.tabs a, .topbar-tools > *, #topbar-aside > *, .topbar > :not(.topbar-main):not(.topbar-tools)');
+        var name = function (o) { return (o.textContent || o.className).trim().slice(0, 15); };
+        var over = Array.prototype.filter.call(items, function (o) {
+          var r = box(o); return r.width && r.height && r.left < b.right - .5 && r.right > b.left + .5 && r.top < b.bottom - .5 && r.bottom > b.top + .5;
+        }).map(name);
+        // Out of the bar: drawn over the page below, or cut off by it.
+        var out = Array.prototype.filter.call(items, function (o) {
+          var r = box(o); return r.width && r.height && (r.top < bar.top - .5 || r.bottom > bar.bottom + .5);
+        }).map(name);
+        return { over: over.concat(out.map(function (x) { return 'out of the bar: ' + x; })),
+                 clipped: brand.scrollWidth > brand.clientWidth + 1 || text.scrollWidth > text.clientWidth + 1
+                   || t.right > b.right + .5 || b.left < 0 || b.right > innerWidth + .5,
+                 wide: document.documentElement.scrollWidth > innerWidth + .5,
+                 h: document.querySelector('.topbar').offsetHeight,
+                 want: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h')) };`);
+      if (s.over.length || s.clipped || s.wide || s.h !== s.want) ok = false;
+      seen.push(`${k * 100}%: over the title ${j(s.over)}, clipped=${s.clipped}, wider than the window=${s.wide}, bar ${s.h}px (--topbar-h ${s.want}px)`);
+    }
+    await d.js(`document.documentElement.style.fontSize = ''; return 1`);
+    return { ok, evidence: seen.join(' | ') };
+  });
   await gotoGraph(d, `collapse=${encodeURIComponent(f.kind)}`);
   await settle();
 

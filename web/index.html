@@ -112,26 +112,30 @@
       <a href="#/progress" data-view="progress">Progress</a>
     </nav>
   </div>
-  <!-- The Stacks project's quick search: Enter opens the search page, or the
-       object whose id is in the box (app.js, `quickSearch`). -->
-  <form class="gsearch" id="gsearch" role="search" action="#/search">
-    <svg class="gsearch-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
-      <circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
-      <path d="M10.3 10.3 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-    </svg>
-    <input type="search" id="gsearch-input" name="query" placeholder="keywords or an id"
-           aria-label="Search the blueprint (press / to focus)" autocomplete="off" spellcheck="false">
-    <kbd class="gsearch-key" aria-hidden="true">/</kbd>
-  </form>
-  <button type="button" class="export-pdf" id="export-pdf" disabled aria-haspopup="dialog"
-          title="Export the blueprint, or the part you are reading, as a PDF">
-    <svg class="export-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
-      <path d="M4 1.5h5.5L13 5v9.5H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
-      <path d="M8.5 7v5m-2-2 2 2 2-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    <span>Export PDF</span>
-  </button>
-  <div class="topbar-aside" id="topbar-aside"></div>
+  <!-- The second row: everything but the title and the tabs, so nothing
+       there can crowd the title (style.css, `.topbar-tools`). -->
+  <div class="topbar-tools">
+    <!-- The Stacks project's quick search: Enter opens the search page, or the
+         object whose id is in the box (app.js, `quickSearch`). -->
+    <form class="gsearch" id="gsearch" role="search" action="#/search">
+      <svg class="gsearch-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+        <circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M10.3 10.3 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <input type="search" id="gsearch-input" name="query" placeholder="keywords or an id"
+             aria-label="Search the blueprint (press / to focus)" autocomplete="off" spellcheck="false">
+      <kbd class="gsearch-key" aria-hidden="true">/</kbd>
+    </form>
+    <button type="button" class="export-pdf" id="export-pdf" disabled aria-haspopup="dialog"
+            title="Export the blueprint, or the part you are reading, as a PDF">
+      <svg class="export-icon" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+        <path d="M4 1.5h5.5L13 5v9.5H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+        <path d="M8.5 7v5m-2-2 2 2 2-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Export PDF</span>
+    </button>
+    <div class="topbar-aside" id="topbar-aside"></div>
+  </div>
 </header>
 
 <div id="banner" class="banner" hidden></div>
