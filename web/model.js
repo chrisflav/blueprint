@@ -44,8 +44,6 @@ export const STATUS_LABEL = {
   proved_with_axioms: 'proved (extra axioms)',
 };
 
-export const CHECK_LEVELS = ['error', 'warning', 'info'];
-
 // ---------------------------------------------------------------------------
 // 1. Indexing
 // ---------------------------------------------------------------------------
@@ -111,7 +109,6 @@ export function buildModel(snapshot) {
     defaultCollapse,
     status: (snapshot.derived && snapshot.derived.status) || {},
     progress: (snapshot.derived && snapshot.derived.progress) || {},
-    checks: (snapshot.derived && snapshot.derived.checks) || [],
     facts: snapshot.facts || null,
     project: snapshot.project || {},
     _orders: new Map(), // memoised collapse orders
@@ -1967,22 +1964,6 @@ export function statusCounts(model) {
     total += 1;
   }
   return { counts, total };
-}
-
-/** Checks mentioning an object. */
-export function checksFor(model, id) {
-  return model.checks.filter((c) => Array.isArray(c.objects) && c.objects.includes(id));
-}
-
-export function checksByLevel(model) {
-  const out = new Map();
-  for (const lv of CHECK_LEVELS) out.set(lv, []);
-  for (const c of model.checks) {
-    const lv = CHECK_LEVELS.includes(c.level) ? c.level : 'info';
-    if (!out.has(lv)) out.set(lv, []);
-    out.get(lv).push(c);
-  }
-  return out;
 }
 
 /** Lean facts for the names an object declares, as [{name, fact|null}]. */

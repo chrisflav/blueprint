@@ -559,6 +559,20 @@ else
   bad "build exits 1 but still writes a snapshot (got $status)"
 fi
 
+# The website shows no checks, so the site's snapshot carries none; `site`
+# prints the errors instead, and `build` still writes them all.
+"$BP" site --root examples/broken -o "$TMP/broken.site" > "$TMP/broken.site.out" 2>&1
+status=$?
+if [ "$status" -eq 1 ] \
+   && grep -q '"checks": \[\]' "$TMP/broken.site/blueprint.json" \
+   && grep -q '^error: \[bad-boundary\]' "$TMP/broken.site.out" \
+   && ! grep -q '"checks": \[\]' "$TMP/broken.json"; then
+  ok "site leaves the checks out of the website's snapshot and prints the errors"
+else
+  bad "site leaves the checks out of the website's snapshot and prints the errors (got $status)"
+  head -5 "$TMP/broken.site.out"; grep -A2 '"checks"' "$TMP/broken.site/blueprint.json" | head -5
+fi
+
 # `Broken.nope` is named by the blueprint and deliberately never declared in
 # `BlueprintExamples`, so the extractor is what proves it missing.
 if "$BP" extract --root examples/broken --out "$TMP/broken.facts.json" > /dev/null 2>&1 \

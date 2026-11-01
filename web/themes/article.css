@@ -222,7 +222,7 @@ details.panel > summary > h3 { font-size: 1.1rem; }
 .gnode.selected .shape { stroke: var(--accent); stroke-width: 2; }
 .gedge path { stroke-width: 1.1; }
 
-/* ------------------------------------------------------- progress, checks */
+/* -------------------------------------------------------------- progress */
 
 .stat { border-top: 1.5px solid var(--st-none); }
 .stat .n { font-weight: 400; font-size: 2.1rem; }
@@ -230,8 +230,6 @@ details.panel > summary > h3 { font-size: 1.1rem; }
 .chart { border: 0; border-radius: 0; background: none; }
 .chart .axis { stroke: var(--fg); }
 
-.check { border: 0; border-left: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: none; padding: .7rem 0; }
-.check .code { font-family: var(--mono); }
 .toolbar { font-size: .92rem; }
 
 /* The statement head runs in as LaTeX's does: one line of text that wraps

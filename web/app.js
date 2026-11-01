@@ -20,7 +20,6 @@ const PAGES = {
   object: () => import('./object.js'),
   document: () => import('./document.js'),
   progress: () => import('./progress.js'),
-  checks: () => import('./checks.js'),
   search: () => import('./search.js'),
 };
 const pageModules = new Map(); // view -> Promise of its module
@@ -517,7 +516,7 @@ export function linkifySlugs(root, known, refs) {
           'a',
           {
             class: 'objlink' + (ok ? '' : ' broken') + (ref ? ' ref' : ''),
-            href: ok ? (ref && ref.href) || objectHref(slug) : '#/checks?code=bad-link',
+            href: ok ? (ref && ref.href) || objectHref(slug) : null,
             title: ok ? slug : `${slug} does not resolve to an object`,
             'data-ref': ref ? slug : null,
           },
@@ -556,10 +555,6 @@ export function statusBadge(status, opts = {}) {
 
 export function kindBadge(kind) {
   return el('span.badge.kind', kind);
-}
-
-export function levelBadge(level) {
-  return el('span', { class: 'badge level-' + level }, level);
 }
 
 export function progressBar(p, opts = {}) {
@@ -651,7 +646,6 @@ const app = {
   objectHref,
   statusBadge,
   kindBadge,
-  levelBadge,
   progressBar,
   objectHeadBadges,
   /** How a reference to `id` reads here: {word, number, href}, or null. */
@@ -960,12 +954,6 @@ function updateChrome() {
         el('span.bar', { style: { width: '70px' } }, el('span', { style: { width: pct + '%' } })),
         el('span.small', `${pct}%`)));
   }
-  if (app.model) {
-    const errs = app.model.checks.filter((c) => c.level === 'error').length;
-    if (errs) {
-      aside.appendChild(el('a', { href: '#/checks?level=error' }, levelBadge('error'), ' ' + errs));
-    }
-  }
 
   const banner = document.getElementById('banner');
   clear(banner);
@@ -1076,7 +1064,7 @@ const root = document.getElementById('app');
 // clicking "Progress" landed a third of the way down the progress page, which
 // is neither where the reader asked to be nor anywhere obvious.  Changes that
 // only rewrite the query of the page you are already on — the graph's
-// selection, a checks filter, `?focus=` — leave the scroll position alone, and
+// selection, the progress listing's filters, `?focus=` — leave the scroll position alone, and
 // a page that scrolls somewhere itself still wins, because it does so from
 // `render` below and in the frame after it.
 let lastPageKey = null;
@@ -1266,7 +1254,7 @@ function prefetchTasks() {
       needed: () => !loadedPages.has('graph') && !lowMemory(),
       run: async () => (await import('./graph.js')).warmElk(),
     },
-    page('search'), page('progress'), page('checks'),
+    page('search'), page('progress'),
     { name: 'export', needed: () => true, run: () => prefetchModule('./export/latex.js') },
   ];
 }

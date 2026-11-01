@@ -526,9 +526,6 @@ body { display: flex; flex-direction: column; }
   font-family: var(--mono);
   font-weight: 500;
 }
-.badge.level-error { color: var(--lv-error); border-color: var(--lv-error); }
-.badge.level-warning { color: var(--lv-warning); border-color: var(--lv-warning); }
-.badge.level-info { color: var(--lv-info); border-color: var(--lv-info); }
 
 .chip {
   display: inline-block;
@@ -1177,28 +1174,6 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 
 .slider-row { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin: .8rem 0; }
 .slider-row input[type="range"] { flex: 1; min-width: 12rem; }
-
-/* ---------------------------------------------------------- checks page */
-
-.check {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: .3rem .8rem;
-  padding: .6rem .8rem;
-  border: 1px solid var(--border);
-  border-left-width: 3px;
-  border-radius: var(--radius);
-  background: var(--panel);
-  margin: .5rem 0;
-}
-.check.level-error { border-left-color: var(--lv-error); }
-.check.level-warning { border-left-color: var(--lv-warning); }
-.check.level-info { border-left-color: var(--lv-info); }
-.check .code { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
-.check .msg { grid-column: 2; }
-.check .objs { grid-column: 2; font-size: .85rem; display: flex; gap: .5rem; flex-wrap: wrap; }
-
-.filter-row { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; margin: 1rem 0; }
 
 /* The progress listing's search and filters. */
 .listing-filters { display: flex; gap: .5rem .9rem; flex-wrap: wrap; align-items: center; margin: .6rem 0 .4rem; }

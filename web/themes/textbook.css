@@ -187,12 +187,11 @@ table.grid td { border-bottom-color: var(--border); }
 .gnode.compound > .shape { fill: var(--graph-compound); stroke: var(--border-strong); stroke-dasharray: none; }
 .gnode.selected .shape { stroke: var(--accent); stroke-width: 2.4; }
 
-/* ------------------------------------------------------- progress, checks */
+/* -------------------------------------------------------------- progress */
 
 .stat { border-top-width: 3px; }
 .stat .n { font-family: var(--ui); }
 .chart { border: 0; background: none; }
-.check { background: none; }
 
 /* The statement head runs in as LaTeX's does: one line of text that wraps
    like prose, the status floated to the margin side. */

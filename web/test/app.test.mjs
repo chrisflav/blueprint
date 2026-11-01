@@ -142,6 +142,19 @@ await check('every route renders without falling over', async () => {
   await go('#/object/def-compact');
 });
 
+await check('there is no Checks page: no tab, an old link opens the graph, nothing about checks in the top bar', async () => {
+  const html = fs.readFileSync(path.join(webDir, 'index.html'), 'utf8');
+  ok(!/data-view="checks"/.test(html), 'index.html still has a Checks tab');
+  ok(!fs.existsSync(path.join(webDir, 'checks.js')), 'checks.js is still there');
+  await go('#/checks?level=error');
+  ok(root.querySelector('.graph-page'), '#/checks did not fall back to the graph');
+  const aside = dom.document.getElementById('topbar-aside');
+  ok(!aside.querySelectorAll('a').some((a) => /checks/.test(a.getAttribute('href') || '')), 'the top bar links to the checks');
+  await go('#/object/lem-diagonal');
+  ok(!root.querySelectorAll('h3').some((h) => /Checks/.test(h.textContent)), 'the object page lists its checks');
+  await go('#/object/def-compact');
+});
+
 await check('auto-render is given the project macros, on the object page', () => {
   ok(katex.calls.length > 0, 'KaTeX was never called');
   const { options } = katex.calls[katex.calls.length - 1];
@@ -849,7 +862,7 @@ await check('on an object page a reference reads "Definition 1.2" and leads to i
   await go('#/object/thm-stone-cech');
   const b = refLinks().find((x) => x.broken);
   eq(b.text, 'def-uniformity', 'a broken link keeps its slug');
-  eq(b.href, '#/checks?code=bad-link', 'and its target');
+  eq(b.href, null, 'and leads nowhere: there is no Checks page to send it to');
 });
 
 await check('a reference to an object the document does not number keeps its slug', async () => {
@@ -1361,7 +1374,7 @@ await check('the graph opens with its toolbar folded and no sidebar, until the r
   const bar = () => root.querySelector('.toolbar');
   const page = () => root.querySelector('.graph-page');
   const button = (sel) => bar().querySelector(sel);
-  const mountGraph = async () => { await go('#/checks'); await go('#/graph?collapse=refines'); };
+  const mountGraph = async () => { await go('#/progress'); await go('#/graph?collapse=refines'); };
   try {
     await mountGraph();
     // What stays: Collapse all, the search and the zoom, outside the fold.
@@ -2153,7 +2166,7 @@ await check('every module app.js imports is preloaded by index.html', () => {
 });
 
 await check('the app hands over the pages, ELK and the export, most likely first', async () => {
-  eq(appPrefetch.pendingPrefetch().join(' '), 'graph document object elk elk-worker search progress checks export',
+  eq(appPrefetch.pendingPrefetch().join(' '), 'graph document object elk elk-worker search progress export',
     'the tasks app.js set up');
 });
 

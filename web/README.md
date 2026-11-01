@@ -69,7 +69,7 @@ Only what the screen on it needs, and as much of it at once as can be:
   `index.html`, before any other script has arrived; `app.js` takes that
   request over (`fetchSnapshot`) rather than making its own;
 * each page's module (`graph.js`, `document.js`, `object.js`, `progress.js`,
-  `checks.js`, `search.js`) is imported the first time the reader goes to it (`PAGES` in
+  `search.js`) is imported the first time the reader goes to it (`PAGES` in
   `app.js`). The one the URL opens on is preloaded by the same script in
   `index.html`, and `app.js`'s own imports by `modulepreload` tags, so they
   download beside `app.js` instead of after it;
@@ -124,7 +124,12 @@ All state lives in the URL hash, so every view is a shareable link.
 | `#/document/<id>` | the page of one entry of the document |
 | `#/progress` | dashboard and time slider |
 | `#/search?query=<keywords>` | the search page; also `radius=all\|statements`, `page=<n>`, `perpage=10\|50\|all` |
-| `#/checks` | `derived.checks` |
+
+There is no page of checks: the site's snapshot carries none (`blueprint
+site` empties `derived.checks`, so the reader does not download them), and
+`blueprint check` is where they are read. An old `#/checks` link opens the
+graph, and a `[slug]` that resolves to nothing is marked as broken but leads
+nowhere.
 
 The graph route carries its full view state as query parameters:
 `collapse=<kind>`, `expand=<comma separated ids>`, `ekinds=<edge kinds>`,
@@ -554,7 +559,6 @@ the pages knowing about it.
 | `object.js` | the object page |
 | `document.js` | the linear document, one page per entry of the collapse order |
 | `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |
-| `checks.js` | the lint report |
 | `search.js` | the search page, after the Stacks project's: the form, the results as the document's tree, the pages, results per page and the query tips |
 | `intro.js` | the project's intro, shown over the landing page while the graph is laid out under it |
 | `prefetch.js` | fetching what the reader may open next, one file at a time, while the browser is idle |
