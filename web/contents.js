@@ -102,48 +102,11 @@ export function render(root, app) {
     return a;
   };
 
-  // Unfold or fold every entry at once.
-  const everyOpenable = () => {
-    const out = [];
-    const walk = (list) => {
-      for (const e of list) {
-        if (!listed(e) || !kids(e).length) continue;
-        out.push(e);
-        walk(kids(e));
-      }
-    };
-    walk(outline.roots);
-    return out;
-  };
-  const redrawAll = () => {
-    rows.clear();
-    clear(tree);
-    for (const e of outline.roots) if (listed(e)) tree.appendChild(item(e));
-  };
-
-  page.appendChild(el('p.muted.doc-controls',
-    'Along the ',
-    m.collapseKinds.length > 1
-      ? el('select', {
-          onchange: (ev) => app.go('contents', null, new URLSearchParams({ collapse: ev.target.value })),
-        }, ...m.collapseKinds.map((k) => el('option', { value: k, selected: k === kind }, k)))
-      : el('code', kind),
-    ' order. ',
-    el('button.contents-all', {
-      type: 'button',
-      onclick: () => { for (const e of everyOpenable()) open.add(e.id); redrawAll(); },
-    }, 'Unfold all'),
-    ' ',
-    el('button.contents-all', {
-      type: 'button',
-      onclick: () => { open.clear(); redrawAll(); },
-    }, 'Fold all')));
-
   if (!outline.roots.some(listed)) {
     page.appendChild(el('p.empty', 'Nothing to read: no object carries prose.'));
     return;
   }
-  redrawAll();
+  for (const e of outline.roots) if (listed(e)) tree.appendChild(item(e));
   page.appendChild(tree);
 }
 

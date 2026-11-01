@@ -796,28 +796,23 @@ async function graphChecks(d, f) {
     };
   });
 
-  // --- collapse kind select ------------------------------------------------
-  await check(d, 'graph/collapse-kind-select', async () => {
+  // --- collapse kind ------------------------------------------------------
+  // The toolbar offers no choice of collapse order; a link still says one.
+  await check(d, 'graph/collapse-kind-from-the-link', async () => {
     if (f.m.collapseKinds.length < 2) return { skip: true, evidence: 'only one collapse kind in the schema' };
     const other = f.m.collapseKinds.find((k) => k !== f.kind);
-    const set = (v) => d.js(`
-      var s = document.querySelector('.toolbar select');
-      if (!s) return null;
-      s.value = ${j(v)};
-      s.dispatchEvent(new Event('change', { bubbles: true }));
-      return s.value;
-    `);
-    await set(other);
+    const select = await d.js(`return document.querySelectorAll('.toolbar select').length`);
+    await gotoGraph(d, `collapse=${encodeURIComponent(other)}`);
     await sleep(400);
     const s1 = await waitFor(d, GRAPH_IDLE, { timeout: 120000, interval: 300, label: 'layout after kind switch' });
     const c1 = await d.js(GRAPH_COUNTS);
-    await set(f.kind);
+    await gotoGraph(d, `collapse=${encodeURIComponent(f.kind)}`);
     await sleep(400);
     const s2 = await waitFor(d, GRAPH_IDLE, { timeout: 120000, interval: 300, label: 'layout back' });
     const c2 = await d.js(GRAPH_COUNTS);
     return {
-      ok: s1.includes(other) && s2.includes(f.kind) && !c1.error && !c2.error,
-      evidence: `${f.kind}->${other}: ${c1.nodes} nodes, status=${j(s1)}; back: ${c2.nodes} nodes, status=${j(s2)}`,
+      ok: select === 0 && s1.includes(other) && s2.includes(f.kind) && !c1.error && !c2.error,
+      evidence: `${select} select in the toolbar (want 0); ${f.kind}->${other}: ${c1.nodes} nodes, status=${j(s1)}; back: ${c2.nodes} nodes, status=${j(s2)}`,
     };
   });
 
@@ -1204,6 +1199,43 @@ async function layoutChecks(d, f) {
       ok: hs.every((x) => x.h === hs[0].h && x.top === 0) && hs[0].h >= hs[0].want,
       evidence: `top bar ${j(Object.fromEntries(Object.entries(heights).map(([k, v]) => [k, v.h])))}, --topbar-h ${hs[0].want}px`,
     };
+  });
+
+  // The title shares its row with the tabs alone, and every row wraps, so
+  // text made larger (Ctrl +, a larger default font) moves things down
+  // rather than over the title or off the screen.
+  await check(d, 'layout/top-bar-title-is-never-covered', async () => {
+    await route(d, '#/document');
+    await sleep(600);
+    const seen = [];
+    let ok = true;
+    for (const k of [1, 1.5, 2]) {
+      await d.js(`document.documentElement.style.fontSize = ${k === 1 ? "''" : `'${16 * k}px'`}; return 1`);
+      await sleep(250);
+      const s = await d.js(`
+        var box = function (e) { return e.getBoundingClientRect(); };
+        var brand = document.querySelector('.brand'), text = document.getElementById('project-title');
+        var b = box(brand), t = box(text), bar = box(document.querySelector('.topbar'));
+        var items = document.querySelectorAll('.tabs a, .topbar-tools > *, #topbar-aside > *, .topbar > :not(.topbar-main):not(.topbar-tools)');
+        var name = function (o) { return (o.textContent || o.className).trim().slice(0, 15); };
+        var over = Array.prototype.filter.call(items, function (o) {
+          var r = box(o); return r.width && r.height && r.left < b.right - .5 && r.right > b.left + .5 && r.top < b.bottom - .5 && r.bottom > b.top + .5;
+        }).map(name);
+        // Out of the bar: drawn over the page below, or cut off by it.
+        var out = Array.prototype.filter.call(items, function (o) {
+          var r = box(o); return r.width && r.height && (r.top < bar.top - .5 || r.bottom > bar.bottom + .5);
+        }).map(name);
+        return { over: over.concat(out.map(function (x) { return 'out of the bar: ' + x; })),
+                 clipped: brand.scrollWidth > brand.clientWidth + 1 || text.scrollWidth > text.clientWidth + 1
+                   || t.right > b.right + .5 || b.left < 0 || b.right > innerWidth + .5,
+                 wide: document.documentElement.scrollWidth > innerWidth + .5,
+                 h: document.querySelector('.topbar').offsetHeight,
+                 want: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h')) };`);
+      if (s.over.length || s.clipped || s.wide || s.h !== s.want) ok = false;
+      seen.push(`${k * 100}%: over the title ${j(s.over)}, clipped=${s.clipped}, wider than the window=${s.wide}, bar ${s.h}px (--topbar-h ${s.want}px)`);
+    }
+    await d.js(`document.documentElement.style.fontSize = ''; return 1`);
+    return { ok, evidence: seen.join(' | ') };
   });
   await gotoGraph(d, `collapse=${encodeURIComponent(f.kind)}`);
   await settle();
@@ -1695,15 +1727,10 @@ async function pageChecks(d, f) {
     return { ok: s.entries === out.roots.length, evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (top level ${out.roots.length})` };
   });
 
-  await check(d, 'document/depth-control-inlines-a-level', async () => {
+  // No control says the depth any more; a link still does.
+  await check(d, 'document/depth-2-inlines-a-level', async () => {
     const want = M.documentPageEntries(out, null, 2).length;
-    await d.js(`
-      var s = document.querySelectorAll('.doc-controls select');
-      s = s[s.length - 1];
-      s.value = '2';
-      s.dispatchEvent(new Event('change', { bubbles: true }));
-      return s.value;
-    `);
+    await route(d, '#/document?depth=2');
     const n = await waitFor(d, `var n = document.querySelectorAll('.doc-entry').length; return n >= ${want} ? n : 0;`,
       { timeout: 30000, label: `${want} entries at depth 2` }).catch(() => null);
     const s = await d.js(PAGE_STATE);

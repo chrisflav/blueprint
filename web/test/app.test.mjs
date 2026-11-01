@@ -647,10 +647,8 @@ await check('the top page writes out the top level; the contents are a page of t
   ok(!entryIds().includes('doc-sec-main-induction'), 'and nothing below it');
   eq(root.querySelectorAll('.contents-tree, .doc-contents').length, 0, 'no contents list on it');
   eq(root.querySelectorAll('.doc-layout').length, 1, 'the sidebar beside it');
-  eq(root.querySelectorAll('.proof-toggle').length, 1, 'proofs to fold');
-  const select = root.querySelectorAll('.doc-controls select')[1];
-  eq(select.querySelectorAll('option').map((o) => o.getAttribute('value')).join(' '), '1 2 3 all', 'no "contents" depth');
-  eq(select.querySelectorAll('option[selected]')[0].getAttribute('value'), '1', 'one level by default');
+  eq(root.querySelectorAll('.doc-controls, .doc-controls select, .proof-toggle, .export-inline').length, 0,
+    'no line of controls: order, depth, Fold proofs, Export PDF');
   // An old link that said the depth reads the same.
   await go('#/document?collapse=refines&focus=sec-main');
   eq(root.querySelectorAll('.doc-entry').length, out.roots.length, 'depth=1 is the same page');
@@ -709,15 +707,7 @@ await check('the contents page: the top level, a triangle unfolding each entry, 
   fire(toggle(), 'click');
   eq(toggle().getAttribute('aria-expanded'), 'false', 'a second click folds it');
   eq(row('sec-main').querySelectorAll('ol').length, 0, 'and its entries go');
-
-  // All at once.
-  const [unfoldAll, foldAll] = root.querySelectorAll('button.contents-all');
-  fire(unfoldAll, 'click');
-  ok(root.querySelectorAll('.contents-toggle[aria-expanded="false"]').length === 0, 'Unfold all leaves nothing folded');
-  ok(row(stmt.id), 'the statements are listed');
-  fire(foldAll, 'click');
-  eq(root.querySelector('ol.contents-tree').children.length, listed.length, 'Fold all: the top level again');
-  eq(root.querySelectorAll('.contents-toggle[aria-expanded="true"]').length, 0, 'nothing unfolded');
+  eq(root.querySelectorAll('.doc-controls, button.contents-all, select').length, 0, 'no line of controls above the tree');
 });
 
 await check('depth=1 on the top page writes out the top level, one level deep', async () => {
@@ -746,8 +736,6 @@ await check('depth=2 inlines a second level', async () => {
   ok(!entryIds().includes('doc-lem-finite-subcover'), 'their contents are not');
   ok(hrefs('a.doc-open').includes('#/document/sec-main-induction?collapse=refines&depth=2'),
     'the depth travels with the links');
-  const select = root.querySelectorAll('.doc-controls select')[1];
-  eq(select.querySelectorAll('option[selected]')[0].getAttribute('value'), '2', 'the depth control shows it');
 });
 
 await check('a chapter page: breadcrumbs, its entries, its siblings', async () => {
@@ -1438,7 +1426,7 @@ await check('the graph opens with its toolbar folded and no sidebar, until the r
     eq(button('.tb-collapse button').textContent, 'Collapse all', 'Collapse all is kept');
     eq(button('.tb-zoom').textContent, 'Fit+\u2212', 'the zoom is kept');
     const folded = button('.tb-filters');
-    ok(folded.querySelector('select'), 'the collapse kind is behind Filters');
+    eq(bar().querySelectorAll('select').length, 0, 'no choice of collapse order');
     ok(folded.querySelectorAll('button').some((b) => /^Expand all/.test(b.textContent)), 'Expand all is behind Filters');
     ok(!folded.querySelectorAll('button').some((b) => b.textContent === 'Collapse all'), 'Collapse all is folded away');
     ok(folded.querySelectorAll('label.chk').length > 0, 'the filters are behind Filters');
@@ -2340,7 +2328,6 @@ if (ELK_PATH && fs.existsSync(ELK_PATH) && fs.existsSync(ELK_WORKER_PATH)) {
   await check('on a document page the dialog offers that part, and the whole blueprint', async () => {
     fresh();
     await go('#/document/sec-main');
-    ok(root.querySelector('.doc-controls .export-inline'), 'the page has its own Export PDF button');
     await pdf.openExport();
     const d = dialogEl();
     ok(d, 'the dialog opened');

@@ -6,7 +6,7 @@
 
 import * as model from './model.js';
 import { setupPreviews, closePreviews } from './preview.js';
-import { setupExport, exportButton, closeExport } from './pdf.js';
+import { setupExport, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
 import { setupPrefetch, pausePrefetch, resumePrefetch, prefetchModule } from './prefetch.js';
 import { introOf, wantsIntro, showIntro, replayIntro, earlyIntro, introDecided, proseReady } from './intro.js';
@@ -652,8 +652,6 @@ const app = {
   /** How a reference to `id` reads here: {word, number, href}, or null. */
   referenceFor: pageReferences,
   documentLevelHref,
-  /** A button that opens the Export PDF dialog, defaulting to the part on screen. */
-  exportButton: (label) => exportButton(app, label),
   /**
    * SHA-256 of the bytes of the snapshot on screen (a Promise), which its
    * prepared PDFs are filed under.  Worked out the first time it is asked
@@ -947,6 +945,25 @@ function themeMenu() {
 // chrome: title, tabs, banner
 // ---------------------------------------------------------------------------
 
+/**
+ * Keep `--topbar-h` at the top bar's height.  Its rows wrap (style.css), so
+ * the height changes with the title, the width of the window and the size of
+ * the text, Ctrl + included; what sits under the bar (a sticky sidebar, the
+ * place a link scrolls an entry to) reads it from there.
+ */
+function watchTopbar() {
+  const bar = typeof document !== 'undefined' && document.querySelector('.topbar');
+  if (!bar) return;
+  const root = document.documentElement;
+  const set = () => {
+    const h = bar.offsetHeight;
+    if (h > 0) root.style.setProperty('--topbar-h', h + 'px');
+  };
+  set();
+  if (typeof ResizeObserver === 'function') new ResizeObserver(set).observe(bar);
+  else if (typeof window.addEventListener === 'function') window.addEventListener('resize', set);
+}
+
 function updateChrome() {
   const title = (app.model && (app.model.project.title || app.model.project.name)) || 'Blueprint';
   document.getElementById('project-title').textContent = title;
@@ -1170,6 +1187,7 @@ function scriptsReady() {
 
 async function boot() {
   applyTheme(currentTheme()); // before anything is drawn, so nothing flashes
+  watchTopbar();
   applyShowProgress(currentShowProgress());
   const url = dataUrlFromQuery();
   app.dataUrlOriginal = url;

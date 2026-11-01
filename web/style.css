@@ -41,7 +41,10 @@
           Arial, "Noto Sans", sans-serif;
 
   --radius: 7px;
-  --topbar-h: 52px;
+  /* The top bar's height, for what sits under it (sticky sidebars, scroll
+     margins).  It has two rows that wrap, so app.js sets it to the bar's
+     measured height (`watchTopbar`); this is a first guess until then. */
+  --topbar-h: 96px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -151,32 +154,53 @@ label.chk input { margin: 0; }
 
 /* ----------------------------------------------------------------- topbar */
 
+/* Two rows: the title and the tabs, then everything else (index.html).
+   Nothing shares the first row with the title, and every row wraps rather
+   than overlaps, so a long title, a narrow window or text made larger
+   (Ctrl +) moves things down instead of covering the title: the tabs go
+   under the title, the title itself onto a second line. */
 .topbar {
   position: sticky;
   top: 0;
   z-index: 30;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  height: var(--topbar-h);
+  flex-direction: column;
   padding: 0 1rem;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
 
-.topbar-main { display: flex; align-items: center; gap: 1.2rem; min-width: 0; }
+.topbar-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .3rem 1.2rem;
+  min-width: 0;
+  min-height: 3.25rem;
+  padding: .35rem 0;
+}
+
+.topbar-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem .6rem;
+  min-width: 0;
+  padding: .45rem 0;
+  border-top: 1px solid var(--border);
+}
 
 .brand {
   display: flex;
   align-items: center;
   gap: .5rem;
+  min-width: 0;
+  max-width: 100%;
   color: var(--fg);
   font-weight: 640;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
+/* A title longer than the row wraps, whole words first. */
+.brand-text { min-width: 0; overflow-wrap: anywhere; }
 .brand:hover { text-decoration: none; }
 .brand-mark {
   width: 15px; height: 15px;
@@ -194,8 +218,9 @@ label.chk input { margin: 0; }
   border-radius: 1px;
 }
 
-.tabs { display: flex; gap: .15rem; }
+.tabs { display: flex; flex-wrap: wrap; gap: .15rem; }
 .tabs a {
+  white-space: nowrap;
   color: var(--muted);
   padding: .3em .7em;
   border-radius: var(--radius);
@@ -206,12 +231,19 @@ label.chk input { margin: 0; }
 
 /* The experimental style menu (app.js, THEMES). */
 .topbar-aside .theme-select { font-size: .8rem; padding: .15em .3em; max-width: 7.5rem; }
-.topbar-aside { display: flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--muted); }
+.topbar-aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .3rem .5rem;
+  margin-left: auto;
+  font-size: .85rem;
+  color: var(--muted);
+}
 
-/* Each item keeps its one line ("46%" under its bar read as a second row),
-   and the search box and the title give way instead; on a phone the items
-   wrap as wholes (below). */
-.topbar-aside, .topbar-aside > * { flex: none; white-space: nowrap; }
+/* Each item keeps its one line ("46%" under its bar read as a second row);
+   when the row is short of room the items wrap as wholes. */
+.topbar-aside > * { flex: none; white-space: nowrap; }
 
 /* Hide progress / Show progress (app.js).  The Progress tab stays either way. */
 .topbar-aside .progress-toggle { font-size: .8rem; padding: .15em .45em; }
@@ -235,30 +267,21 @@ label.chk input { margin: 0; }
   border-radius: var(--radius);
 }
 .export-pdf:hover { background: color-mix(in srgb, var(--accent) 86%, var(--fg)); }
-.export-pdf:focus-visible, .export-inline:focus-visible, .export-dialog :focus-visible {
+.export-pdf:focus-visible, .export-dialog :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 .export-pdf:disabled { opacity: .55; }
 .export-icon { flex: none; }
-/* The same action on a document page, next to its controls. */
-.export-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: .35em;
-  font-weight: 560;
-  color: var(--accent);
-  border-color: var(--accent);
-}
 
-/* The search box sits between the tabs and the progress figure: the Stacks
-   project's quick search, a magnifier inside the box and no list under it;
-   Enter opens the search page (search.js). */
+/* The search box opens the second row: the Stacks project's quick search, a
+   magnifier inside the box and no list under it; Enter opens the search page
+   (search.js). */
 .gsearch {
   position: relative;
   flex: 0 1 18rem;
   min-width: 9rem;
-  margin: 0 0 0 auto;
+  margin: 0;
 }
 .gsearch input[type="search"] { width: 100%; padding-left: 1.9em; padding-right: 1.8em; font-size: .88rem; }
 .gsearch-icon {
@@ -1383,14 +1406,10 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
   .side.min > .sheet-keep { margin: .4rem 0 .6rem; }
   .doc-layout { grid-template-columns: 1fr; }
   .toc { position: static; max-height: none; border-bottom: 1px solid var(--border); padding-bottom: .8rem; }
-  .topbar { flex-wrap: wrap; height: auto; padding: .5rem 1rem; gap: .4rem; }
-  .topbar-main { flex: 1 1 100%; justify-content: space-between; }
-  /* On its own row the box starts at the left edge. */
-  .gsearch { flex: 1 1 12rem; margin-left: 0; }
+  /* The box takes what the row has to spare. */
+  .gsearch { flex: 1 1 12rem; }
   .search-page { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
   .search-aside { position: static; }
-  .topbar-aside { flex: 0 1 auto; flex-wrap: wrap; row-gap: .3rem; }
-  :root { --topbar-h: 86px; }
   .legend { display: none; }
 }
 
@@ -1610,7 +1629,6 @@ button.primary:hover { background: var(--accent); filter: brightness(1.08); }
 }
 
 /* Proofs fold under their "Proof." heading. */
-.doc-controls .proof-toggle { font-size: .82rem; padding: .15em .55em; margin-left: .4rem; }
 details.proof > summary {
   cursor: pointer;
   list-style: none;

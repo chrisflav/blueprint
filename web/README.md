@@ -195,8 +195,8 @@ sections open side by side, as after *Expand all*, there is no one level to
 be in and nothing is faded.
 
 The graph opens on the graph alone. Of the toolbar only *Collapse all*, the
-highlight search, Fit, `+` and `−` show; the collapse kind, *Expand all*, and
-the edge, *hide implied* and status filters fold behind *Filters*, which
+highlight search, Fit, `+` and `−` show; *Expand all* and the edge, *hide
+implied* and status filters fold behind *Filters*, which
 carries a dot while anything is filtered out. The side panel is hidden too,
 and the stage takes its column; *Show sidebar* at the right end of the
 toolbar brings it back, and *Hide sidebar* hides it again. Both choices are
@@ -306,9 +306,8 @@ The table of contents is a page of its own, `#/contents` (`contents.js`), the
 order and under the same numbers, a row per entry — a section or a
 statement — with its number, title and progress, each a link to its level
 (below). Beside a row with entries below it is a small triangle that unfolds
-them, and folds them again; the tree opens on the top level, *Unfold all*
-and *Fold all* do every row at once, and what the reader unfolded is kept
-while the site is open. A row's entries are built when it is first unfolded.
+them, and folds them again; the tree opens on the top level, and what the
+reader unfolded is kept while the site is open. A row's entries are built when it is first unfolded.
 
 Every link to an entry — a row of the contents or of the sidebar, a heading
 on a page, a cross reference in prose, *In the document →* on an object page —
@@ -331,7 +330,8 @@ way, so 1 goes back to the chapters. An entry of the level on screen is only
 scrolled to and opened, and the link updated, without rebuilding the page. A
 page reached otherwise — by a *Read* line, the breadcrumbs, a number — lists
 its own entries under its chain. Every style has this sidebar; the Outline
-style draws it as an outline (see below). Query parameters:
+style draws it as an outline (see below). Query parameters, which a link may
+carry (the page itself has no controls for them):
 
 * `collapse=<kind>`: the collapse order to read along (default: the
   snapshot's `defaultCollapse`). The outline, the numbers and the pages are
@@ -381,8 +381,8 @@ from.
 
 Every proof is a `<details class="proof">` (`proofDisclosure` in `app.js`)
 whose summary is its "Proof." line, so one click folds or unfolds one proof,
-and *Fold proofs* / *Unfold proofs* (the document's controls line, and object
-pages with a proof) does all of them; the choice is kept in `localStorage`
+and *Fold proofs* / *Unfold proofs* (on object pages with a proof) does all
+of them; the choice is kept in `localStorage`
 (`blueprint.proofs`). A blueprint not yet migrated to proof objects gets the
 same: `renderBody` turns a body's `## Proof` heading and what follows it, up
 to the next heading of the same level, into that disclosure.
