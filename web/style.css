@@ -910,23 +910,8 @@ a.objlink.broken { color: var(--lv-missing, var(--st-missing)); text-decoration:
 .preview-id { font-family: var(--mono); font-size: .8rem; overflow-wrap: anywhere; }
 .preview-open { margin-left: auto; white-space: nowrap; }
 
-/* The document's "Lean" mark beside a heading, a link to the object page,
-   and the card of Lean names it opens (preview.js). */
-a.lean-mark {
-  display: inline-block;
-  align-self: center;
-  margin: 0;
-  padding: .05em .45em;
-  font: 600 .72rem/1.4 var(--mono);
-  letter-spacing: .02em;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  vertical-align: .15em;
-}
-a.lean-mark:hover, a.lean-mark:focus-visible { border-color: var(--accent); background: var(--accent-soft); text-decoration: none; }
-.lean-count { margin-left: .3em; font-weight: 400; color: var(--muted); }
+/* The card of Lean names that the document's "object" link beside a heading
+   opens (preview.js). */
 .preview.lean-card { width: max-content; min-width: min(18rem, calc(100vw - 16px)); max-width: min(32rem, calc(100vw - 16px)); }
 ul.lean-names { list-style: none; margin: 0; padding: 0; }
 ul.lean-names li {

@@ -565,7 +565,7 @@ the pages knowing about it.
 | `search.js` | the search page, after the Stacks project's: the form, the results as the document's tree, the pages, results per page and the query tips |
 | `intro.js` | the project's intro, shown over the landing page while the graph is laid out under it |
 | `prefetch.js` | fetching what the reader may open next, one file at a time, while the browser is idle |
-| `preview.js` | the card a link to an object opens while the pointer rests on it, and the document's Lean mark and its card |
+| `preview.js` | the card a link to an object opens while the pointer rests on it, and the card of Lean names the document's "object" link opens |
 | `pdf.js` | the Export PDF button and dialog: the part, the detail, finding or making the PDF, the TeX source |
 | `export/latex.js` | **pure**: a part of the document as a LaTeX document — the request, the plan (order, shared objects, depth), the TeX. Imported by the dialog and by the command line |
 | `export/markdown-tex.js`, `export/unicode.js` | **pure**: a body's Markdown and maths as LaTeX; the characters pdfLaTeX is told about |

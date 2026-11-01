@@ -2117,8 +2117,8 @@ async function referenceChecks(d, f) {
     };
   });
 
-  // The document's Lean mark: a statement with Lean names on the page it is
-  // read on, its mark beside the heading, and the card it opens.
+  // The document's "object" link beside the heading of a statement with Lean
+  // names, on the page it is read on, and the card of those names it opens.
   const leanFixture = (() => {
     for (const e of f.outline.entries) {
       const names = M.leanNamesOf(e.object);
@@ -2126,7 +2126,7 @@ async function referenceChecks(d, f) {
     }
     return null;
   })();
-  const LEAN_MARK = (id) => `var b = document.querySelector('#' + CSS.escape(${j(anchorOf(id))}) + ' > .head a.lean-mark');
+  const LEAN_MARK = (id) => `var b = document.querySelector('#' + CSS.escape(${j(anchorOf(id))}) + ' > .head a.doc-object[data-lean]');
     if (!b) return null; var r = inView(b);
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, top: r.top, bottom: r.bottom, text: b.textContent };
     ${IN_VIEW}`;
@@ -2137,16 +2137,16 @@ async function referenceChecks(d, f) {
              left: r.left, top: r.top, right: r.right, bottom: r.bottom, onTop: !!hit && c.contains(hit),
              vw: window.innerWidth, vh: window.innerHeight };`;
 
-  await check(d, 'references/lean-mark-shows-the-lean-names', async () => {
+  await check(d, 'references/object-link-shows-the-lean-names', async () => {
     if (!leanFixture) return { skip: true, evidence: 'no object with Lean names in the document' };
     const { id, names, page } = leanFixture;
     await route(d, docPage(page, id));
     await d.move(away.x, away.y);
     const b = await steadyLink(d, LEAN_MARK(id));
-    if (!b) return { ok: false, evidence: `no Lean mark in the heading of ${j(id)} on ${docPage(page, id)}` };
+    if (!b) return { ok: false, evidence: `no object link showing Lean names in the heading of ${j(id)} on ${docPage(page, id)}` };
     await d.move(b.x, b.y);
     const c = await waitFor(d, LEAN_CARD, { timeout: 4000, label: 'Lean card' }).catch(() => null);
-    if (!c) return { ok: false, evidence: `resting on the Lean mark of ${j(id)} opened no card` };
+    if (!c) return { ok: false, evidence: `resting on the object link of ${j(id)} opened no card` };
     await sleep(300); // past the fade-in
     await d.shot(`${SHOTS}/${d.name}-lean-card.png`);
     const inside = c.left >= 0 && c.top >= 0 && c.right <= c.vw && c.bottom <= c.vh;
@@ -2156,16 +2156,16 @@ async function referenceChecks(d, f) {
     const after = await d.js(LEAN_CARD);
     return {
       ok: c.id === id && j(c.names) === j(names) && inside && clear && c.onTop && !after,
-      evidence: `mark ${j(b.text)} of ${j(id)}: card ${j(c.lead)} lists ${j(c.names)} (want ${j(names)}), inside the window=${inside}, clear of the mark=${clear}, on top=${c.onTop}; moved away: ${after ? 'still open' : 'closed'}`,
+      evidence: `link ${j(b.text)} of ${j(id)}: card ${j(c.lead)} lists ${j(c.names)} (want ${j(names)}), inside the window=${inside}, clear of the link=${clear}, on top=${c.onTop}; moved away: ${after ? 'still open' : 'closed'}`,
     };
   });
 
-  await check(d, 'references/lean-mark-leads-to-the-object-page', async () => {
+  await check(d, 'references/object-link-leads-to-the-object-page', async () => {
     if (!leanFixture) return { skip: true, evidence: 'no object with Lean names in the document' };
     const { id, page } = leanFixture;
     await route(d, docPage(page, id));
     const b = await steadyLink(d, LEAN_MARK(id));
-    if (!b) return { ok: false, evidence: `no Lean mark for ${j(id)}` };
+    if (!b) return { ok: false, evidence: `no object link showing Lean names for ${j(id)}` };
     const want = '#/object/' + encodeURIComponent(id);
     await d.click(b.x, b.y);
     const there = await waitFor(d, `return location.hash === ${j(want)} && !!document.querySelector('.obj-head')`,
@@ -2175,7 +2175,7 @@ async function referenceChecks(d, f) {
     const hash = await d.js('return location.hash');
     return {
       ok: !!there && !card,
-      evidence: `clicked the mark of ${j(id)}: at ${j(hash)} (want ${j(want)}), card ${card ? 'still open' : 'closed'}`,
+      evidence: `clicked the object link of ${j(id)}: at ${j(hash)} (want ${j(want)}), card ${card ? 'still open' : 'closed'}`,
     };
   });
 

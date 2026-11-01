@@ -1073,33 +1073,30 @@ await check('a card says what an edge joins, and leaves the Lean names out', asy
   ok(!text.includes('Compact.Filter') && !text.includes('Compact.Ultrafilter'), `Lean names in the card: ${text}`);
 });
 
-/** The Lean marks in the document's headings, by the object they are of. */
-const leanMarks = () => new Map(root.querySelectorAll('.doc-entry .head a.lean-mark')
+/** The document's "object" links that show Lean names, by the object they are of. */
+const leanLinks = () => new Map(root.querySelectorAll('.doc-entry .head a.doc-object[data-lean]')
   .map((b) => [b.getAttribute('data-lean'), b]));
 
-await check('the document marks each heading with Lean names, and only those', async () => {
+await check('the document has no Lean mark: the object link of a heading with Lean names shows them', async () => {
   await go('#/document/sec-foundations?collapse=refines');
-  const marks = leanMarks();
-  ok(marks.size > 0, 'no Lean mark on the page');
-  for (const [id, b] of marks) {
-    const n = M.leanNamesOf(app.model.byId.get(id)).length;
-    ok(n > 0, `${id} has no Lean names but a mark`);
-    eq(b.textContent, n > 1 ? 'Lean' + n : 'Lean', `the mark of ${id} counts its names`);
-  }
-  // Every heading of an object with Lean names on the page has one.
+  eq(root.querySelectorAll('.doc-entry .head .lean-mark').length, 0, 'a Lean mark beside a heading');
+  const links = leanLinks();
+  ok(links.size > 0, 'no object link showing Lean names on the page');
   for (const h of root.querySelectorAll('.doc-entry .head')) {
-    const a = h.querySelector('a.objlink');
-    const id = a && decodeURIComponent(a.getAttribute('href').replace('#/object/', ''));
-    if (id && M.leanNamesOf(app.model.byId.get(id)).length) ok(h.querySelector('a.lean-mark'), `no mark on ${id}`);
+    const a = h.querySelector('a.doc-object');
+    if (!a) continue;
+    const id = decodeURIComponent(a.getAttribute('href').replace('#/object/', ''));
+    const n = M.leanNamesOf(app.model.byId.get(id)).length;
+    eq(a.getAttribute('data-lean'), n ? id : null, `the object link of ${id} (${n} Lean names)`);
+    eq(a.textContent, 'object', `the object link of ${id} keeps its word`);
   }
-  eq(marks.get('def-filter').textContent, 'Lean2', 'two names');
-  eq(marks.get('def-filter').getAttribute('href'), '#/object/def-filter', 'a link to the object page');
+  eq(links.get('def-filter').getAttribute('href'), '#/object/def-filter', 'a link to the object page');
 });
 
-await check('resting on the Lean mark opens a card of its Lean declarations', async () => {
+await check('resting on the object link opens a card of its Lean declarations', async () => {
   await go('#/document/sec-foundations?collapse=refines');
-  const mark = leanMarks().get('def-filter');
-  preview.hover(mark);
+  const link = leanLinks().get('def-filter');
+  preview.hover(link);
   await tick(SHOWN);
   eq(cards().length, 1, 'one card');
   const card = cards()[0].card;

@@ -5,7 +5,7 @@
 // to import each other.
 
 import * as model from './model.js';
-import { setupPreviews, closePreviews, leanMark } from './preview.js';
+import { setupPreviews, closePreviews } from './preview.js';
 import { setupExport, exportButton, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
 import { setupPrefetch, pausePrefetch, resumePrefetch, prefetchModule } from './prefetch.js';
@@ -654,7 +654,6 @@ const app = {
   referenceFor: pageReferences,
   documentLevelHref,
   /** The document's "Lean" mark for an object, or null when it has no Lean names. */
-  leanMark: (o) => leanMark(app, o),
   /** A button that opens the Export PDF dialog, defaulting to the part on screen. */
   exportButton: (label) => exportButton(app, label),
   /**

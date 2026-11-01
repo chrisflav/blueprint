@@ -249,10 +249,13 @@ export function render(root, app) {
       // beside its title.
       leadsOn ? el('a.doc-open', { href: href(o.id) }, 'Read ', num, ' →') : null,
       // The heading leads into the paper; the object page is a step aside.
-      el('a.doc-object', { href: app.objectHref(o.id), title: 'the object page of ' + num }, 'object'),
-      // Its Lean names, in a card of their own, so the heading keeps one word.
-      // Before the badges: themes set the last of them apart.
-      app.leanMark(o),
+      // Resting on the link shows the object's Lean names, when it has any,
+      // in a card (preview.js), so the heading keeps one word.
+      el('a.doc-object', {
+        href: app.objectHref(o.id),
+        title: 'the object page of ' + num,
+        'data-lean': M.leanNamesOf(o).length ? o.id : null,
+      }, 'object'),
       isSection ? null : app.kindBadge(o.kind),
       status === null ? null : app.statusBadge(status),
       entry.duplicate ? el('span.chip', 'repeated') : null);
