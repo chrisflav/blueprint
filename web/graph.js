@@ -379,7 +379,7 @@ function renderToolbar(app, st) {
   bar.appendChild(el('div.spacer'));
 
   const search = el('input', {
-    type: 'search', placeholder: 'search id, title, body\u2026', value: st.q,
+    type: 'search', placeholder: 'search the graph', value: st.q,
     oninput: (e) => {
       clearTimeout(ui.searchTimer);
       const v = e.target.value;

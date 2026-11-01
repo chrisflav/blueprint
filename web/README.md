@@ -232,7 +232,7 @@ nothing changes on a wider screen:
 
 The search is the Stacks project's (<https://stacks.math.columbia.edu/search>):
 
-* the **box in the top bar**, "keywords or an id", is a form, with no list
+* the **box in the top bar**, "search the document", is a form, with no list
   under it: Enter opens the search page with what is in it, or the object
   page when it is exactly an object's id, as a Stacks tag does
   (`quickSearch` in `app.js`). `/` focuses it from anywhere that is not
