@@ -2246,13 +2246,26 @@ function fitToView(app) {
   if (!bb) return;
   const rect = ui.stage.getBoundingClientRect();
   const pad = 40;
-  const k = Math.max(0.08, Math.min(1.6,
-    Math.min((rect.width - pad * 2) / bb.w, (rect.height - pad * 2) / bb.h)));
-  ui.transform = {
-    k,
-    x: (rect.width - bb.w * k) / 2 - bb.x * k,
-    y: (rect.height - bb.h * k) / 2 - bb.y * k,
+  const fit = (w, h) => {
+    const k = Math.max(0.08, Math.min(1.6, Math.min((w - pad * 2) / bb.w, (h - pad * 2) / bb.h)));
+    return { k, x: (w - bb.w * k) / 2 - bb.x * k, y: (h - bb.h * k) / 2 - bb.y * k };
   };
+  let t = fit(rect.width, rect.height);
+  // The legend sits in the stage's corner, over whatever is drawn there.  A
+  // graph that would reach under it is fitted beside it or above it instead,
+  // whichever leaves the graph larger.
+  const lg = ui.legend && ui.legend.isConnected ? ui.legend.getBoundingClientRect() : null;
+  if (lg && lg.width && lg.height) {
+    const L = { left: lg.left - rect.left, top: lg.top - rect.top };
+    const right = t.x + (bb.x + bb.w) * t.k;
+    const bottom = t.y + (bb.y + bb.h) * t.k;
+    if (right > L.left && bottom > L.top) {
+      const beside = fit(L.left, rect.height);
+      const above = fit(rect.width, L.top);
+      t = beside.k >= above.k ? beside : above;
+    }
+  }
+  ui.transform = t;
   applyTransform(false);
 }
 
