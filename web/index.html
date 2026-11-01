@@ -23,7 +23,7 @@
   try {
     (function () {
       var view = (location.hash.match(/^#\/([a-z]+)/) || [])[1];
-      if (['object', 'document', 'progress', 'search'].indexOf(view) < 0) view = 'graph';
+      if (['object', 'contents', 'document', 'progress', 'search'].indexOf(view) < 0) view = 'graph';
       var link = document.createElement('link');
       link.rel = 'modulepreload';
       link.href = view + '.js';
@@ -107,6 +107,7 @@
     </a>
     <nav class="tabs" id="tabs">
       <a href="#/graph"    data-view="graph">Graph</a>
+      <a href="#/contents" data-view="contents">Contents</a>
       <a href="#/document" data-view="document">Document</a>
       <a href="#/progress" data-view="progress">Progress</a>
     </nav>

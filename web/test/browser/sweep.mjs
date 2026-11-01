@@ -1508,7 +1508,7 @@ const PAGE_STATE = `
     crumbs: document.querySelectorAll('.doc-crumbs a').length,
     pagers: document.querySelectorAll('.doc-pager').length,
     opens: document.querySelectorAll('a.doc-open').length,
-    rows: document.querySelectorAll('.doc-contents li').length,
+    rows: document.querySelectorAll('.contents-tree > li').length,
     toc: document.querySelectorAll('nav.toc a').length,
     scrollY: Math.round(window.scrollY),
     errorBox: !!document.querySelector('.error-box')
@@ -1551,19 +1551,62 @@ async function pageChecks(d, f) {
     };
   });
 
-  // Without one it is the contents: a row per top-level entry, nothing
-  // written out, not even the text at the top level.
-  const rows = out.roots.filter((e) => !e.text).length;
-  await check(d, 'document/top-page-is-the-contents', async () => {
+  // Without one too: the top of the document is the top level written out.
+  await check(d, 'document/top-page-writes-out-the-top-level', async () => {
     await route(d, '#/document');
-    await waitFor(d, `return document.querySelectorAll('.doc-contents li, .doc-entry').length > 0`,
-      { timeout: 30000, label: 'contents' }).catch(() => null);
+    await waitFor(d, `return document.querySelectorAll('.doc-entry').length > 0`,
+      { timeout: 30000, label: 'top level' }).catch(() => null);
     await sleep(500);
     const s = await d.js(PAGE_STATE);
     return {
-      ok: s.rows === rows && s.entries === 0 && s.toc === 0 && !s.pageHead && s.crumbs === 0 && s.pagers === 0,
-      evidence: `#/document: ${s.rows} contents rows (top-level entries ${rows}), ${s.entries} .doc-entry (want 0), `
+      ok: s.entries === out.roots.length && s.rows === 0 && s.toc > 0 && !s.pageHead && s.crumbs === 0 && s.pagers === 0,
+      evidence: `#/document: ${s.entries} .doc-entry (outline roots ${out.roots.length}), ${s.rows} contents rows (want 0), `
         + `${s.toc} sidebar links, page head ${j(s.pageHead)}, ${s.crumbs} breadcrumbs, ${s.pagers} pagers`,
+    };
+  });
+
+  // The contents are a page of their own: a row per top-level entry, folded,
+  // nothing written out, not even the text at the top level.
+  const rows = out.roots.filter((e) => !e.text).length;
+  await check(d, 'contents/a-row-per-top-level-entry', async () => {
+    await route(d, '#/contents');
+    await waitFor(d, `return document.querySelectorAll('.contents-tree > li').length > 0`,
+      { timeout: 30000, label: 'contents' }).catch(() => null);
+    const s = await d.js(PAGE_STATE);
+    return {
+      ok: s.rows === rows && s.entries === 0 && s.toc === 0,
+      evidence: `#/contents: ${s.rows} rows (top-level entries ${rows}), ${s.entries} .doc-entry (want 0), ${s.toc} sidebar links`,
+    };
+  });
+
+  // The triangle beside a row unfolds its entries, and folds them again.
+  const TREE_ROW = (id) => `
+    var li = Array.prototype.slice.call(document.querySelectorAll('.contents-tree li')).filter(function (x) {
+      var a = x.querySelector('a.contents-link');
+      return a && new URLSearchParams(a.getAttribute('href').split('?')[1]).get('focus') === ${j(id)}; })[0];
+    if (!li) return null;
+    var t = li.querySelector('.contents-row > button.contents-toggle');
+    var sub = li.querySelector(':scope > ol');
+    var r = t ? t.getBoundingClientRect() : null;
+    return { expanded: t ? t.getAttribute('aria-expanded') : null, kids: sub ? sub.children.length : 0,
+             x: r ? r.left + r.width / 2 : 0, y: r ? r.top + r.height / 2 : 0, w: r ? Math.round(r.width) : 0 };
+  `;
+  await check(d, 'contents/triangle-unfolds-an-entry', async () => {
+    if (!f.chapter) return { skip: true, evidence: 'no top-level entry with children' };
+    const want = out.byId.get(f.chapter).children.filter((c) => !c.text).length;
+    const before = await d.js(TREE_ROW(f.chapter));
+    if (!before || !before.w) return { ok: false, evidence: `no triangle beside ${f.chapter}: ${j(before)}` };
+    await d.click(before.x, before.y);
+    await sleep(300);
+    const open = await d.js(TREE_ROW(f.chapter));
+    await d.click(open.x, open.y);
+    await sleep(300);
+    const shut = await d.js(TREE_ROW(f.chapter));
+    return {
+      ok: before.expanded === 'false' && before.kids === 0 && open.expanded === 'true' && open.kids === want
+        && shut.expanded === 'false' && shut.kids === 0,
+      evidence: `${f.chapter}: folded ${before.expanded}/${before.kids} rows, after a click ${open.expanded}/${open.kids} (want ${want}), `
+        + `after another ${shut.expanded}/${shut.kids}`,
     };
   });
 
@@ -1580,14 +1623,14 @@ async function pageChecks(d, f) {
     const entry = out.byId.get(f.chapter);
     await d.js('window.scrollTo(0, 0); return 0;');
     const box = await d.js(`
-      var a = Array.prototype.slice.call(document.querySelectorAll('.doc-contents a')).filter(function (x) {
+      var a = Array.prototype.slice.call(document.querySelectorAll('.contents-tree a.contents-link')).filter(function (x) {
         return decodeURIComponent(x.getAttribute('href')).indexOf(${j('focus=' + f.chapter)}) >= 0; })[0];
       if (!a) return null;
       var r = inView(a);
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: (a.textContent || '').trim() };
       ${IN_VIEW}
     `);
-    if (!box) return { ok: false, evidence: `no contents row for ${f.chapter} on the top page` };
+    if (!box) return { ok: false, evidence: `no contents row for ${f.chapter} on the contents page` };
     await clickAndWait(d, box, `return document.querySelectorAll('.doc-entry').length > 0 && !!document.querySelector('nav.toc li.open')`, 'the top level');
     await sleep(900);
     const s = await d.js(PAGE_STATE);
@@ -1595,7 +1638,7 @@ async function pageChecks(d, f) {
     const r = await d.js(ENTRY_IN_VIEW(f.chapter));
     const kids = entry.children.filter((c) => !c.duplicate && !c.text).map((c) => c.id);
     return {
-      ok: s.hash.startsWith('#/document?') && /depth=1/.test(s.hash) && s.entries === out.roots.length && !s.pageHead
+      ok: s.hash.startsWith('#/document?') && s.entries === out.roots.length && !s.pageHead
         && side.ups.length === 0 && side.opened.join() === f.chapter && kids.every((k) => side.links.includes(k)) && r.inView,
       evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (top level ${out.roots.length}), ${entry.number} in view=${r.inView}; `
         + `sidebar chain ${j(side.ups)}, opened ${j(side.opened)}, its ${kids.length} entries listed=${kids.every((k) => side.links.includes(k))}`,
@@ -1647,9 +1690,9 @@ async function pageChecks(d, f) {
     const box = await d.js(elBox('.doc-crumbs a'));
     if (!box) return { ok: false, evidence: 'no breadcrumb link' };
     await clickAndWait(d, box, `return location.hash.indexOf('#/document?') === 0 && !document.querySelector('.doc-entry.page-head')
-      && document.querySelectorAll('.doc-contents li').length > 0`, 'top page');
+      && document.querySelectorAll('.doc-entry').length > 0`, 'top page');
     const s = await d.js(PAGE_STATE);
-    return { ok: s.rows === rows, evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.rows} contents rows` };
+    return { ok: s.entries === out.roots.length, evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (top level ${out.roots.length})` };
   });
 
   await check(d, 'document/depth-control-inlines-a-level', async () => {
@@ -2558,8 +2601,8 @@ async function navChecks(d, f) {
     const log = [];
     let ok = true;
     const tabs = await d.js(`return Array.prototype.map.call(document.querySelectorAll('#tabs a'), function (a) { return a.dataset.view; })`);
-    if (j(tabs) !== j(['graph', 'document', 'progress'])) { ok = false; log.push(`tabs=${j(tabs)}`); }
-    for (const view of ['graph', 'document', 'progress']) {
+    if (j(tabs) !== j(['graph', 'contents', 'document', 'progress'])) { ok = false; log.push(`tabs=${j(tabs)}`); }
+    for (const view of ['graph', 'contents', 'document', 'progress']) {
       const a = await d.js(elBox(`#tabs a[data-view="${view}"]`));
       await d.click(a.x, a.y);
       await sleep(view === 'graph' ? 1200 : 900);
@@ -2568,6 +2611,7 @@ async function navChecks(d, f) {
         return { hash: location.hash, active: (document.querySelector('#tabs a.active') || {}).dataset.view,
                  mounted: !!document.querySelector('#app').firstElementChild,
                  kind: document.querySelector('.graph-page') ? 'graph' : document.querySelector('.doc-layout') ? 'document'
+                     : document.querySelector('.contents-tree') ? 'contents'
                      : document.querySelector('input[type=range]') ? 'progress' : '?' };
       `);
       const good = s.hash.startsWith('#/' + view) && s.mounted;

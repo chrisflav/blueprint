@@ -68,8 +68,8 @@ Only what the screen on it needs, and as much of it at once as can be:
 * the snapshot is asked for by a few lines of script at the top of
   `index.html`, before any other script has arrived; `app.js` takes that
   request over (`fetchSnapshot`) rather than making its own;
-* each page's module (`graph.js`, `document.js`, `object.js`, `progress.js`,
-  `search.js`) is imported the first time the reader goes to it (`PAGES` in
+* each page's module (`graph.js`, `contents.js`, `document.js`, `object.js`,
+  `progress.js`, `search.js`) is imported the first time the reader goes to it (`PAGES` in
   `app.js`). The one the URL opens on is preloaded by the same script in
   `index.html`, and `app.js`'s own imports by `modulepreload` tags, so they
   download beside `app.js` instead of after it;
@@ -293,22 +293,29 @@ server makes PDFs on demand for the Export PDF dialog (`POST api/export`,
 
 The document is the reading order of DESIGN.md §6, numbered as a paper is
 ("Definition 1.2.14"), and split into pages along the collapse order.
-`#/document` is the contents: a row per top-level entry — usually the
-chapters — with its number, title and progress, each a link to its level
-(below); nothing is written out there, not even text at the top level (see below).
-`#/document/<id>` writes out one entry and the levels below it. An entry whose
-children are not on the page links on to its own page by a *Read 1.2 →* link
-beside its title. Each page has breadcrumbs up its chain, back to the
-contents, its previous and next siblings, and the contents in a sidebar. A
-top-level entry with nothing under it (an introduction, say) is read on its
-own page too, since the contents do not write it out.
+`#/document` is the top level written out — usually the chapters — with the
+text between them. `#/document/<id>` writes out one entry and the levels
+below it. An entry whose children are not on the page links on to its own
+page by a *Read 1.2 →* link beside its title. Each page has breadcrumbs up
+its chain, back to the top, its previous and next siblings, and the contents
+in a sidebar. A top-level entry with nothing under it (an introduction, say)
+has its own page too.
+
+The table of contents is a page of its own, `#/contents` (`contents.js`), the
+*Contents* tab of the top bar: the whole document as a tree, along the same
+order and under the same numbers, a row per entry — a section or a
+statement — with its number, title and progress, each a link to its level
+(below). Beside a row with entries below it is a small triangle that unfolds
+them, and folds them again; the tree opens on the top level, *Unfold all*
+and *Fold all* do every row at once, and what the reader unfolded is kept
+while the site is open. A row's entries are built when it is first unfolded.
 
 Every link to an entry — a row of the contents or of the sidebar, a heading
 on a page, a cross reference in prose, *In the document →* on an object page —
 leads to its *level* (`documentLevelOf` in `model.js`): the page of its
 parent, which writes out the entry and its siblings, scrolled to it
-(`?focus=`) — for a chapter, the top level written out
-(`#/document?depth=1&focus=<id>`). A heading is one link, the kind, the
+(`?focus=`) — for a chapter, the top of the document
+(`#/document?focus=<id>`). A heading is one link, the kind, the
 number and the title together: *Lemma 2.1 Triviality on fibres* leads to the
 page with 2.1, 2.2, …, and the title of section 2's own page to the page with
 sections 1, 2, 3, …, whatever page it is clicked on; when that is the page
@@ -330,10 +337,9 @@ whole outline opened along the way to the page. Query parameters:
   snapshot's `defaultCollapse`). The outline, the numbers and the pages are
   all of that order;
 * `depth=<n>|all`: how many levels below the page are written out on it
-  (default 1). On the top page there is no default: without `depth=` it is the
-  contents, and the depth control offers *contents* besides the numbers.
-  `depth=1` there writes out the chapters, `depth=2` the chapters with their
-  sections, and `depth=all` is the whole document on one page;
+  (default 1). On the top page `depth=1` writes out the chapters, `depth=2`
+  the chapters with their sections, and `depth=all` is the whole document on
+  one page;
 * `focus=<id>`: scroll to that entry. If the page does not show it, the route
   is replaced by its level: its parent's page, or the top level written out
   for a chapter, a step's being its source's (`documentLevelOf` in
@@ -353,10 +359,9 @@ it: the lines that open a section, or a paragraph between two lemmas, that
 belong to no statement. It is set where its `order` puts it, as bare prose with
 no heading, no kind word and no number, and takes no number from its
 siblings, so the lemma after the lines that open section 2 is still 2.1.
-Text at the top level — an abstract, an introduction — is not on the contents,
-which list only the entries: it is read on the top level written out, where
-any row of the contents leads, and a link to it goes there too. It is
-not in the contents, the pager or the outline sidebar, and a `[slug]` link to
+Text at the top level — an abstract, an introduction — is read at the top of
+the document, between the chapters, and a link to it goes there. It is not
+in the contents, the pager or the outline sidebar, and a `[slug]` link to
 it keeps its title rather than reading "Section 2.1".
 
 ### Proofs
@@ -560,6 +565,7 @@ the pages knowing about it.
 | `app.js` | data loading, hash router, the top bar's search box, and the DOM helpers handed to the pages in the `app` context object |
 | `graph.js` | ELK compound layout plus hand-written SVG rendering, pan/zoom, filters, side panel |
 | `object.js` | the object page |
+| `contents.js` | the table of contents: the document as a tree that unfolds, each row a link into the document |
 | `document.js` | the linear document, one page per entry of the collapse order |
 | `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |
 | `search.js` | the search page, after the Stacks project's: the form, the results as the document's tree, the pages, results per page and the query tips |

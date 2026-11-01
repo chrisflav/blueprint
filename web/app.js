@@ -18,6 +18,7 @@ import { introOf, wantsIntro, showIntro, replayIntro, earlyIntro, introDecided, 
 const PAGES = {
   graph: () => import('./graph.js'),
   object: () => import('./object.js'),
+  contents: () => import('./contents.js'),
   document: () => import('./document.js'),
   progress: () => import('./progress.js'),
   search: () => import('./search.js'),
@@ -369,15 +370,13 @@ function levelHref(outline, kind, id) {
 }
 
 /**
- * The document's page for the level `id` is on, scrolled to it: the top
- * level written out (`depth=1`, since the top page without a depth is the
- * contents) when it is at the top.  null when the document leaves it out.
+ * The document's page for the level `id` is on, scrolled to it: the top of
+ * the document when it is at the top.  null when the document leaves it out.
  */
 function documentLevelHref(outline, kind, id) {
   const page = model.documentLevelOf(outline, id);
   if (page === undefined) return null;
   const q = new URLSearchParams({ collapse: kind });
-  if (page === null) q.set('depth', '1');
   q.set('focus', id);
   return buildHash('document', page, q);
 }
@@ -653,7 +652,6 @@ const app = {
   /** How a reference to `id` reads here: {word, number, href}, or null. */
   referenceFor: pageReferences,
   documentLevelHref,
-  /** The document's "Lean" mark for an object, or null when it has no Lean names. */
   /** A button that opens the Export PDF dialog, defaulting to the part on screen. */
   exportButton: (label) => exportButton(app, label),
   /**
@@ -1253,7 +1251,7 @@ function prefetchTasks() {
     run: () => prefetchModule(`./${view}.js`),
   });
   return [
-    page('graph'), page('document'), page('object'),
+    page('graph'), page('document'), page('contents'), page('object'),
     {
       name: 'elk',
       big: true,

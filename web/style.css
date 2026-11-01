@@ -1102,25 +1102,67 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .doc-entry .head a.doc-object { font-size: .78rem; font-weight: 400; color: var(--muted); white-space: nowrap; }
 .doc-entry .head a.doc-object:hover { color: var(--accent); }
 
-/* The top of the document: its contents, a row per top-level entry, each a
-   link to the entry's page. */
-.doc-contents { list-style: none; margin: .4rem 0 1.6rem; padding: 0; border-top: 1px solid var(--border); }
-.doc-contents > li { border-bottom: 1px solid var(--border); }
-.doc-contents > li > a {
-  display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) minmax(0, 14rem);
-  gap: .9rem; align-items: baseline; padding: .65rem .5rem; color: var(--fg);
+/* The table of contents, a page of its own (contents.js): the document as a
+   tree, a row per entry, a link to where it is read, and beside a row with
+   entries below it a triangle that unfolds them. */
+.contents-tree, .contents-tree ol { list-style: none; margin: 0; padding: 0; }
+.contents-tree { margin: .4rem 0 1.6rem; border-top: 1px solid var(--border); }
+.contents-tree > li { border-bottom: 1px solid var(--border); }
+.contents-tree ol { margin: 0 0 .4rem 1.05rem; padding-left: .6rem; border-left: 1px solid var(--border); }
+.contents-row { display: flex; align-items: baseline; gap: .15rem; }
+.contents-toggle {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
 }
-.doc-contents > li > a:hover { background: var(--panel-2); text-decoration: none; }
-.doc-contents .num { color: var(--faint); font-family: var(--mono); font-size: .85em; text-align: right; }
-.doc-contents-title { font-size: 1.08rem; color: var(--accent); }
-.doc-contents-title .kindword { font-weight: 700; }
-.doc-contents-meta { justify-self: end; width: 100%; display: flex; justify-content: flex-end; }
-.doc-contents-meta .bar-row { width: 100%; }
-.doc-contents-meta:empty { display: none; }
-.doc-contents > li.dup { opacity: .75; }
+.contents-toggle:hover { color: var(--fg); background: var(--panel-2); }
+.contents-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The triangle: pointing right when folded, down when unfolded. */
+.contents-toggle::before {
+  content: "";
+  border-style: solid;
+  border-width: .3rem 0 .3rem .45rem;
+  border-color: transparent transparent transparent currentColor;
+  transition: transform .15s ease;
+}
+.contents-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+.contents-toggle.none { cursor: default; }
+.contents-toggle.none::before { content: none; }
+.contents-link {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) minmax(0, 12rem);
+  gap: .6rem;
+  align-items: baseline;
+  padding: .45rem .5rem .45rem .2rem;
+  color: var(--fg);
+  border-radius: var(--radius);
+}
+.contents-tree > li > .contents-row > .contents-link { padding-top: .65rem; padding-bottom: .65rem; }
+.contents-link:hover { background: var(--panel-2); text-decoration: none; }
+.contents-link .num { color: var(--faint); font-family: var(--mono); font-size: .85em; }
+.contents-title { color: var(--accent); }
+.contents-tree > li > .contents-row .contents-title { font-size: 1.08rem; }
+.contents-title .kindword { font-weight: 700; color: var(--fg); }
+.contents-meta { justify-self: end; width: 100%; display: flex; justify-content: flex-end; }
+.contents-meta .bar-row { width: 100%; }
+.contents-meta:empty { display: none; }
+.contents-tree li.dup > .contents-row { opacity: .75; }
 @media (max-width: 640px) {
-  .doc-contents > li > a { grid-template-columns: 2.2rem minmax(0, 1fr); }
-  .doc-contents-meta { grid-column: 2; justify-content: flex-start; }
+  .contents-link { grid-template-columns: max-content minmax(0, 1fr); gap: .5rem; }
+  .contents-meta { grid-column: 2; justify-content: flex-start; }
+  .contents-tree ol { margin-left: .8rem; padding-left: .4rem; }
 }
 
 /* -------------------------------------------------------- progress page */

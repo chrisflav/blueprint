@@ -16,11 +16,9 @@
 // A page has breadcrumbs up its chain, its previous and next siblings, and a
 // contents list of what it shows.
 //
-// The top of the document is its contents: a row per top-level entry, each
-// leading to its level, and nothing written out — not even the text at the
-// top level (an abstract, an introduction), which is read on the top level
-// written out, where a row leads.  A `depth=` on the top page writes the top
-// levels out instead.
+// The top of the document is the top level written out, its parts and the
+// text between them (an abstract, an introduction).  The table of contents of
+// the whole document is a page of its own, `#/contents` (contents.js).
 //
 // `?focus=<id>` scrolls to an entry.  A focus the page does not show — every
 // link written before the split, `#/document?focus=x` — is redirected to the
@@ -76,24 +74,19 @@ export function render(root, app) {
   const focus = app.route.params.get('focus');
   const href = (page, target) => docHref(kind, levels, page, target);
   // The page that writes out the level an entry is on (`documentLevelOf`),
-  // scrolled to it: its parent's page, or the top level written out, which
-  // says its depth (the top page without one is the contents).  Every link to
-  // an entry leads there: its heading, a reference to it, the contents.
+  // scrolled to it: its parent's page, or the top of the document.  Every
+  // link to an entry leads there: its heading, a reference to it, the
+  // contents.
   const levelPage = (id) => M.documentLevelOf(outline, id);
-  const levelHref = (id) => (levelPage(id) === null
-    ? '#/document?' + docQuery(kind, levels, id, true).toString()
-    : href(levelPage(id), id));
-  // The top page with no `depth=` is the contents, which write out no level.
-  const contents = pageId === null && !app.route.params.has('depth');
-  const shown = contents ? 0 : levels;
+  const levelHref = (id) => href(levelPage(id), id);
+  const shown = levels;
 
   // An entry this page does not write out is read somewhere else: go to its
   // level.
   if (focus && !M.documentPageShows(outline, pageId, shown, focus)) {
     const home = M.documentLevelOf(outline, focus);
     if (home !== undefined) {
-      // Read at the top level: written out, since the contents write nothing.
-      app.go('document', home, docQuery(kind, levels, focus, home === null), { replace: true });
+      app.go('document', home, docQuery(kind, levels, focus), { replace: true });
       return;
     }
   }
@@ -132,12 +125,11 @@ export function render(root, app) {
   // entry, which is set as the page's title.
   const base = pageEntry ? pageEntry.depth + 1 : 0;
 
-  // The contents need no sidebar: they are one.
-  const page = el(contents ? 'div.page' : 'div.page.wide');
+  const page = el('div.page.wide');
   const body = el('div');
   const flow = el('div.doc-flow');
   const toc = el('nav.toc');
-  page.appendChild(contents ? body : el('div.doc-layout', toc, body));
+  page.appendChild(el('div.doc-layout', toc, body));
   root.appendChild(page);
 
   // A reference or a heading whose level is this page jumps to the entry
@@ -175,28 +167,22 @@ export function render(root, app) {
     ' order, showing ',
     el('select', {
       title: 'how many levels below this page are written out on it',
-      // On the top page no `depth=` is the contents, so a depth is always
-      // said there; elsewhere the default goes without saying.
-      onchange: (e) => app.setParams({
-        depth: e.target.value === 'contents' ? null
-          : pageId !== null && e.target.value === String(DEFAULT_LEVELS) ? null : e.target.value,
-      }),
+      // The default goes without saying.
+      onchange: (e) => app.setParams({ depth: e.target.value === String(DEFAULT_LEVELS) ? null : e.target.value }),
     },
-    pageId === null ? el('option', { value: 'contents', selected: contents }, 'contents') : null,
     // A depth typed into the URL is offered too, so the control shows it.
     ...[...new Set([...LEVEL_CHOICES, levels])].filter(Number.isFinite).sort((a, b) => a - b)
-      .map((n) => el('option', { value: String(n), selected: !contents && n === levels }, String(n))),
-    el('option', { value: 'all', selected: !contents && levels === Infinity }, 'all')),
-    contents ? ' only.' : levels === 1 ? ' level.' : ' levels.',
-    // The contents set out no proofs to fold.
-    contents ? null : [' ', app.proofToggle()],
+      .map((n) => el('option', { value: String(n), selected: n === levels }, String(n))),
+    el('option', { value: 'all', selected: levels === Infinity }, 'all')),
+    levels === 1 ? ' level.' : ' levels.',
+    ' ', app.proofToggle(),
     // This page's part, as a PDF: the dialog opens on it.
     app.exportButton ? [' ', app.exportButton('Export PDF')] : null));
   const pagerTop = pager(app, outline, pageEntry, href);
   if (pagerTop) body.appendChild(pagerTop);
   body.appendChild(flow);
 
-  if (!(contents ? outline.roots : entries).length) {
+  if (!entries.length) {
     body.appendChild(el('p.empty', 'Nothing to read: no object carries prose.'));
     return;
   }
@@ -307,21 +293,6 @@ export function render(root, app) {
     flow.appendChild(section);
   };
 
-  // --------------------------------------------------------------- contents
-  //
-  // The top of the document: a row per top-level entry, each leading to its
-  // level.  The text at the top level is not here but on that level, read
-  // where it stands once the reader goes in.
-  if (contents) {
-    flow.appendChild(el('h2.toc-head', 'Contents'));
-    const list = el('ol.doc-contents');
-    for (const entry of outline.roots) {
-      if (!entry.text) list.appendChild(contentsRow(app, outline, entry, levelHref));
-    }
-    flow.appendChild(list);
-    return;
-  }
-
   let tocShown = false;
   const showToc = () => {
     if (tocShown) return;
@@ -393,32 +364,6 @@ function land(target) {
   requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
 }
 
-/**
- * One row of the contents: the entry's number and title, its progress (or,
- * for a statement, its status), all a link to its level: the top level
- * written out, scrolled to it.  An entry repeated at the top level leads to
- * where it is written out.
- */
-function contentsRow(app, outline, entry, levelHref) {
-  const { el } = app;
-  const m = app.model;
-  const o = entry.object;
-  const isSection = M.isSectionKind(o.kind);
-  const prog = M.progressMixOf(m, outline.kind, o.id);
-  const status = M.badgeStatusOf(m, o.id);
-  const row = el('li', { class: 'kind-' + o.kind + (entry.duplicate ? ' dup' : '') },
-    el('a', { href: levelHref(o.id) },
-      el('span.num', entry.number),
-      el('span.doc-contents-title',
-        isSection ? null : el('span.kindword', M.kindWord(o.kind), ' '),
-        M.titleOf(o)),
-      el('span.doc-contents-meta',
-        prog && prog.total > 1 ? app.progressBar(prog)
-          : status === null ? null : app.statusBadge(status))));
-  app.renderMath(row); // titles carry maths too
-  return row;
-}
-
 /** Mark the entry a link led to, briefly. */
 function flash(target) {
   target.classList.remove('flash');
@@ -428,10 +373,10 @@ function flash(target) {
 }
 
 /** `?collapse=…&depth=…&focus=…` for a document route; the depth only when
- *  it is not the default, or when `sayDepth`. */
-function docQuery(kind, levels, focus, sayDepth = false) {
+ *  it is not the default. */
+function docQuery(kind, levels, focus) {
   const q = new URLSearchParams({ collapse: kind });
-  if (sayDepth || levels !== DEFAULT_LEVELS) q.set('depth', levels === Infinity ? 'all' : String(levels));
+  if (levels !== DEFAULT_LEVELS) q.set('depth', levels === Infinity ? 'all' : String(levels));
   if (focus) q.set('focus', focus);
   return q;
 }
