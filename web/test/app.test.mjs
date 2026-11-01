@@ -1002,15 +1002,34 @@ await check('the side panel reads prose first and folds the long listings', asyn
   ok(at(/^Prose$/) >= 0, `no prose in ${JSON.stringify(names)}`);
   ok(at(/^Incident objects \(6\)$/) > at(/^Prose$/), `incident objects before the prose: ${JSON.stringify(names)}`);
   ok(at(/^Hidden inside \(3\)$/) > at(/^Incident objects/), `hidden inside before the incidents: ${JSON.stringify(names)}`);
-  const folds = root.querySelectorAll('aside.side section.fold details');
-  eq(folds.length, 2, 'the two listings are disclosures');
-  for (const d of folds) ok(!d.hasAttribute('open'), `${d.querySelector('summary').textContent} starts open`);
-  eq(folds[0].querySelectorAll('ul.objlist li').length, 6, 'the incident rows are there, only shut');
+  const folds = root.querySelectorAll('aside.side section.fold');
+  eq(folds.map((f) => f.getAttribute('data-fold')).join(' '), 'prose incident hidden', 'the prose and the two listings are disclosures');
+  const [prose, ...listings] = folds.map((f) => f.querySelector('details'));
+  ok(prose.hasAttribute('open'), 'the prose starts shut');
+  ok(prose.querySelector('.excerpt.body-prose'), 'the prose is inside its disclosure');
+  for (const d of listings) ok(!d.hasAttribute('open'), `${d.querySelector('summary').textContent} starts open`);
+  eq(listings[0].querySelectorAll('ul.objlist li').length, 6, 'the incident rows are there, only shut');
+});
+
+await check('the side panel heads with the title and the object page link, and no id', async () => {
+  await go('#/graph?sel=sec-foundations');
+  const head = root.querySelector('aside.side .side-head');
+  ok(head, 'no heading row');
+  eq(head.getAttribute('data-id'), 'sec-foundations', 'the row names the object it is for');
+  eq(head.querySelector('h2').textContent, modelMod.titleOf(app.model.byId.get('sec-foundations')), 'the title');
+  const a = head.querySelector('a.side-open');
+  ok(a, 'no object page link beside the title');
+  eq(a.getAttribute('href'), '#/object/sec-foundations', 'it leads to the object page');
+  eq(root.querySelectorAll('aside.side a').filter((x) => /Open object page/.test(x.textContent)).length, 1,
+    'the link is there more than once');
+  eq(root.querySelector('aside.side .obj-id'), null, 'the id is still shown under the title');
+  const top = [head, root.querySelector('aside.side .meta')].map((n) => n.textContent).join(' ');
+  ok(!top.includes('sec-foundations'), `the id is written at the top of the panel: ${JSON.stringify(top)}`);
 });
 
 await check('an opened listing stays open while the panel is rebuilt', async () => {
   await go('#/graph?sel=sec-foundations');
-  const incident = () => root.querySelector('aside.side section.fold details');
+  const incident = () => root.querySelector('aside.side section.fold[data-fold="incident"] details');
   const d = incident();
   fire(d, 'toggle', { target: { open: true } });
   // Another route change rebuilds the panel; the listing is open on the next
@@ -1020,6 +1039,14 @@ await check('an opened listing stays open while the panel is rebuilt', async () 
   fire(incident(), 'toggle', { target: { open: false } });
   await go('#/graph?sel=sec-foundations');
   ok(!incident().hasAttribute('open'), 'the incident listing stayed open after it was shut');
+  // The prose, which starts open, stays folded once the reader folds it.
+  const prose = () => root.querySelector('aside.side section.fold[data-fold="prose"] details');
+  fire(prose(), 'toggle', { target: { open: false } });
+  await go('#/graph?sel=sec-main');
+  ok(!prose().hasAttribute('open'), 'the folded prose opened again on the next selection');
+  fire(prose(), 'toggle', { target: { open: true } });
+  await go('#/graph?sel=sec-foundations');
+  ok(prose().hasAttribute('open'), 'the prose stayed folded after it was opened');
 });
 
 // ---------------------------------------------------------------------------
