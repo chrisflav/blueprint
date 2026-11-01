@@ -271,7 +271,12 @@ title, exact Lean name, id, title, part of a Lean name, body; within a tier
 statements before edges and shorter ids first), over a lowercase index built
 once per snapshot. Two places use it:
 
-* the graph's highlight (`q=`), which dims every node that does not match;
+* the graph's highlight (`q=`). A node that matches itself is outlined in
+  the highlight colour, with a glow; a node with matches hidden inside it (a
+  collapsed object's contents, a statement's proof) carries their count in a
+  badge on its top left corner (`model.hiddenHits`), so a node that does both
+  shows both. Every other node is dimmed. The legend explains the two marks
+  while a search is on;
 * the progress listing's search box, combined with its kind, status and
   "under" filters (`model.filterListing`).
 

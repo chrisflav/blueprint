@@ -1727,6 +1727,26 @@ export function searchIds(model, query) {
   return ids;
 }
 
+/**
+ * The visible objects of a view that hide matches of a search, each with how
+ * many: a match hidden inside a collapsed object counts for that object, and
+ * a proof for the statement it is drawn with (`view.rep`).  `ids` is what
+ * `searchIds` found.
+ *
+ * Arcs are left out.  An arc is drawn between its ends rather than inside
+ * anything, and a `uses/a/b` edge matches by id whenever `a` or `b` does, so
+ * counting edges would only repeat the count of their ends.
+ */
+export function hiddenHits(view, ids) {
+  const out = new Map();
+  for (const id of ids) {
+    const o = view.model.byId.get(id);
+    if (!o || o.boundary.length > 1) continue;
+    for (const r of view.rep(id)) if (r !== id) out.set(r, (out.get(r) || 0) + 1);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // 6b. The search page's full-text search, after the Stacks project's
 // ---------------------------------------------------------------------------
