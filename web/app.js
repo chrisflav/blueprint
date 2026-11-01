@@ -6,7 +6,7 @@
 
 import * as model from './model.js';
 import { setupPreviews, closePreviews } from './preview.js';
-import { setupExport, exportButton, closeExport } from './pdf.js';
+import { setupExport, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
 import { setupPrefetch, pausePrefetch, resumePrefetch, prefetchModule } from './prefetch.js';
 import { introOf, wantsIntro, showIntro, replayIntro, earlyIntro, introDecided, proseReady } from './intro.js';
@@ -652,8 +652,6 @@ const app = {
   /** How a reference to `id` reads here: {word, number, href}, or null. */
   referenceFor: pageReferences,
   documentLevelHref,
-  /** A button that opens the Export PDF dialog, defaulting to the part on screen. */
-  exportButton: (label) => exportButton(app, label),
   /**
    * SHA-256 of the bytes of the snapshot on screen (a Promise), which its
    * prepared PDFs are filed under.  Worked out the first time it is asked

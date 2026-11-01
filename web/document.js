@@ -47,8 +47,6 @@ const FIRST_CHUNK = 40;
 const CHUNK = 120;
 // Levels written out below a page when the route does not say.
 const DEFAULT_LEVELS = 1;
-// The choices offered by the depth control, besides "all".
-const LEVEL_CHOICES = [1, 2, 3];
 
 // Guards the chunked append and the observer against a route change landing
 // mid-build.
@@ -155,29 +153,6 @@ export function render(root, app) {
   const crumbs = breadcrumbs(app, outline, pageEntry, href);
   if (crumbs) body.appendChild(crumbs);
   if (!pageEntry) body.appendChild(el('h1', m.project.title || m.project.name || 'Blueprint'));
-  body.appendChild(el('p.muted.doc-controls',
-    'Reading order along the ',
-    m.collapseKinds.length > 1
-      ? el('select', {
-          // The other order has other pages: open the current entry's page
-          // there if it has one, and the top of the document otherwise.
-          onchange: (e) => app.go('document', null, docQuery(e.target.value, levels, pageId)),
-        }, ...m.collapseKinds.map((k) => el('option', { value: k, selected: k === kind }, k)))
-      : el('code', kind),
-    ' order, showing ',
-    el('select', {
-      title: 'how many levels below this page are written out on it',
-      // The default goes without saying.
-      onchange: (e) => app.setParams({ depth: e.target.value === String(DEFAULT_LEVELS) ? null : e.target.value }),
-    },
-    // A depth typed into the URL is offered too, so the control shows it.
-    ...[...new Set([...LEVEL_CHOICES, levels])].filter(Number.isFinite).sort((a, b) => a - b)
-      .map((n) => el('option', { value: String(n), selected: n === levels }, String(n))),
-    el('option', { value: 'all', selected: levels === Infinity }, 'all')),
-    levels === 1 ? ' level.' : ' levels.',
-    ' ', app.proofToggle(),
-    // This page's part, as a PDF: the dialog opens on it.
-    app.exportButton ? [' ', app.exportButton('Export PDF')] : null));
   const pagerTop = pager(app, outline, pageEntry, href);
   if (pagerTop) body.appendChild(pagerTop);
   body.appendChild(flow);

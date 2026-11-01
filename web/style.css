@@ -267,21 +267,12 @@ label.chk input { margin: 0; }
   border-radius: var(--radius);
 }
 .export-pdf:hover { background: color-mix(in srgb, var(--accent) 86%, var(--fg)); }
-.export-pdf:focus-visible, .export-inline:focus-visible, .export-dialog :focus-visible {
+.export-pdf:focus-visible, .export-dialog :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 .export-pdf:disabled { opacity: .55; }
 .export-icon { flex: none; }
-/* The same action on a document page, next to its controls. */
-.export-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: .35em;
-  font-weight: 560;
-  color: var(--accent);
-  border-color: var(--accent);
-}
 
 /* The search box opens the second row: the Stacks project's quick search, a
    magnifier inside the box and no list under it; Enter opens the search page
@@ -1638,7 +1629,6 @@ button.primary:hover { background: var(--accent); filter: brightness(1.08); }
 }
 
 /* Proofs fold under their "Proof." heading. */
-.doc-controls .proof-toggle { font-size: .82rem; padding: .15em .55em; margin-left: .4rem; }
 details.proof > summary {
   cursor: pointer;
   list-style: none;

@@ -796,28 +796,23 @@ async function graphChecks(d, f) {
     };
   });
 
-  // --- collapse kind select ------------------------------------------------
-  await check(d, 'graph/collapse-kind-select', async () => {
+  // --- collapse kind ------------------------------------------------------
+  // The toolbar offers no choice of collapse order; a link still says one.
+  await check(d, 'graph/collapse-kind-from-the-link', async () => {
     if (f.m.collapseKinds.length < 2) return { skip: true, evidence: 'only one collapse kind in the schema' };
     const other = f.m.collapseKinds.find((k) => k !== f.kind);
-    const set = (v) => d.js(`
-      var s = document.querySelector('.toolbar select');
-      if (!s) return null;
-      s.value = ${j(v)};
-      s.dispatchEvent(new Event('change', { bubbles: true }));
-      return s.value;
-    `);
-    await set(other);
+    const select = await d.js(`return document.querySelectorAll('.toolbar select').length`);
+    await gotoGraph(d, `collapse=${encodeURIComponent(other)}`);
     await sleep(400);
     const s1 = await waitFor(d, GRAPH_IDLE, { timeout: 120000, interval: 300, label: 'layout after kind switch' });
     const c1 = await d.js(GRAPH_COUNTS);
-    await set(f.kind);
+    await gotoGraph(d, `collapse=${encodeURIComponent(f.kind)}`);
     await sleep(400);
     const s2 = await waitFor(d, GRAPH_IDLE, { timeout: 120000, interval: 300, label: 'layout back' });
     const c2 = await d.js(GRAPH_COUNTS);
     return {
-      ok: s1.includes(other) && s2.includes(f.kind) && !c1.error && !c2.error,
-      evidence: `${f.kind}->${other}: ${c1.nodes} nodes, status=${j(s1)}; back: ${c2.nodes} nodes, status=${j(s2)}`,
+      ok: select === 0 && s1.includes(other) && s2.includes(f.kind) && !c1.error && !c2.error,
+      evidence: `${select} select in the toolbar (want 0); ${f.kind}->${other}: ${c1.nodes} nodes, status=${j(s1)}; back: ${c2.nodes} nodes, status=${j(s2)}`,
     };
   });
 
@@ -1732,15 +1727,10 @@ async function pageChecks(d, f) {
     return { ok: s.entries === out.roots.length, evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (top level ${out.roots.length})` };
   });
 
-  await check(d, 'document/depth-control-inlines-a-level', async () => {
+  // No control says the depth any more; a link still does.
+  await check(d, 'document/depth-2-inlines-a-level', async () => {
     const want = M.documentPageEntries(out, null, 2).length;
-    await d.js(`
-      var s = document.querySelectorAll('.doc-controls select');
-      s = s[s.length - 1];
-      s.value = '2';
-      s.dispatchEvent(new Event('change', { bubbles: true }));
-      return s.value;
-    `);
+    await route(d, '#/document?depth=2');
     const n = await waitFor(d, `var n = document.querySelectorAll('.doc-entry').length; return n >= ${want} ? n : 0;`,
       { timeout: 30000, label: `${want} entries at depth 2` }).catch(() => null);
     const s = await d.js(PAGE_STATE);

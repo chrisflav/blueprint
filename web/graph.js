@@ -309,13 +309,8 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => writeState(app, { expand: [] }) }, 'Collapse all')));
   const filters = bar.appendChild(el('div.tb-filters'));
 
-  // collapse kind
-  const kindSel = el('select', {
-    title: 'collapse kind driving the view',
-    onchange: (e) => writeState(app, { collapse: e.target.value, expand: [], sel: null }),
-  }, ...m.collapseKinds.map((k) => el('option', { value: k, selected: k === st.collapse }, k)));
-  filters.appendChild(el('div.group', el('span.lbl', 'collapse'), kindSel));
-
+  // The collapse order has no control: the snapshot's default, or the one
+  // the link says (`collapse=`).
   const order = M.collapseOrder(m, st.collapse);
   // Expanding everything is the one action that can put thousands of nodes on
   // screen, so the button says so rather than springing it on the reader.
