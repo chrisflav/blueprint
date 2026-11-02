@@ -468,7 +468,9 @@ themselves, so the default fetches none. A theme may also ask for a sidebar:
 Outline sets `data-sidebar="outline"` on `<html>`, and the document marks its
 sidebar `toc-outline`, which `themes/outline.css` draws as an outline — the
 same contents one level at a time, each entry under a hairline, a blue bar
-beside the chain and the entry opened. `?theme=<id>` in the page's URL picks a
+beside the chain and the entry opened. Its page keeps the default's margins
+(the sidebar at the left, the text across the rest), not PreTeXt's narrow
+column in the middle. `?theme=<id>` in the page's URL picks a
 style for a shared link; otherwise the reader's last pick is kept in
 `localStorage` (`blueprint.theme`), and a reader who has not picked one sees
 the project's style, `project.theme` (`[site] theme` in `blueprint.toml`), or
