@@ -189,11 +189,12 @@ function mount(root, app) {
   stage.appendChild(back);
 
   // `folded`: the side panel's listings the reader has opened (see `fold`).
-  // `toolbarOpen`, `sideShown`: the reader's choices (`shownPref`).
+  // `toolbarOpen`, `sideShown`, `statsShown`: the reader's choices (`shownPref`).
   ui = { page, toolbar, stage, svg, layer, side, back, transform: { x: 40, y: 40, k: 1 }, fitted: false,
     folded: new Map(), entered: null, legend: key, legendProgress: app.showProgress,
-    toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY) };
+    toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY), statsShown: shownPref(STATS_KEY) };
   page.classList.toggle('side-hidden', !ui.sideShown);
+  stage.classList.toggle('stats-hidden', !ui.statsShown);
   installPanZoom(app);
   prevPos = new Map();
   lastSignature = null;
@@ -267,11 +268,13 @@ function legend(app, progress) {
 // ---------------------------------------------------------------------------
 
 // The graph opens on the graph alone: of the toolbar only Collapse all, the
-// search and the zoom, the rest folded behind the Filters button, and no side
-// panel beside it.  Whether the reader has unfolded either is theirs to keep,
-// in localStorage, as the top bar keeps the progress (app.js).
+// search and the zoom, the rest folded behind the Filters button, no side
+// panel beside it and no statistics under it.  Whether the reader has shown
+// any of them is theirs to keep, in localStorage, as the top bar keeps the
+// progress (app.js).
 const TOOLS_KEY = 'blueprint.graph.tools';
 const SIDE_KEY = 'blueprint.graph.side';
+const STATS_KEY = 'blueprint.graph.stats';
 
 /** Whether the reader asked for this to be shown: no, unless they did. */
 function shownPref(key) {
@@ -392,10 +395,34 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => fitToView(app) , title: 'fit the graph into the viewport' }, 'Fit'),
     el('button', { onclick: () => zoomBy(app, 1.25) }, '+'),
     el('button', { onclick: () => zoomBy(app, 1 / 1.25) }, '\u2212')));
+  bar.appendChild(statsToggle(app));
   // Replay intro is the graph's alone, where the intro lands (app.js).
   const intro = app.introButton ? app.introButton() : null;
   if (intro) bar.appendChild(intro);
   bar.appendChild(sideToggle(app));
+}
+
+/**
+ * Show or hide the statistics at the foot of the stage (nodes, links, what is
+ * hidden, what is expanded).  While a layout runs the line shows whatever
+ * was chosen, since it is then the only sign of how much is being laid out.
+ */
+function statsToggle(app) {
+  const { el } = app;
+  const label = () => (ui.statsShown ? 'Hide statistics' : 'Show statistics');
+  const button = el('button.tb-stats', {
+    type: 'button',
+    'aria-pressed': ui.statsShown ? 'true' : 'false',
+    title: 'the counts of what is drawn, at the foot of the graph',
+    onclick: () => {
+      ui.statsShown = !ui.statsShown;
+      savePref(STATS_KEY, ui.statsShown);
+      ui.stage.classList.toggle('stats-hidden', !ui.statsShown);
+      button.setAttribute('aria-pressed', ui.statsShown ? 'true' : 'false');
+      button.textContent = label();
+    },
+  }, label());
+  return button;
 }
 
 /** Show or hide the side panel; on a phone it is a sheet of its own and this is not offered. */

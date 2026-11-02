@@ -3039,8 +3039,9 @@ async function runBrowser(name, f) {
       };
     });
     // The graph starts bare too (graph.js, `renderToolbar`): of the toolbar
-    // only Filters, Collapse all, the search, the zoom and Show sidebar, and
-    // the stage across the whole page.
+    // only Filters, Collapse all, the search, the zoom, Show statistics and
+    // Show sidebar, the stage across the whole page, and no statistics under
+    // the graph once it is laid out.
     if (SECTIONS.has('boot')) await check(d, 'boot/graph-starts-bare', async () => {
       await d.open(`${ORIGIN}/#/graph`);
       await waitFor(d, `return !!document.querySelector('.toolbar .tb-zoom');`, { timeout: 60000, label: 'graph toolbar' });
@@ -3054,17 +3055,21 @@ async function runBrowser(name, f) {
         return { visible: visible, side: shown(document.querySelector('aside.side')),
                  stage: Math.round(stage.width), page: Math.round(page.width) };
       `);
-      const want = ['Filters', 'Collapse all', 'input:search', 'Fit', '+', '\u2212', 'Show sidebar'];
+      await waitFor(d, GRAPH_IDLE, { timeout: 90000, label: 'graph layout' });
+      const stats = await d.js(`var s = document.getElementById('graph-status');
+        return { shown: !!s && s.getClientRects().length > 0, text: s ? s.textContent : null };`);
+      const want = ['Filters', 'Collapse all', 'input:search', 'Fit', '+', '\u2212', 'Show statistics', 'Show sidebar'];
       return {
-        ok: j(s.visible) === j(want) && !s.side && s.stage === s.page,
-        evidence: `toolbar shows ${j(s.visible)}; side panel shown=${s.side}; stage ${s.stage}px of ${s.page}px`,
+        ok: j(s.visible) === j(want) && !s.side && s.stage === s.page && !stats.shown && !!stats.text,
+        evidence: `toolbar shows ${j(s.visible)}; side panel shown=${s.side}; stage ${s.stage}px of ${s.page}px; `
+          + `statistics shown=${stats.shown} (${j(stats.text)})`,
       };
     });
-    // Everything after covers the progress, the filters and the side panel
-    // too: show them, as a reader would.
+    // Everything after covers the progress, the filters, the side panel and
+    // the statistics too: show them, as a reader would.
     await d.open(`${ORIGIN}/#/progress`);
     await firstPaint();
-    await d.js(`['blueprint.progress', 'blueprint.graph.tools', 'blueprint.graph.side']
+    await d.js(`['blueprint.progress', 'blueprint.graph.tools', 'blueprint.graph.side', 'blueprint.graph.stats']
       .forEach(function (k) { localStorage.setItem(k, 'shown'); }); return true;`);
     await d.reload();
     await firstPaint();

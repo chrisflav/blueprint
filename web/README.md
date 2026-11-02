@@ -235,11 +235,15 @@ highlight search, Fit, `+` and `−` show; the edge, *hide implied* and
 status filters fold behind *Filters*, which
 carries a dot while anything is filtered out. The side panel is hidden too,
 and the stage takes its column; *Show sidebar* at the right end of the
-toolbar brings it back, and *Hide sidebar* hides it again. *Replay intro*,
-when the project has an intro, is beside it, and only on the graph, where
-the intro lands. Both choices are
-the reader's, kept in `localStorage` (`blueprint.graph.tools` and
-`blueprint.graph.side`, `shown` or `hidden`; no choice is hidden).
+toolbar brings it back, and *Hide sidebar* hides it again. So are the
+statistics at the foot of the stage (how many nodes and links, what is
+hidden, what is expanded): *Show statistics*, beside it, shows them, and
+*Hide statistics* hides them again; while a layout runs the line shows
+anyway, to say how much is being laid out. *Replay intro*, when the project
+has an intro, is between them, and only on the graph, where the intro lands.
+The three choices are the reader's, kept in `localStorage`
+(`blueprint.graph.tools`, `blueprint.graph.side` and `blueprint.graph.stats`,
+`shown` or `hidden`; no choice is hidden).
 
 The side panel of a selected node heads with its title and, beside it, *Open
 in document →*: the document's page with the node's level, scrolled to it,

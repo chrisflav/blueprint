@@ -1625,18 +1625,19 @@ await check('`/` focuses the top bar\'s search, and on the graph the graph\'s ow
   eq(focused.join(', '), 'top bar, graph', 'what took the focus');
 });
 
-await check('the graph opens with its toolbar folded and no sidebar, until the reader asks', async () => {
+await check('the graph opens with its toolbar folded, no sidebar and no statistics, until the reader asks', async () => {
   const store = new Map();
   global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => { store.set(k, String(v)); } };
   const bar = () => root.querySelector('.toolbar');
   const page = () => root.querySelector('.graph-page');
+  const stage = () => root.querySelector('.graph-stage');
   const button = (sel) => bar().querySelector(sel);
   const mountGraph = async () => { await go('#/progress'); await go('#/graph?collapse=refines'); };
   try {
     await mountGraph();
     // What stays: Collapse all, the search and the zoom, outside the fold.
     const kept = [...bar().childNodes].map((n) => n.className);
-    for (const c of ['tb-toggle', 'group tb-collapse', 'group tb-search', 'group tb-zoom', 'tb-side']) {
+    for (const c of ['tb-toggle', 'group tb-collapse', 'group tb-search', 'group tb-zoom', 'tb-stats', 'tb-side']) {
       ok(kept.includes(c), `${c} is not one of the toolbar's own items: ${JSON.stringify(kept)}`);
     }
     eq(button('.tb-collapse button').textContent, 'Collapse all', 'Collapse all is kept');
@@ -1650,9 +1651,22 @@ await check('the graph opens with its toolbar folded and no sidebar, until the r
     eq(button('.tb-toggle').getAttribute('aria-expanded'), 'false', 'Filters says it is shut');
     ok(page().classList.contains('side-hidden'), 'the sidebar starts shown');
     eq(button('.tb-side').textContent, 'Show sidebar', 'the toolbar offers the sidebar');
+    ok(stage().classList.contains('stats-hidden'), 'the statistics start shown');
+    ok(root.querySelector('#graph-status').textContent.length > 0, 'and are not kept up to date meanwhile');
+    eq(button('.tb-stats').textContent, 'Show statistics', 'the toolbar offers the statistics');
+    const order = [...bar().childNodes].map((n) => n.className);
+    eq(order.indexOf('tb-side') - order.indexOf('tb-stats'), 1, `not beside Show sidebar: ${JSON.stringify(order)}`);
+    const css = fs.readFileSync(path.join(webDir, 'style.css'), 'utf8');
+    ok(/\.graph-stage\.stats-hidden:not\(\.laying-out\) \.graph-status \{ display: none; \}/.test(css),
+      'the statistics are not hidden, or hidden while a layout runs too');
 
     fire(button('.tb-toggle'), 'click');
     fire(button('.tb-side'), 'click');
+    fire(button('.tb-stats'), 'click');
+    ok(!stage().classList.contains('stats-hidden'), 'Show statistics did not show them');
+    eq(button('.tb-stats').textContent, 'Hide statistics', 'the button offers to hide them again');
+    eq(button('.tb-stats').getAttribute('aria-pressed'), 'true', 'and says they are shown');
+    eq(store.get('blueprint.graph.stats'), 'shown', 'the shown statistics are not remembered');
     ok(bar().classList.contains('open'), 'Filters did not unfold');
     ok(!page().classList.contains('side-hidden'), 'Show sidebar did not show it');
     eq(button('.tb-side').textContent, 'Hide sidebar', 'the button offers to hide it again');
@@ -1662,11 +1676,16 @@ await check('the graph opens with its toolbar folded and no sidebar, until the r
     // A redraw and a fresh graph page keep the reader's choice.
     await go('#/graph?collapse=refines&reduce=0');
     ok(bar().classList.contains('open') && !page().classList.contains('side-hidden'), 'lost on a redraw');
+    ok(!stage().classList.contains('stats-hidden'), 'the statistics lost on a redraw');
     await mountGraph();
     ok(bar().classList.contains('open') && !page().classList.contains('side-hidden'), 'lost on a fresh page');
+    ok(!stage().classList.contains('stats-hidden'), 'the statistics lost on a fresh page');
 
     fire(button('.tb-toggle'), 'click');
     fire(button('.tb-side'), 'click');
+    fire(button('.tb-stats'), 'click');
+    eq(store.get('blueprint.graph.stats'), 'hidden', 'hiding the statistics is not remembered');
+    ok(stage().classList.contains('stats-hidden'), 'the statistics did not hide again');
     eq(store.get('blueprint.graph.tools'), 'hidden', 'folding the filters is not remembered');
     eq(store.get('blueprint.graph.side'), 'hidden', 'hiding the sidebar is not remembered');
     ok(!bar().classList.contains('open') && page().classList.contains('side-hidden'), 'did not hide again');

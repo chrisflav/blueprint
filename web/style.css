@@ -739,6 +739,10 @@ table.grid tr:last-child td { border-bottom: 0; }
   pointer-events: none;
 }
 
+/* Hidden unless the reader shows the statistics (graph.js, `statsToggle`),
+   but never while a layout runs: then it says how much is being laid out. */
+.graph-stage.stats-hidden:not(.laying-out) .graph-status { display: none; }
+
 /* Layout gave up: said in the pane itself, not only in the status line. */
 .graph-error {
   position: absolute;
