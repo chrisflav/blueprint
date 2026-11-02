@@ -232,7 +232,14 @@ const document2 = {
   getElementById: (id) => registry.get(id) || documentEl.querySelector('#' + id) || null,
   querySelector: (s) => documentEl.querySelector(s),
   querySelectorAll: (s) => documentEl.querySelectorAll(s),
-  addEventListener() {},
+  // Kept, so a test can deliver an event to the page's document listeners
+  // (the top bar's `/`).
+  _listeners: new Map(),
+  addEventListener(t, fn) {
+    if (!this._listeners.has(t)) this._listeners.set(t, []);
+    this._listeners.get(t).push(fn);
+  },
+  dispatch(t, ev) { for (const fn of this._listeners.get(t) || []) fn(ev); },
   title: '',
   documentElement: documentEl,
   body: documentEl,

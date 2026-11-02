@@ -652,6 +652,7 @@ const app = {
   /** How a reference to `id` reads here: {word, number, href}, or null. */
   referenceFor: pageReferences,
   documentLevelHref,
+  introButton,
   /**
    * SHA-256 of the bytes of the snapshot on screen (a Promise), which its
    * prepared PDFs are filed under.  Worked out the first time it is asked
@@ -924,8 +925,13 @@ function progressToggle() {
   }, shown ? 'Hide progress' : 'Show progress');
 }
 
-/** See the project's intro again, on the landing page where it ends. */
+/**
+ * See the project's intro again, on the landing page where it ends.  In the
+ * graph's toolbar, beside Show sidebar (graph.js); null when the project has
+ * no intro.
+ */
 function introButton() {
+  if (!app.model || !introOf(app.model.project)) return null;
   return el('button.intro-replay', {
     type: 'button',
     title: 'Play the introduction again',
@@ -971,7 +977,6 @@ function updateChrome() {
 
   const aside = document.getElementById('topbar-aside');
   clear(aside);
-  if (app.model && introOf(app.model.project)) aside.appendChild(introButton());
   aside.appendChild(themeMenu());
   aside.appendChild(progressToggle());
   if (app.model && app.showProgress) {
@@ -1030,13 +1035,16 @@ function setupGlobalSearch() {
     input.blur();
   });
 
-  // `/` from anywhere that is not itself taking text.
+  // `/` from anywhere that is not itself taking text.  The graph has no such
+  // box in the top bar (style.css): there it is the graph's own search.
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented) return;
     if (takesText(ev.target)) return;
+    const box = (app.route && document.documentElement.getAttribute('data-view') === 'graph'
+      && document.querySelector('.toolbar .tb-search input')) || input;
     ev.preventDefault();
-    input.focus();
-    if (typeof input.select === 'function') input.select();
+    box.focus();
+    if (typeof box.select === 'function') box.select();
   });
 }
 
@@ -1111,6 +1119,9 @@ function render() {
     if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
   }
   const view = PAGES[app.route.view] ? app.route.view : 'graph';
+  // What the top bar shows depends on the page: the graph has its toolbar
+  // where the others have the search and Export PDF (style.css).
+  document.documentElement.setAttribute('data-view', view);
   const token = ++renderToken;
   // Nothing is fetched in the background while a page is being opened; it
   // goes on once that page is drawn (the graph: laid out), when idle.

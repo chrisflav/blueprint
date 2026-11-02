@@ -199,12 +199,24 @@ when they nest one inside the next (`enteredSection` in `graph.js`); with
 sections open side by side, as after *Expand all*, there is no one level to
 be in and nothing is faded.
 
+The top bar has two rows. The first is the title, the tabs and, at its
+right, the *Style* menu and *Show progress*, which wrap under the tabs as a
+whole when the row is short of room rather than crowd the title. The second
+is the search box and *Export PDF* on every page but the graph; on the graph
+it is the graph's toolbar instead, set as that row is: the same padding, the
+line above it inset as between the two rows, and its controls the size and
+colour of the top bar's (`html[data-view="graph"]` in `style.css`; app.js
+sets `data-view`, and index.html already before the page loads, so the
+graph never shows the second row while it loads).
+
 The graph opens on the graph alone. Of the toolbar only *Collapse all*, the
 highlight search, Fit, `+` and `−` show; *Expand all* and the edge, *hide
 implied* and status filters fold behind *Filters*, which
 carries a dot while anything is filtered out. The side panel is hidden too,
 and the stage takes its column; *Show sidebar* at the right end of the
-toolbar brings it back, and *Hide sidebar* hides it again. Both choices are
+toolbar brings it back, and *Hide sidebar* hides it again. *Replay intro*,
+when the project has an intro, is beside it, and only on the graph, where
+the intro lands. Both choices are
 the reader's, kept in `localStorage` (`blueprint.graph.tools` and
 `blueprint.graph.side`, `shown` or `hidden`; no choice is hidden).
 
@@ -250,7 +262,8 @@ The search is the Stacks project's (<https://stacks.math.columbia.edu/search>):
   under it: Enter opens the search page with what is in it, or the object
   page when it is exactly an object's id, as a Stacks tag does
   (`quickSearch` in `app.js`). `/` focuses it from anywhere that is not
-  taking text, Escape gives the keyboard back. While the search page is on
+  taking text, Escape gives the keyboard back. The graph has no such box
+  (its top bar is the toolbar): there `/` focuses its highlight search. While the search page is on
   screen the two boxes say the same, whichever is typed in;
 * the **search page** (`search.js`, `#/search?query=…`) has the form again,
   "Keywords", a Search button and *Search all objects* or *Search only
@@ -513,7 +526,7 @@ default order on the object page. The slug stays the link's tooltip.
 ### Export PDF
 
 The top bar's **Export PDF** button (also on every document page, next to
-its controls) opens a dialog that says what will be exported before anything
+its controls; not on the graph, whose top bar is its toolbar) opens a dialog that says what will be exported before anything
 is made (`pdf.js`): *this part* — the document page's entry, or the part an
 object page's object (or the graph's selection) is read in — or *the whole
 blueprint*, which is the default at the top of the document, or *another

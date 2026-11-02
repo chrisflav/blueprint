@@ -24,6 +24,9 @@
     (function () {
       var view = (location.hash.match(/^#\/([a-z]+)/) || [])[1];
       if (['object', 'contents', 'document', 'progress', 'search'].indexOf(view) < 0) view = 'graph';
+      // Which page it is, for what the top bar shows on it (style.css): the
+      // graph has no second row, so it must not show one while it loads.
+      document.documentElement.setAttribute('data-view', view);
       var link = document.createElement('link');
       link.rel = 'modulepreload';
       link.href = view + '.js';
@@ -111,9 +114,13 @@
       <a href="#/document" data-view="document">Document</a>
       <a href="#/progress" data-view="progress">Progress</a>
     </nav>
+    <!-- The style menu and Show progress, at the right of the first row; on
+         a row too short for them they wrap under the title as a whole rather
+         than crowd it (style.css, `.topbar-aside`). -->
+    <div class="topbar-aside" id="topbar-aside"></div>
   </div>
-  <!-- The second row: everything but the title and the tabs, so nothing
-       there can crowd the title (style.css, `.topbar-tools`). -->
+  <!-- The second row: the search and Export PDF.  Not on the graph, whose
+       own toolbar is the second row there (style.css, `.topbar-tools`). -->
   <div class="topbar-tools">
     <!-- The Stacks project's quick search: Enter opens the search page, or the
          object whose id is in the box (app.js, `quickSearch`). -->
@@ -134,7 +141,6 @@
       </svg>
       <span>Export PDF</span>
     </button>
-    <div class="topbar-aside" id="topbar-aside"></div>
   </div>
 </header>
 
