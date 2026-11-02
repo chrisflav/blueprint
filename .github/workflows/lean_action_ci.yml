@@ -60,6 +60,15 @@ jobs:
 
       - uses: leanprover/lean-action@v1
 
+      # pdfLaTeX for `blueprint site --pdf` below (docs/pdf-export.md); node,
+      # which runs the export, comes with the runner image.
+      - name: Install TeX
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            latexmk texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended texlive-plain-generic lmodern
+
       # The Lean facts of the example: proof status and actual dependencies,
       # read out of the BlueprintExamples library of this repository.  Run
       # through `lake exe` so that the .olean files are on LEAN_PATH.
@@ -97,9 +106,19 @@ jobs:
       - name: Add this commit's snapshot to the history
         run: lake exe blueprint history add snapshot.json --dir history
 
-      # web/ + the freshly built blueprint.json + history/ as data/.
-      - name: Assemble the site
-        run: lake exe blueprint site --root examples/induction --history history -o _site
+      # web/ + the freshly built blueprint.json + history/ as data/, and the
+      # PDFs the Export PDF button hands out, under data/exports/.
+      - name: Assemble the site, with its PDFs
+        run: lake exe blueprint site --root examples/induction --history history -o _site --pdf
+
+      # `site --pdf` reuses the exports already under data/exports/ and drops
+      # those of snapshots it no longer keeps, so handing its result back to
+      # the history keeps the PDFs on gh-pages for the next run.
+      - name: Keep the PDFs with the history
+        run: |
+          set -euo pipefail
+          rm -rf history/exports
+          if [ -d _site/data/exports ]; then cp -a _site/data/exports history/exports; fi
 
       - uses: actions/configure-pages@v5
 
