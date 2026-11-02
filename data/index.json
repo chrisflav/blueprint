@@ -460,6 +460,14 @@
     "proved": 2,
     "byStatus":
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "654732a71e814ae49ce9de3cc488e6a00513f0f2",
+   "file": "data/654732a71e814ae49ce9de3cc488e6a00513f0f2.json",
+   "date": "2026-11-02"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "98c0e0021b576ad3f82273f703f84c8893ba034a",
    "file": "data/98c0e0021b576ad3f82273f703f84c8893ba034a.json",
    "date": "2026-11-02"},
