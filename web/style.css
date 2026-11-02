@@ -226,6 +226,17 @@ label.chk input { margin: 0; }
   background: var(--accent);
   border-radius: 1px;
 }
+/* A project's logo (`project.logo`, app.js `brandLogo`) stands in for the
+   mark, in every style: a little taller than the title's letters. */
+.brand.has-logo .brand-mark { display: none; }
+.brand-logo { width: 1.9em; height: 1.9em; flex: none; }
+.brand-logo[hidden] { display: none; }
+.brand-logo img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.brand-logo.ink {
+  background-color: currentColor;
+  -webkit-mask: var(--brand-logo) center / contain no-repeat;
+  mask: var(--brand-logo) center / contain no-repeat;
+}
 
 .tabs { display: flex; flex-wrap: wrap; gap: .15rem; }
 .tabs a {
@@ -1450,6 +1461,8 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
   .tabs a { padding: .3em .5em; font-size: .85rem; }
   dl.kv { grid-template-columns: 1fr; }
   dl.kv dt { margin-top: .5em; }
+  /* the height of the title's line, so the logo does not make the bar taller */
+  .brand-logo { width: 1.5em; height: 1.5em; }
 }
 
 @media (prefers-reduced-motion: reduce) {

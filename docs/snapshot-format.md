@@ -20,6 +20,8 @@ by editing this file first. Version 1.
       "\\poly": "#1[T]"
     },
     "theme": "outline",                          // optional, see below
+    "logo": "assets/logo.svg",                   // optional, see below
+    "logoInk": true,                             // optional
     "intro": {                                   // optional, see below
       "body": "![](assets/logo.png)\n\n## Welcome …",
       "durationMs": 4000,                        // optional
@@ -113,6 +115,11 @@ Notes
   the website opens in for a reader who has not picked one.  It is left out
   when the project names none; a reader defaults it to the website's default
   style, and so treats an id it does not know.
+- `project.logo` is `[site] logo` of `blueprint.toml`: the address of a
+  picture the website shows left of its title, resolved against the
+  directory holding the snapshot.  `project.logoInk`, `[site] logoInk`, says
+  to draw only its shape, in the title's colour.  Both are left out when the
+  project has no logo, and `logoInk` when it is false.
 - `project.intro` is `[site.intro]` of `blueprint.toml`: what the website
   shows in the middle of the screen as it opens, before the graph.  `body`
   is Markdown, rendered as an object's prose is (maths, `[slug]`

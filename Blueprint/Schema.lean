@@ -293,6 +293,13 @@ def decodeConfig (t : TValue) (defaultName : String) :
       | some s => pure s
       | none => throw s!"'[site] {k}' must be a string, got a {v.typeName}"
   let theme ← siteStr "theme"
+  let logo ← siteStr "logo"
+  let logoInk ← match site.bind (·.get? "logoInk") with
+    | none => pure false
+    | some (.bool b) => pure b
+    | some v => throw s!"'[site] logoInk' must be a boolean, got a {v.typeName}"
+  if logoInk && logo.isEmpty then
+    throw "'[site] logoInk' needs a 'logo'"
   let assets ← siteStr "assets"
   let (intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom) ←
     match site.bind (·.get? "intro") with
@@ -324,7 +331,7 @@ def decodeConfig (t : TValue) (defaultName : String) :
       pure (body, file, ms, background, hold, step, zoom)
     | some v => throw s!"'[site] intro' must be a table, got a {v.typeName}"
   let project : Project :=
-    { name, title, dir, leanModules, leanDescend, katexMacros, theme,
+    { name, title, dir, leanModules, leanDescend, katexMacros, theme, logo, logoInk,
       intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom,
       assets }
   let mut schema := defaultSchema

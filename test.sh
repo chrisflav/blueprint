@@ -668,6 +668,31 @@ else
   bad "a [site] theme that is not a string is refused"; cat "$TMP/badtheme.out"
 fi
 
+# `[site] logo` and `logoInk` reach the snapshot as `project.logo` and
+# `project.logoInk`; an ink without a logo, or one that is no boolean, is refused
+cp -r examples/minimal "$TMP/logo"
+printf '\n[site]\nlogo = "assets/logo.svg"\nlogoInk = true\n' >> "$TMP/logo/blueprint.toml"
+if "$BP" build --root "$TMP/logo" -o "$TMP/logo.json" > /dev/null 2>&1 \
+   && grep -q '"logo": "assets/logo.svg"' "$TMP/logo.json" \
+   && grep -q '"logoInk": true' "$TMP/logo.json" \
+   && ! grep -q '"logo' "$TMP/unthemed.json"; then
+  ok "[site] logo and logoInk reach the snapshot, and only when given"
+else
+  bad "[site] logo and logoInk reach the snapshot, and only when given"
+fi
+cp -r examples/minimal "$TMP/badlogo"
+printf '\n[site]\nlogoInk = true\n' >> "$TMP/badlogo/blueprint.toml"
+cp -r examples/minimal "$TMP/badink"
+printf '\n[site]\nlogo = "a.svg"\nlogoInk = "yes"\n' >> "$TMP/badink/blueprint.toml"
+if ! "$BP" build --root "$TMP/badlogo" -o "$TMP/badlogo.json" > "$TMP/badlogo.out" 2>&1 \
+   && grep -q "'\[site\] logoInk' needs a 'logo'" "$TMP/badlogo.out" \
+   && ! "$BP" build --root "$TMP/badink" -o "$TMP/badink.json" > "$TMP/badink.out" 2>&1 \
+   && grep -q "'\[site\] logoInk' must be a boolean" "$TMP/badink.out"; then
+  ok "a [site] logoInk without a logo, or not a boolean, is refused"
+else
+  bad "a [site] logoInk without a logo, or not a boolean, is refused"; cat "$TMP/badlogo.out" "$TMP/badink.out"
+fi
+
 # `[site.intro]` reaches the snapshot as `project.intro`, its body inline or
 # read from a file, with its duration in milliseconds; `[site] assets` is
 # copied into the site as `assets/`
