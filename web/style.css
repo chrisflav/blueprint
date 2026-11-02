@@ -155,13 +155,13 @@ label.chk input { margin: 0; }
 /* ----------------------------------------------------------------- topbar */
 
 /* Two rows: the title, the tabs and, at the right, the style menu and Show
-   progress; then the search and Export PDF (index.html).  On the graph the
-   second row is the graph's own toolbar instead, set as this one is (below,
-   `html[data-view="graph"]`).  Every row wraps rather than overlaps, so a
-   long title, a narrow window or text made larger (Ctrl +) moves things down
-   instead of covering the title: the style menu and Show progress go under
-   the tabs as a whole, the tabs under the title, the title itself onto a
-   second line.
+   progress; then the search and Export PDF, at the right too (index.html).
+   On the graph the second row is the graph's own toolbar instead, set as this
+   one is (below, `html[data-view="graph"]`).  Every row wraps rather than
+   overlaps, so a long title, a narrow window or text made larger (Ctrl +)
+   moves things down instead of covering the title: the style menu and Show
+   progress go under the tabs as a whole, the tabs under the title, the title
+   itself onto a second line.
    Fixed to the top of the window, however far the page is scrolled; the
    body makes room for it (`padding-top`, below).  Sticky would not do: it
    sticks only within the body, which is one window tall (the graph fills
@@ -189,9 +189,14 @@ label.chk input { margin: 0; }
   padding: .35rem 0;
 }
 
+/* The search box and Export PDF, at the right, under the style menu and Show
+   progress, one height and one size of text (a style may set the text). */
 .topbar-tools {
+  --tools-h: 2rem;
+  --tools-font: .88rem;
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: .4rem .6rem;
   min-width: 0;
@@ -280,8 +285,9 @@ html[data-view="graph"] .topbar { border-bottom: 0; }
   align-items: center;
   gap: .4em;
   flex: none;
-  padding: .38em .8em;
-  font-size: .86rem;
+  height: var(--tools-h);
+  padding: 0 .8em;
+  font-size: var(--tools-font);
   font-weight: 600;
   white-space: nowrap;
   color: var(--accent-fg);
@@ -297,7 +303,7 @@ html[data-view="graph"] .topbar { border-bottom: 0; }
 .export-pdf:disabled { opacity: .55; }
 .export-icon { flex: none; }
 
-/* The search box opens the second row: the Stacks project's quick search, a
+/* The search box, before Export PDF: the Stacks project's quick search, a
    magnifier inside the box and no list under it; Enter opens the search page
    (search.js). */
 .gsearch {
@@ -306,7 +312,13 @@ html[data-view="graph"] .topbar { border-bottom: 0; }
   min-width: 9rem;
   margin: 0;
 }
-.gsearch input[type="search"] { width: 100%; padding-left: 1.9em; padding-right: 1.8em; font-size: .88rem; }
+.gsearch input[type="search"] {
+  width: 100%;
+  height: var(--tools-h);
+  padding-left: 1.9em;
+  padding-right: 1.8em;
+  font-size: var(--tools-font);
+}
 .gsearch-icon {
   position: absolute;
   left: .6em;
@@ -659,10 +671,11 @@ table.grid tr:last-child td { border-bottom: 0; }
     var(--panel);
   border-bottom: 1px solid var(--border);
 }
-/* The padding of Export PDF, so the row is as tall as the top bar's own. */
-.toolbar button { color: var(--muted); padding: .38em .8em; }
+/* The height of the top bar's search box and Export PDF, so the row is as
+   tall as the top bar's own. */
+.toolbar button { color: var(--muted); height: 2rem; padding: 0 .8em; }
 .toolbar button:hover { color: var(--fg); }
-.toolbar input[type="search"] { font-size: .88rem; }
+.toolbar input[type="search"] { font-size: .88rem; height: 2rem; }
 .toolbar .group { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
 .toolbar .group > .lbl { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 .toolbar .sep { width: 1px; align-self: stretch; background: var(--border); }
@@ -725,6 +738,10 @@ table.grid tr:last-child td { border-bottom: 0; }
   border-radius: 4px;
   pointer-events: none;
 }
+
+/* Hidden unless the reader shows the statistics (graph.js, `statsToggle`),
+   but never while a layout runs: then it says how much is being laid out. */
+.graph-stage.stats-hidden:not(.laying-out) .graph-status { display: none; }
 
 /* Layout gave up: said in the pane itself, not only in the status line. */
 .graph-error {

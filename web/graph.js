@@ -5,8 +5,9 @@
 //
 // Size.  The default view is the fully collapsed one — a handful of chapters —
 // and the reader expands into it, so the page normally lays out tens of nodes.
-// A reader who asks for "Expand all" on a few-thousand-object blueprint gets
-// what they asked for, and that costs seconds of ELK time, so:
+// A link that opens every section (`expand=` naming them all) of a
+// few-thousand-object blueprint still gets what it asks for, and that costs
+// seconds of ELK time, so:
 //
 //   * the graph handed to ELK carries no back-references into the model (see
 //     `plainGraph`); the metadata is looked up again by id after layout;
@@ -23,8 +24,7 @@
 //     back to the main thread, which fetches the whole of elkjs,
 //     elk.bundled.js, only then, and yields to the event loop between phases
 //     so the status line is painted before the browser freezes;
-//   * the status line says how many nodes are being laid out, and the
-//     "Expand all" button says so up front.
+//   * the status line says how many nodes are being laid out.
 
 import * as M from './model.js';
 import { prefetchFile } from './prefetch.js';
@@ -189,11 +189,12 @@ function mount(root, app) {
   stage.appendChild(back);
 
   // `folded`: the side panel's listings the reader has opened (see `fold`).
-  // `toolbarOpen`, `sideShown`: the reader's choices (`shownPref`).
+  // `toolbarOpen`, `sideShown`, `statsShown`: the reader's choices (`shownPref`).
   ui = { page, toolbar, stage, svg, layer, side, back, transform: { x: 40, y: 40, k: 1 }, fitted: false,
     folded: new Map(), entered: null, legend: key, legendProgress: app.showProgress,
-    toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY) };
+    toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY), statsShown: shownPref(STATS_KEY) };
   page.classList.toggle('side-hidden', !ui.sideShown);
+  stage.classList.toggle('stats-hidden', !ui.statsShown);
   installPanZoom(app);
   prevPos = new Map();
   lastSignature = null;
@@ -267,11 +268,13 @@ function legend(app, progress) {
 // ---------------------------------------------------------------------------
 
 // The graph opens on the graph alone: of the toolbar only Collapse all, the
-// search and the zoom, the rest folded behind the Filters button, and no side
-// panel beside it.  Whether the reader has unfolded either is theirs to keep,
-// in localStorage, as the top bar keeps the progress (app.js).
+// search and the zoom, the rest folded behind the Filters button, no side
+// panel beside it and no statistics under it.  Whether the reader has shown
+// any of them is theirs to keep, in localStorage, as the top bar keeps the
+// progress (app.js).
 const TOOLS_KEY = 'blueprint.graph.tools';
 const SIDE_KEY = 'blueprint.graph.side';
+const STATS_KEY = 'blueprint.graph.stats';
 
 /** Whether the reader asked for this to be shown: no, unless they did. */
 function shownPref(key) {
@@ -317,20 +320,9 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => writeState(app, { expand: [] }) }, 'Collapse all')));
   const filters = bar.appendChild(el('div.tb-filters'));
 
-  // The collapse order has no control: the snapshot's default, or the one
+  // There is no Expand all: the reader opens the sections one at a time.  The
+  // collapse order has no control either: the snapshot's default, or the one
   // the link says (`collapse=`).
-  const order = M.collapseOrder(m, st.collapse);
-  // Expanding everything is the one action that can put thousands of nodes on
-  // screen, so the button says so rather than springing it on the reader.
-  const whenExpanded = drawnNodeCount(m);
-  const big = whenExpanded >= BIG_GRAPH;
-  filters.appendChild(el('div.group',
-    el('button', {
-      onclick: () => writeState(app, { expand: [...order.expandable] }),
-      title: `lay out all ${whenExpanded.toLocaleString()} objects at once`,
-    }, big ? `Expand all (${whenExpanded.toLocaleString()})` : 'Expand all')));
-
-  filters.appendChild(el('div.sep'));
 
   // edge kind filter
   const eks = M.edgeKinds(m).filter((k) => k !== st.collapse);
@@ -403,10 +395,34 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => fitToView(app) , title: 'fit the graph into the viewport' }, 'Fit'),
     el('button', { onclick: () => zoomBy(app, 1.25) }, '+'),
     el('button', { onclick: () => zoomBy(app, 1 / 1.25) }, '\u2212')));
+  bar.appendChild(statsToggle(app));
   // Replay intro is the graph's alone, where the intro lands (app.js).
   const intro = app.introButton ? app.introButton() : null;
   if (intro) bar.appendChild(intro);
   bar.appendChild(sideToggle(app));
+}
+
+/**
+ * Show or hide the statistics at the foot of the stage (nodes, links, what is
+ * hidden, what is expanded).  While a layout runs the line shows whatever
+ * was chosen, since it is then the only sign of how much is being laid out.
+ */
+function statsToggle(app) {
+  const { el } = app;
+  const label = () => (ui.statsShown ? 'Hide statistics' : 'Show statistics');
+  const button = el('button.tb-stats', {
+    type: 'button',
+    'aria-pressed': ui.statsShown ? 'true' : 'false',
+    title: 'the counts of what is drawn, at the foot of the graph',
+    onclick: () => {
+      ui.statsShown = !ui.statsShown;
+      savePref(STATS_KEY, ui.statsShown);
+      ui.stage.classList.toggle('stats-hidden', !ui.statsShown);
+      button.setAttribute('aria-pressed', ui.statsShown ? 'true' : 'false');
+      button.textContent = label();
+    },
+  }, label());
+  return button;
 }
 
 /** Show or hide the side panel; on a phone it is a sheet of its own and this is not offered. */
@@ -438,14 +454,6 @@ function sideToggle(app) {
 /** Is there anything the "hide appendix" checkbox would hide? */
 function hasAppendix(m) {
   return m.objects.some((o) => M.graphHint(m, o.kind) === 'optional');
-}
-
-/** How many nodes the fully expanded view would draw: every object that is
- *  drawn as a box rather than as an arc. */
-function drawnNodeCount(m) {
-  let n = 0;
-  for (const kind of M.nodeKinds(m)) n += M.objectsOfKind(m, kind).length;
-  return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -1614,7 +1622,15 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
   ui.chain = chain;
 
   ui.bbox = bboxOf(abs);
-  if (!ui.fitted) { fitToView(app); ui.fitted = true; } else applyTransform();
+  // The first drawing is fitted into the stage, and so is every drawing after
+  // something was unfolded or folded (a node's + or −, a double click, the
+  // side panel, Collapse all, a link that opens a section): Fit, done for the
+  // reader.  Anything else (a filter, the search, a selection) keeps the view
+  // where the reader left it.
+  const expandKey = view.kind + ' ' + [...view.expanded].sort().join(',');
+  const toggled = ui.drawnExpand !== undefined && ui.drawnExpand !== expandKey;
+  ui.drawnExpand = expandKey;
+  if (!ui.fitted || toggled) { fitToView(app); ui.fitted = true; } else applyTransform();
   // The view this drawing is of: `render` moves `ui.view` on as soon as the
   // state changes, before the new layout is drawn.
   ui.drawnView = view;
@@ -2081,7 +2097,7 @@ function keepClearOfSheet(id) {
  * The section the reader is in: the innermost open section, when the open
  * sections nest one inside the next, as they do when each was opened from
  * inside the last.  Null with nothing open, or with sections open side by
- * side (Expand all): then there is no one level to be in.
+ * side: then there is no one level to be in.
  */
 export function enteredSection(view) {
   const open = [...view.expanded];

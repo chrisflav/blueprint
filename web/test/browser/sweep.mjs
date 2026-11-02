@@ -558,6 +558,50 @@ async function graphChecks(d, f) {
     };
   });
 
+  // Unfolding or folding fits the graph into the stage, as Fit does: zoomed
+  // in first, the view after it is the one Fit gives (Fit then moves nothing).
+  await check(d, 'graph/unfold-and-fold-fit-the-view', async () => {
+    const TRANSFORM = `var t = (document.querySelector('g.glayer') || { getAttribute: function () { return ''; } }).getAttribute('transform') || '';
+      var m = /translate\\(([-\\d.e]+),\\s*([-\\d.e]+)\\)\\s*scale\\(([-\\d.e]+)\\)/.exec(t);
+      return m ? [+m[1], +m[2], +m[3]] : null;`;
+    const press = (text) => d.js(`var b = Array.prototype.slice.call(document.querySelectorAll('.toolbar button'))
+      .filter(function (x) { return x.textContent === ${j(text)}; })[0]; if (b) b.click(); return !!b;`);
+    const zoomIn = async () => { await press('+'); await press('+'); await press('+'); await sleep(400); };
+    const fitted = async () => {
+      const a = await d.js(TRANSFORM);
+      await press('Fit');
+      await sleep(500);
+      const b = await d.js(TRANSFORM);
+      return { a, b, same: !!a && !!b && a.every((v, k) => Math.abs(v - b[k]) < (k === 2 ? 0.001 : 0.6)) };
+    };
+    await zoomIn();
+    const zoomed = await d.js(TRANSFORM);
+    const opened = await d.js(`
+      var ex = Array.prototype.slice.call(document.querySelectorAll('.gnode .expander'))
+        .filter(function (t) { return (t.textContent || '').indexOf('+') >= 0; });
+      var g = ex.length ? ex[0].parentNode : null;
+      if (!g) return null;
+      (g.querySelector('.shape') || g).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      return g.dataset.id;
+    `);
+    if (!opened) return { ok: false, evidence: 'no collapsed expandable node' };
+    await waitFor(d, `return location.hash.indexOf('expand=') >= 0`, { timeout: 8000, label: 'expand= in hash' });
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, label: 'relayout after unfolding' });
+    await settle();
+    const afterOpen = await fitted();
+    await zoomIn();
+    await press('Collapse all');
+    await sleep(500);
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, label: 'relayout after folding' });
+    await settle();
+    const afterShut = await fitted();
+    return {
+      ok: afterOpen.same && afterShut.same && !!zoomed && zoomed[2] !== afterOpen.a[2],
+      evidence: `zoomed to ${j(zoomed)}; unfolded ${j(opened)}: ${j(afterOpen.a)}, Fit then ${j(afterOpen.b)}; `
+        + `zoomed again, Collapse all: ${j(afterShut.a)}, Fit then ${j(afterShut.b)}`,
+    };
+  });
+
   await check(d, 'graph/keyboard-space-selects', async () => {
     await d.js(`document.querySelectorAll('.gnode')[0].focus(); return document.activeElement.tagName;`);
     const focused = await d.js(`return { tag: document.activeElement.tagName, id: document.activeElement.dataset ? document.activeElement.dataset.id : null };`);
@@ -612,22 +656,23 @@ async function graphChecks(d, f) {
     };
   });
 
-  // --- expand all / collapse all ------------------------------------------
-  await check(d, 'graph/expand-all', async () => {
-    const btn = await d.js(elBoxByText('.toolbar button', 'Expand all'));
-    if (!btn) return { ok: false, evidence: 'no "Expand all" button' };
+  // --- every section open / collapse all -----------------------------------
+  // The toolbar has no Expand all; a link naming every section still opens
+  // them all, which the title checks below are made on.
+  await check(d, 'graph/no-expand-all-every-section-by-link', async () => {
+    const offered = await d.js(`return Array.prototype.some.call(document.querySelectorAll('.toolbar button'),
+      function (b) { return /Expand all/.test(b.textContent); })`);
+    if (offered) return { ok: false, evidence: 'the toolbar still has an Expand all button' };
     const before = await d.js(GRAPH_COUNTS);
-    await d.click(btn.x, btn.y);
-    await sleep(500);
-    const status = await waitFor(d, GRAPH_IDLE, { timeout: 300000, interval: 500, label: 'expand-all layout' });
+    const status = await gotoGraph(d, new URLSearchParams({ collapse: f.kind, expand: [...f.order.expandable].join(',') }).toString());
     const after = await d.js(GRAPH_COUNTS);
     return {
       ok: after.nodes > before.nodes * 2 && !after.error,
-      evidence: `${j(btn.text)}: nodes ${before.nodes}->${after.nodes}, edges ${before.edges}->${after.edges}, status=${j(status)}, error=${j(after.error)}`,
+      evidence: `no Expand all button; expand= every section: nodes ${before.nodes}->${after.nodes}, edges ${before.edges}->${after.edges}, status=${j(status)}, error=${j(after.error)}`,
     };
   });
 
-  await d.shot(`${SHOTS}/${d.name}-graph-expand-all.png`);
+  await d.shot(`${SHOTS}/${d.name}-graph-every-section.png`);
 
   // Titles are never cut: each node shows the whole of it, wrapped if need
   // be, inside its box and clear of the kind mark and the expander.
@@ -1188,19 +1233,32 @@ async function layoutChecks(d, f) {
     // graph.  The tall pages are scrolled to the bottom, too, so the bar is
     // measured where it must stay: a sticky bar stayed for the first window
     // only, the body being one window tall, and left with the body's foot.
+    // On the graph the bar is its first row alone and the graph's toolbar is
+    // the second (its filters may wrap it onto more lines), so what is the
+    // same everywhere is the first row, and where the second row's controls
+    // end: the search box elsewhere, Collapse all on the graph.
     const heights = {};
     for (const hash of ['#/graph', '#/document?depth=all', '#/progress', '#/object/' + encodeURIComponent((f.withFacts || f.section))]) {
       await route(d, hash);
       await sleep(900);
       heights[hash.split('/')[1]] = await d.js(`window.scrollTo(0, document.documentElement.scrollHeight);
-        var r = document.querySelector('.topbar').getBoundingClientRect();
-        return { h: Math.round(r.height * 10) / 10, top: Math.round(r.top),
+        var bar = document.querySelector('.topbar');
+        var r = bar.getBoundingClientRect();
+        var graph = document.documentElement.getAttribute('data-view') === 'graph';
+        var control = document.querySelector(graph ? '.toolbar .tb-collapse button' : '#gsearch-input');
+        var round = function (v) { return Math.round(v * 10) / 10; };
+        return { h: round(r.height), top: Math.round(r.top), graph: graph,
+                 first: round(document.querySelector('.topbar-main').getBoundingClientRect().height),
+                 controls: control ? round(control.getBoundingClientRect().bottom - r.top) : null,
                  want: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h')) };`);
     }
     const hs = Object.values(heights);
+    const others = hs.filter((x) => !x.graph);
     return {
-      ok: hs.every((x) => x.h === hs[0].h && x.top === 0) && hs[0].h >= hs[0].want,
-      evidence: `top bar, scrolled to the bottom: ${j(Object.fromEntries(Object.entries(heights).map(([k, v]) => [k, v.h + 'px at ' + v.top])))}, --topbar-h ${hs[0].want}px`,
+      ok: hs.every((x) => x.top === 0 && x.first === hs[0].first && x.controls !== null && x.controls === hs[0].controls)
+        && others.every((x) => x.h === others[0].h && x.h >= x.want),
+      evidence: `scrolled to the bottom, the bar's height, first row and where the second row's controls end: `
+        + j(Object.fromEntries(Object.entries(heights).map(([k, v]) => [k, `${v.h}px at ${v.top}, row ${v.first}px, controls to ${v.controls}px`]))),
     };
   });
 
@@ -1618,7 +1676,10 @@ async function pageChecks(d, f) {
   const TREE_ROW = (id) => `
     var li = Array.prototype.slice.call(document.querySelectorAll('.contents-tree li')).filter(function (x) {
       var a = x.querySelector('a.contents-link');
-      return a && new URLSearchParams(a.getAttribute('href').split('?')[1]).get('focus') === ${j(id)}; })[0];
+      if (!a) return false;
+      var href = a.getAttribute('href');
+      var page = /^#\\/document\\/([^?]+)/.exec(href);
+      return (new URLSearchParams(href.split('?')[1]).get('focus') || (page && decodeURIComponent(page[1]))) === ${j(id)}; })[0];
     if (!li) return null;
     var t = li.querySelector('.contents-row > button.contents-toggle');
     var sub = li.querySelector(':scope > ol');
@@ -1645,8 +1706,8 @@ async function pageChecks(d, f) {
     };
   });
 
-  // A contents row leads to its level: the top level written out, scrolled
-  // to the chapter, which the sidebar shows opened on its entries.
+  // A contents row leads to the page its entry heads: a chapter to its own
+  // page, at the top, the sidebar the chapter over its entries.
   const SIDEBAR = `
     var own = function (li) { return li.querySelector('a').getAttribute('data-id'); };
     return { ups: Array.prototype.map.call(document.querySelectorAll('nav.toc li.toc-up'), own),
@@ -1659,49 +1720,80 @@ async function pageChecks(d, f) {
     await d.js('window.scrollTo(0, 0); return 0;');
     const box = await d.js(`
       var a = Array.prototype.slice.call(document.querySelectorAll('.contents-tree a.contents-link')).filter(function (x) {
-        return decodeURIComponent(x.getAttribute('href')).indexOf(${j('focus=' + f.chapter)}) >= 0; })[0];
+        return decodeURIComponent(x.getAttribute('href')).indexOf(${j(docPath(f.chapter))}) === 0; })[0];
       if (!a) return null;
       var r = inView(a);
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: (a.textContent || '').trim() };
       ${IN_VIEW}
     `);
     if (!box) return { ok: false, evidence: `no contents row for ${f.chapter} on the contents page` };
-    await clickAndWait(d, box, `return document.querySelectorAll('.doc-entry').length > 0 && !!document.querySelector('nav.toc li.open')`, 'the top level');
+    await clickAndWait(d, box, `return decodeURIComponent(location.hash).indexOf(${j(docPath(f.chapter))}) === 0
+      && !!document.querySelector('.doc-entry.page-head')`, 'the chapter page');
     await sleep(900);
     const s = await d.js(PAGE_STATE);
     const side = await d.js(SIDEBAR);
     const r = await d.js(ENTRY_IN_VIEW(f.chapter));
     const kids = entry.children.filter((c) => !c.duplicate && !c.text).map((c) => c.id);
+    const want = M.documentPageEntries(out, f.chapter, 1).length;
     return {
-      ok: s.hash.startsWith('#/document?') && s.entries === out.roots.length && !s.pageHead
-        && side.ups.length === 0 && side.opened.join() === f.chapter && kids.every((k) => side.links.includes(k)) && r.inView,
-      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (top level ${out.roots.length}), ${entry.number} in view=${r.inView}; `
-        + `sidebar chain ${j(side.ups)}, opened ${j(side.opened)}, its ${kids.length} entries listed=${kids.every((k) => side.links.includes(k))}`,
+      ok: !/focus=/.test(s.hash) && s.ids[0] === anchorOf(f.chapter) && s.entries === want
+        && side.ups.join() === f.chapter && kids.every((k) => side.links.includes(k)) && r.inView,
+      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, first entry #${s.ids[0]}, ${s.entries} entries (want ${want}), ${entry.number} in view=${r.inView}; `
+        + `sidebar chain ${j(side.ups)}, its ${kids.length} entries listed=${kids.every((k) => side.links.includes(k))}`,
     };
   });
 
-  // An entry of the opened chapter leads to its level: the chapter's page.
+  // An entry of the chapter with entries of its own leads to its own page,
+  // a level down; then back to the chapter's page for the checks after it.
   await check(d, 'document/sidebar-goes-down-a-level', async () => {
     if (!f.chapter) return { skip: true, evidence: 'no chapter fixture' };
     const entry = out.byId.get(f.chapter);
-    const child = entry.children.find((c) => !c.duplicate && !c.text);
+    const child = entry.children.find((c) => !c.duplicate && !c.text && c.children.length);
+    if (!child) return { skip: true, evidence: `nothing under ${f.chapter} has entries of its own` };
     const box = await d.js(`
       var a = document.querySelector('nav.toc a[data-id="${child.id}"]');
       if (!a) return null; a.scrollIntoView({ block: 'nearest' });
       var r = a.getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2, text: (a.textContent || '').trim() };
     `);
     if (!box) return { ok: false, evidence: `no sidebar link to ${child.id}` };
-    await clickAndWait(d, box, `return decodeURIComponent(location.hash).indexOf(${j(docPath(f.chapter))}) === 0
-      && !!document.querySelector('.doc-entry.page-head')`, 'chapter page');
+    await clickAndWait(d, box, `return decodeURIComponent(location.hash).indexOf(${j(docPath(child.id))}) === 0
+      && !!document.querySelector('.doc-entry.page-head')`, 'section page');
     await sleep(900);
     const s = await d.js(PAGE_STATE);
     const side = await d.js(SIDEBAR);
-    const want = M.documentPageEntries(out, f.chapter, 1).length;
+    const want = M.documentPageEntries(out, child.id, 1).length;
+    await route(d, docPath(f.chapter) + new URLSearchParams({ collapse: f.kind }).toString());
+    await waitFor(d, `return !!document.querySelector('.doc-entry.page-head')`, { timeout: 30000, label: 'back to the chapter' });
     return {
-      ok: s.entries === want && s.crumbs >= 1 && s.pagers >= 1 && side.ups.join() === f.chapter && side.opened.join() === child.id
+      ok: s.ids[0] === anchorOf(child.id) && s.entries === want && s.crumbs >= 2 && s.pagers >= 1
+        && side.ups.join() === [f.chapter, child.id].join()
         && !side.links.includes(out.roots.find((e) => e !== entry && !e.text && !e.duplicate).id),
-      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (want ${want}), ${s.crumbs} breadcrumb links, `
-        + `${s.pagers} pagers; sidebar chain ${j(side.ups)}, opened ${j(side.opened)}`,
+      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, first entry #${s.ids[0]}, ${s.entries} entries (want ${want}), ${s.crumbs} breadcrumb links, `
+        + `${s.pagers} pagers; sidebar chain ${j(side.ups)}`,
+    };
+  });
+
+  // A title stays on its page: clicked, it is scrolled to, the page not left.
+  await check(d, 'document/title-click-stays-on-the-page', async () => {
+    if (!f.chapter) return { skip: true, evidence: 'no chapter fixture' };
+    const entry = out.byId.get(f.chapter);
+    const child = entry.children.filter((c) => !c.duplicate && !c.text).slice(-1)[0];
+    if (!child) return { skip: true, evidence: `nothing under ${f.chapter}` };
+    await d.js('window.scrollTo(0, 0); return 0;');
+    const box = await d.js(`
+      var a = document.querySelector('#${anchorOf(child.id)} .head a.doc-title');
+      if (!a) return null; a.scrollIntoView({ block: 'center' });
+      var r = a.getBoundingClientRect(); return { x: r.left + Math.min(20, r.width / 2), y: r.top + r.height / 2, text: (a.textContent || '').trim() };
+    `);
+    if (!box) return { ok: false, evidence: `no title of ${child.id} on ${f.chapter}'s page` };
+    await d.click(box.x, box.y);
+    await sleep(900);
+    const s = await d.js(PAGE_STATE);
+    const r = await d.js(ENTRY_IN_VIEW(child.id));
+    return {
+      ok: decodeURIComponent(s.hash).indexOf(docPath(f.chapter)) === 0 && new URLSearchParams(s.hash.split('?')[1]).get('focus') === child.id
+        && s.ids[0] === anchorOf(f.chapter) && r.found && r.top > -10 && r.top < 200,
+      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, first entry #${s.ids[0]}, its heading top=${r.top}px`,
     };
   });
 
@@ -1912,7 +2004,9 @@ async function documentChecks(d, f) {
       var a = document.querySelectorAll('nav.toc a')[2] || document.querySelector('nav.toc a');
       if (!a) return null;
       var href = a.getAttribute('href');
-      var focus = decodeURIComponent((href.split('focus=')[1] || '').split('&')[0]);
+      // Where it leads: the entry scrolled to, or the page it heads.
+      var page = /^#\\/document\\/([^?]+)/.exec(href);
+      var focus = decodeURIComponent((href.split('focus=')[1] || '').split('&')[0]) || (page ? decodeURIComponent(page[1]) : '');
       var r = inView(a);
       return { text: (a.textContent || '').trim(), focus: focus, x: r.left + r.width / 2, y: r.top + r.height / 2 };
       ${IN_VIEW}
@@ -2958,8 +3052,9 @@ async function runBrowser(name, f) {
       };
     });
     // The graph starts bare too (graph.js, `renderToolbar`): of the toolbar
-    // only Filters, Collapse all, the search, the zoom and Show sidebar, and
-    // the stage across the whole page.
+    // only Filters, Collapse all, the search, the zoom, Show statistics and
+    // Show sidebar, the stage across the whole page, and no statistics under
+    // the graph once it is laid out.
     if (SECTIONS.has('boot')) await check(d, 'boot/graph-starts-bare', async () => {
       await d.open(`${ORIGIN}/#/graph`);
       await waitFor(d, `return !!document.querySelector('.toolbar .tb-zoom');`, { timeout: 60000, label: 'graph toolbar' });
@@ -2973,17 +3068,21 @@ async function runBrowser(name, f) {
         return { visible: visible, side: shown(document.querySelector('aside.side')),
                  stage: Math.round(stage.width), page: Math.round(page.width) };
       `);
-      const want = ['Filters', 'Collapse all', 'input:search', 'Fit', '+', '\u2212', 'Show sidebar'];
+      await waitFor(d, GRAPH_IDLE, { timeout: 90000, label: 'graph layout' });
+      const stats = await d.js(`var s = document.getElementById('graph-status');
+        return { shown: !!s && s.getClientRects().length > 0, text: s ? s.textContent : null };`);
+      const want = ['Filters', 'Collapse all', 'input:search', 'Fit', '+', '\u2212', 'Show statistics', 'Show sidebar'];
       return {
-        ok: j(s.visible) === j(want) && !s.side && s.stage === s.page,
-        evidence: `toolbar shows ${j(s.visible)}; side panel shown=${s.side}; stage ${s.stage}px of ${s.page}px`,
+        ok: j(s.visible) === j(want) && !s.side && s.stage === s.page && !stats.shown && !!stats.text,
+        evidence: `toolbar shows ${j(s.visible)}; side panel shown=${s.side}; stage ${s.stage}px of ${s.page}px; `
+          + `statistics shown=${stats.shown} (${j(stats.text)})`,
       };
     });
-    // Everything after covers the progress, the filters and the side panel
-    // too: show them, as a reader would.
+    // Everything after covers the progress, the filters, the side panel and
+    // the statistics too: show them, as a reader would.
     await d.open(`${ORIGIN}/#/progress`);
     await firstPaint();
-    await d.js(`['blueprint.progress', 'blueprint.graph.tools', 'blueprint.graph.side']
+    await d.js(`['blueprint.progress', 'blueprint.graph.tools', 'blueprint.graph.side', 'blueprint.graph.stats']
       .forEach(function (k) { localStorage.setItem(k, 'shown'); }); return true;`);
     await d.reload();
     await firstPaint();

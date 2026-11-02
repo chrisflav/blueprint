@@ -203,6 +203,11 @@ The reduction (`transitiveReduction` in `model.js`) works
 Hiding everything it says loses no reachability. The status line counts the
 arcs it hid.
 
+Every unfolding or folding — a node's + or −, a double click, the side
+panel's button, *Collapse all*, *↑ Back to …*, a link that opens a section —
+fits the new graph into the stage, as *Fit* does (`draw` in `graph.js`); a
+filter, the search or a selection keeps the view where the reader left it.
+
 Expanding a section enters it: the level it was opened from — every node,
 title and arc drawn outside it — is faded, as selecting a node fades what is
 not its neighbourhood, but stays clickable and reachable with Tab. Arcs with
@@ -211,13 +216,14 @@ still show. The reader goes back up with *↑ Back to …* at the top left of th
 stage or the section's own −. Going down another level does the same again,
 one level at a time. The section entered is the innermost of the open ones
 when they nest one inside the next (`enteredSection` in `graph.js`); with
-sections open side by side, as after *Expand all*, there is no one level to
-be in and nothing is faded.
+sections open side by side there is no one level to be in and nothing is
+faded.
 
 The top bar has two rows. The first is the title, the tabs and, at its
 right, the *Style* menu and *Show progress*, which wrap under the tabs as a
 whole when the row is short of room rather than crowd the title. The second
-is the search box and *Export PDF* on every page but the graph; on the graph
+is the search box and *Export PDF*, at its right, on every page but the
+graph; on the graph
 it is the graph's toolbar instead, set as that row is: the same padding, the
 line above it inset as between the two rows, and its controls the size and
 colour of the top bar's (`html[data-view="graph"]` in `style.css`; app.js
@@ -225,15 +231,19 @@ sets `data-view`, and index.html already before the page loads, so the
 graph never shows the second row while it loads).
 
 The graph opens on the graph alone. Of the toolbar only *Collapse all*, the
-highlight search, Fit, `+` and `−` show; *Expand all* and the edge, *hide
-implied* and status filters fold behind *Filters*, which
+highlight search, Fit, `+` and `−` show; the edge, *hide implied* and
+status filters fold behind *Filters*, which
 carries a dot while anything is filtered out. The side panel is hidden too,
 and the stage takes its column; *Show sidebar* at the right end of the
-toolbar brings it back, and *Hide sidebar* hides it again. *Replay intro*,
-when the project has an intro, is beside it, and only on the graph, where
-the intro lands. Both choices are
-the reader's, kept in `localStorage` (`blueprint.graph.tools` and
-`blueprint.graph.side`, `shown` or `hidden`; no choice is hidden).
+toolbar brings it back, and *Hide sidebar* hides it again. So are the
+statistics at the foot of the stage (how many nodes and links, what is
+hidden, what is expanded): *Show statistics*, beside it, shows them, and
+*Hide statistics* hides them again; while a layout runs the line shows
+anyway, to say how much is being laid out. *Replay intro*, when the project
+has an intro, is between them, and only on the graph, where the intro lands.
+The three choices are the reader's, kept in `localStorage`
+(`blueprint.graph.tools`, `blueprint.graph.side` and `blueprint.graph.stats`,
+`shown` or `hidden`; no choice is hidden).
 
 The side panel of a selected node heads with its title and, beside it, *Open
 in document →*: the document's page with the node's level, scrolled to it,
@@ -367,31 +377,36 @@ The PDF export leaves the same heading and prose out (below).
 The table of contents is a page of its own, `#/contents` (`contents.js`), the
 *Contents* tab of the top bar: the whole document as a tree, along the same
 order and under the same numbers, a row per entry — a section or a
-statement — with its number, title and progress, each a link to its level
-(below). Beside a row with entries below it is a small triangle that unfolds
+statement — with its number, title and progress, each a link to the page
+its entry heads (below). Beside a row with entries below it is a small triangle that unfolds
 them, and folds them again; the tree opens on the top level, and what the
 reader unfolded is kept while the site is open. A row's entries are built when it is first unfolded.
 
-Every link to an entry — a row of the contents or of the sidebar, a heading
-on a page, a cross reference in prose, *In the document →* on an object page,
-*Open in document →* in the graph's side panel — leads to its *level* (`documentLevelOf` in `model.js`): the page of its
-parent, which writes out the entry and its siblings, scrolled to it
-(`?focus=`) — for a chapter, the top of the document
-(`#/document?focus=<id>`). A heading is one link, the kind, the
-number and the title together: *Lemma 2.1 Triviality on fibres* leads to the
-page with 2.1, 2.2, …, and the title of section 2's own page to the page with
-sections 1, 2, 3, …, whatever page it is clicked on; when that is the page
-already open, the click scrolls. The object page is a step aside, on the small
-*object* link beside the heading. The sidebar (`levelSidebar` in
+A row of the contents, of the contents page or of the sidebar, leads to the
+page its entry heads (`documentPageOf` in `model.js`, `documentPageHref` in
+`app.js`): chapter 2 to the page of 2, with 2.1, 2.2, … written out, at its
+top. A statement, which heads no page, leads to the page it is read on,
+scrolled to it (`?focus=`). A heading is one link, the kind, the number and
+the title together, and it stays where it is: clicked, it is scrolled to the
+top of the page it is on, whatever page and whatever entry, the page's own
+title and a repeated entry's included, and the link says so (`?focus=`).
+*Read 1.2 →* beside it leads on to its own page, and the object page is a
+step aside, on the small *object* link.
+
+Every other link to an entry — a cross reference in prose, *In the document →*
+on an object page, *Open in document →* in the graph's side panel — leads to
+its *level* (`documentLevelOf` in `model.js`): the page of its parent, which
+writes out the entry and its siblings, scrolled to it (`?focus=`) — for a
+chapter, the top of the document (`#/document?focus=<id>`); a reference whose
+level is the page open only scrolls. The sidebar (`levelSidebar` in
 `document.js`) lists the level the page writes out, under the chain down to
-it as headings, with the entry gone to opened on its own entries. So after a
-click on chapter 1 the page is 1, 2, 3, … and the sidebar is 1 with 1.1, 1.2,
-… under it, then 2, 3, …; after a click on 1.1 the page is 1.1, 1.2, … and
-the sidebar is the heading 1 over 1.1, with 1.1.1, 1.1.2, … under it, then
-1.2, …, and no 2, 3. A heading of the chain leads to its own level the same
-way, so 1 goes back to the chapters. An entry of the level on screen is only
-scrolled to and opened, and the link updated, without rebuilding the page. A
-page reached otherwise — by a *Read* line, the breadcrumbs, a number — lists
+it as headings; reached by such a link, it shows the entry gone to opened on
+its own entries. So on chapter 2's page the sidebar is the heading 2 over
+2.1, 2.2, …; a click on 2.1 opens 2.1's page, with 2.1.1, 2.1.2, … written
+out and the sidebar the headings 2 and 2.1 over them. A statement of the page
+on screen is only scrolled to and opened, and the link updated, without
+rebuilding the page; the page's own entry scrolls to the top. A page reached
+otherwise — by a *Read* line, the breadcrumbs, a number — lists
 its own entries under its chain. Every style has this sidebar; the Outline
 style draws it as an outline (see below). Query parameters, which a link may
 carry (the page itself has no controls for them):
@@ -838,8 +853,8 @@ The shape the pages are built for:
 
 * the graph's default view is the fully collapsed one — the top of the
   hierarchy, tens of nodes. Everything below it arrives as the reader expands
-  into it, and only "Expand all" (which says how many objects that is) puts
-  thousands of nodes on screen;
+  into it, a section at a time; there is no *Expand all*, and only a link
+  whose `expand=` names every section puts thousands of nodes on screen;
 * the document is split into pages, so a page is one level of the hierarchy
   rather than the whole project; and a page that is still large (a section
   with hundreds of statements, or `depth=all`) appends its headings a chunk
