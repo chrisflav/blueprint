@@ -1500,6 +1500,79 @@ await check('"hide appendix" is offered only when there is an appendix to hide',
   ok(!labels.includes('hide appendix'), 'offered on a snapshot without an appendix');
 });
 
+await check('the top bar: the style menu and Show progress on the first row; the search and Export PDF on the second, which the graph has not', async () => {
+  const html = fs.readFileSync(path.join(webDir, 'index.html'), 'utf8');
+  const between = (from, to) => html.slice(html.indexOf(from), html.indexOf(to, html.indexOf(from)));
+  const first = between('<div class="topbar-main">', '<div class="topbar-tools">');
+  const second = between('<div class="topbar-tools">', '</header>');
+  ok(/<nav class="tabs"[\s\S]*<\/nav>[\s\S]*id="topbar-aside"/.test(first), 'the aside is not after the tabs on the first row');
+  ok(!/topbar-aside/.test(second), 'the aside is still on the second row');
+  ok(/id="gsearch"/.test(second) && /id="export-pdf"/.test(second), 'the search and Export PDF are on the second row');
+  ok(/setAttribute\('data-view', view\)/.test(html), 'index.html does not mark the page before it loads');
+  const css = fs.readFileSync(path.join(webDir, 'style.css'), 'utf8');
+  ok(/html\[data-view="graph"\] \.topbar-tools \{ display: none; \}/.test(css), 'the graph still has the second row');
+
+  const view = () => dom.document.documentElement.getAttribute('data-view');
+  await go('#/graph?collapse=refines');
+  eq(view(), 'graph', 'the graph');
+  await go('#/document');
+  eq(view(), 'document', 'the document');
+  await go('#/object/def-compact');
+  eq(view(), 'object', 'an object page');
+  await go('#/checks');
+  eq(view(), 'graph', 'an old link the graph answers');
+  const aside = dom.document.getElementById('topbar-aside');
+  ok(aside.querySelector('select.theme-select') && aside.querySelector('button.progress-toggle'),
+    'the style menu and Show progress are in the aside');
+});
+
+await check('Replay intro is in the graph\'s toolbar beside Show sidebar, and nowhere else', async () => {
+  const project = app.model.project;
+  const aside = dom.document.getElementById('topbar-aside');
+  const redrawTopBar = async () => {
+    for (let i = 0; i < 2; i += 1) { fire(aside.querySelector('button.progress-toggle'), 'click'); await tick(5); }
+  };
+  try {
+    app.model.project = { ...project, intro: { body: 'Welcome', durationMs: 60000 } };
+    await redrawTopBar();
+    await go('#/progress');
+    await go('#/graph?collapse=refines');
+    const items = [...root.querySelector('.toolbar').childNodes];
+    const at = items.findIndex((n) => n.classList && n.classList.contains('intro-replay'));
+    ok(at >= 0, 'no Replay intro in the toolbar');
+    eq(items[at].textContent, 'Replay intro', 'its words');
+    ok(items[at + 1] && items[at + 1].classList.contains('tb-side'), 'it is not just before Show sidebar');
+    eq(aside.querySelectorAll('.intro-replay').length, 0, 'the top bar still has one');
+    await go('#/document');
+    eq(dom.document.querySelectorAll('.intro-replay').length, 0, 'a page that is not the graph has one');
+
+    app.model.project = { ...project };
+    await go('#/progress');
+    await go('#/graph?collapse=refines');
+    eq(root.querySelectorAll('.toolbar .intro-replay').length, 0, 'offered for a project with no intro');
+  } finally {
+    app.model.project = project;
+    await redrawTopBar();
+  }
+});
+
+await check('`/` focuses the top bar\'s search, and on the graph the graph\'s own', async () => {
+  const focused = [];
+  const spy = (e, name) => { e.focus = () => focused.push(name); e.select = () => {}; };
+  const key = () => {
+    let prevented = false;
+    dom.document.dispatch('keydown', { key: '/', target: dom.document.documentElement, preventDefault() { prevented = true; } });
+    return prevented;
+  };
+  spy(dom.document.getElementById('gsearch-input'), 'top bar');
+  await go('#/document');
+  ok(key(), 'the key was left to the page');
+  await go('#/graph?collapse=refines');
+  spy(root.querySelector('.toolbar .tb-search input'), 'graph');
+  ok(key(), 'the key was left to the page on the graph');
+  eq(focused.join(', '), 'top bar, graph', 'what took the focus');
+});
+
 await check('the graph opens with its toolbar folded and no sidebar, until the reader asks', async () => {
   const store = new Map();
   global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => { store.set(k, String(v)); } };

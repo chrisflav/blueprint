@@ -37,8 +37,8 @@
 // Only on the way in: when the site is opened at its landing page, the bare
 // graph.  A link to anything else (an object, the document, a graph with a
 // selection) is something the reader asked for and opens straight on it, and
-// `?intro=0` in the page's URL leaves the intro out anywhere.  The top bar
-// has a button to see it again (`replayIntro`), from any page.
+// `?intro=0` in the page's URL leaves the intro out anywhere.  The graph's
+// toolbar has a button to see it again (`replayIntro`).
 
 export const DEFAULT_MS = 3000;
 export const FADE_MS = 700; // the `.intro.leaving` transition in style.css
@@ -220,11 +220,12 @@ export function showIntro(app, { host = document.body, project = app.model && ap
 }
 
 /**
- * The intro again, as the reader asked for it from the top bar: on the
- * landing page, the bare graph, which is where it ends.  From anywhere else
- * the page goes there first and the intro starts with it, after the route
- * change (which would otherwise end it).  Returns what `showIntro` does, or a
- * Promise of it when the page had to change.
+ * The intro again, as the reader asked for it from the graph's toolbar: on
+ * the landing page, the bare graph, which is where it ends.  From anywhere
+ * else (a graph with a selection, say) the page goes there first and the
+ * intro starts with it, after the route change (which would otherwise end
+ * it).  Returns what `showIntro` does, or a Promise of it when the page had
+ * to change.
  */
 export function replayIntro(app, { atLanding, host = document.body, landing = '#/graph' } = {}) {
   if (!introOf(app.model && app.model.project)) return null;

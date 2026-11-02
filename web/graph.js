@@ -400,6 +400,9 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => fitToView(app) , title: 'fit the graph into the viewport' }, 'Fit'),
     el('button', { onclick: () => zoomBy(app, 1.25) }, '+'),
     el('button', { onclick: () => zoomBy(app, 1 / 1.25) }, '\u2212')));
+  // Replay intro is the graph's alone, where the intro lands (app.js).
+  const intro = app.introButton ? app.introButton() : null;
+  if (intro) bar.appendChild(intro);
   bar.appendChild(sideToggle(app));
 }
 
