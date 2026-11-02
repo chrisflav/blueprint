@@ -2483,12 +2483,17 @@ function renderSide(app, st, view, quot) {
       onclick: () => select(app, null),
     }, '\u2715')));
 
-  // The title, and beside it the way to the object's own page.
+  // The title, and beside it the way into the document: the page with the
+  // object's level, scrolled to it, as every link to it there leads.  What the
+  // document leaves out (a plain sugar edge, say) has its object page instead.
   const status = M.badgeStatusOf(m, id);
   const heading = el('h2', M.titleOf(o));
+  const inDoc = app.documentLevelHref(M.documentOutline(app.model, st.collapse), st.collapse, id);
   side.appendChild(el('div.side-head', { 'data-id': id },
     heading,
-    el('a.side-open', { href: app.objectHref(id) }, 'Open object page \u2192')));
+    inDoc
+      ? el('a.side-open', { href: inDoc }, 'Open in document \u2192')
+      : el('a.side-open', { href: app.objectHref(id) }, 'Open object page \u2192')));
   side.appendChild(el('div.meta', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status)));
 
   const prog = st.progress ? M.progressMixOf(app.model, st.collapse, id) : null;

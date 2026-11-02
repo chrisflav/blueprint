@@ -1011,17 +1011,23 @@ await check('the side panel reads prose first and folds the long listings', asyn
   eq(listings[0].querySelectorAll('ul.objlist li').length, 6, 'the incident rows are there, only shut');
 });
 
-await check('the side panel heads with the title and the object page link, and no id', async () => {
+await check('the side panel heads with the title and the link into the document, and no id', async () => {
   await go('#/graph?sel=sec-foundations');
   const head = root.querySelector('aside.side .side-head');
   ok(head, 'no heading row');
   eq(head.getAttribute('data-id'), 'sec-foundations', 'the row names the object it is for');
   eq(head.querySelector('h2').textContent, modelMod.titleOf(app.model.byId.get('sec-foundations')), 'the title');
   const a = head.querySelector('a.side-open');
-  ok(a, 'no object page link beside the title');
-  eq(a.getAttribute('href'), '#/object/sec-foundations', 'it leads to the object page');
-  eq(root.querySelectorAll('aside.side a').filter((x) => /Open object page/.test(x.textContent)).length, 1,
+  ok(a, 'no document link beside the title');
+  eq(a.textContent, 'Open in document \u2192', 'its words');
+  eq(a.getAttribute('href'), '#/document?collapse=refines&focus=sec-foundations',
+    'a chapter: the top level of the document, scrolled to it');
+  eq(root.querySelectorAll('aside.side a').filter((x) => /Open in document/.test(x.textContent)).length, 1,
     'the link is there more than once');
+  await go('#/graph?sel=sec-main-induction&expand=sec-main');
+  eq(root.querySelector('aside.side .side-head a.side-open').getAttribute('href'),
+    '#/document/sec-main?collapse=refines&focus=sec-main-induction', 'a section: its chapter\'s page, with its siblings');
+  await go('#/graph?sel=sec-foundations');
   eq(root.querySelector('aside.side .obj-id'), null, 'the id is still shown under the title');
   const top = [head, root.querySelector('aside.side .meta')].map((n) => n.textContent).join(' ');
   ok(!top.includes('sec-foundations'), `the id is written at the top of the panel: ${JSON.stringify(top)}`);

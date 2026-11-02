@@ -209,7 +209,10 @@ the reader's, kept in `localStorage` (`blueprint.graph.tools` and
 `blueprint.graph.side`, `shown` or `hidden`; no choice is hidden).
 
 The side panel of a selected node heads with its title and, beside it, *Open
-object page →*; under them its kind and status, but not its id. Its prose
+in document →*: the document's page with the node's level, scrolled to it,
+where every link to it in the document leads (in the graph's collapse kind).
+What the document leaves out has *Open object page →* there instead. Under
+them its kind and status, but not its id. Its prose
 comes next, open, and folds like the listings after it (*Incident objects*,
 *Hidden inside*), which start shut. Whether each is open is kept while the
 reader clicks from node to node.
@@ -232,7 +235,7 @@ nothing changes on a wider screen:
 * the side panel is a sheet over the bottom of the graph, there only while
   something is selected, whatever *Show sidebar* was set to on a wide screen
   (the button is not offered). Its bar minimises it to the title, with
-  *Open object page →*, and the *Expand/Collapse* button, or closes it, which deselects. A node tapped under
+  *Open in document →*, and the *Expand/Collapse* button, or closes it, which deselects. A node tapped under
   the sheet is panned up into view;
 * two fingers pinch to zoom about their midpoint and pan; one finger pans;
 * a double tap on a node expands or collapses it. It is counted by the page
@@ -326,8 +329,8 @@ them, and folds them again; the tree opens on the top level, and what the
 reader unfolded is kept while the site is open. A row's entries are built when it is first unfolded.
 
 Every link to an entry — a row of the contents or of the sidebar, a heading
-on a page, a cross reference in prose, *In the document →* on an object page —
-leads to its *level* (`documentLevelOf` in `model.js`): the page of its
+on a page, a cross reference in prose, *In the document →* on an object page,
+*Open in document →* in the graph's side panel — leads to its *level* (`documentLevelOf` in `model.js`): the page of its
 parent, which writes out the entry and its siblings, scrolled to it
 (`?focus=`) — for a chapter, the top of the document
 (`#/document?focus=<id>`). A heading is one link, the kind, the
