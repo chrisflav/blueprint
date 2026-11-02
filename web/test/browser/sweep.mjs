@@ -1233,19 +1233,32 @@ async function layoutChecks(d, f) {
     // graph.  The tall pages are scrolled to the bottom, too, so the bar is
     // measured where it must stay: a sticky bar stayed for the first window
     // only, the body being one window tall, and left with the body's foot.
+    // On the graph the bar is its first row alone and the graph's toolbar is
+    // the second (its filters may wrap it onto more lines), so what is the
+    // same everywhere is the first row, and where the second row's controls
+    // end: the search box elsewhere, Collapse all on the graph.
     const heights = {};
     for (const hash of ['#/graph', '#/document?depth=all', '#/progress', '#/object/' + encodeURIComponent((f.withFacts || f.section))]) {
       await route(d, hash);
       await sleep(900);
       heights[hash.split('/')[1]] = await d.js(`window.scrollTo(0, document.documentElement.scrollHeight);
-        var r = document.querySelector('.topbar').getBoundingClientRect();
-        return { h: Math.round(r.height * 10) / 10, top: Math.round(r.top),
+        var bar = document.querySelector('.topbar');
+        var r = bar.getBoundingClientRect();
+        var graph = document.documentElement.getAttribute('data-view') === 'graph';
+        var control = document.querySelector(graph ? '.toolbar .tb-collapse button' : '#gsearch-input');
+        var round = function (v) { return Math.round(v * 10) / 10; };
+        return { h: round(r.height), top: Math.round(r.top), graph: graph,
+                 first: round(document.querySelector('.topbar-main').getBoundingClientRect().height),
+                 controls: control ? round(control.getBoundingClientRect().bottom - r.top) : null,
                  want: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h')) };`);
     }
     const hs = Object.values(heights);
+    const others = hs.filter((x) => !x.graph);
     return {
-      ok: hs.every((x) => x.h === hs[0].h && x.top === 0) && hs[0].h >= hs[0].want,
-      evidence: `top bar, scrolled to the bottom: ${j(Object.fromEntries(Object.entries(heights).map(([k, v]) => [k, v.h + 'px at ' + v.top])))}, --topbar-h ${hs[0].want}px`,
+      ok: hs.every((x) => x.top === 0 && x.first === hs[0].first && x.controls !== null && x.controls === hs[0].controls)
+        && others.every((x) => x.h === others[0].h && x.h >= x.want),
+      evidence: `scrolled to the bottom, the bar's height, first row and where the second row's controls end: `
+        + j(Object.fromEntries(Object.entries(heights).map(([k, v]) => [k, `${v.h}px at ${v.top}, row ${v.first}px, controls to ${v.controls}px`]))),
     };
   });
 
