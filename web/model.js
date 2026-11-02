@@ -1586,6 +1586,31 @@ export function mathRegExp() {
 }
 
 /**
+ * Whether an object says `hide_content = true` (or `"yes"`) in its front
+ * matter: the document leaves it off its parent's page, heading and prose,
+ * and it is read on its own page instead (`isHiddenEntry`).
+ */
+export function hidesContent(o) {
+  const v = o && o.attrs ? o.attrs.hide_content : undefined;
+  return v === true || (typeof v === 'string' && v.trim().toLowerCase() === 'yes');
+}
+
+/**
+ * Whether the document leaves this entry off its parent's page: it hides its
+ * content (`hidesContent`) and has a page of its own, with entries under it,
+ * where it is written out as the page's head.  Its place in the contents, its
+ * number and its children are untouched: on a page that writes out more than
+ * one level, its children are still there.  An entry with nothing under it
+ * has no page to be read on and is never hidden (`blueprint check` reports
+ * the attribute there).  A repeated entry follows the one it repeats.
+ */
+export function isHiddenEntry(outline, entry) {
+  if (!entry) return false;
+  const real = outline.byId.get(entry.id) || entry;
+  return real.children.length > 0 && hidesContent(real.object);
+}
+
+/**
  * The page of the split document an object is read on: its own page if it has
  * entries under it, otherwise its parent's, which shows it among its siblings.
  * The top of the document is its contents, so a top-level entry with nothing
@@ -1609,12 +1634,16 @@ export function documentPageOf(outline, id) {
  * `null` for the top level (written out, since the contents write nothing).
  * So Lemma 2.1 is on the page with 2.1, 2.2, …, and Section 2 on the one with
  * 1, 2, 3, ….  A step is on the level of its source, a proof on its
- * statement's.  `undefined` when the object is not in the document at all.
+ * statement's.  An entry that hides its content (`isHiddenEntry`) is on its
+ * own page, the one place it is written out.  `undefined` when the object is
+ * not in the document at all.
  */
 export function documentLevelOf(outline, id) {
   if (outline.stepOf.has(id)) return documentLevelOf(outline, outline.stepOf.get(id));
   const entry = outline.byId.get(id);
   if (!entry) return undefined;
+  // Left off its parent's page: it is written out on its own.
+  if (isHiddenEntry(outline, entry)) return entry.id;
   return entry.parent ? entry.parent.id : null;
 }
 
@@ -1622,14 +1651,16 @@ export function documentLevelOf(outline, id) {
  * Whether the page of `pageId` (null for the top level), inlining `levels`
  * levels below itself, writes out `id`.  `levels` 0 on the top page is its
  * contents alone, which write nothing out: text at the top level is read on
- * the top level written out.
+ * the top level written out.  An entry that hides its content is shown on its
+ * own page alone.
  */
 export function documentPageShows(outline, pageId, levels, id) {
   if (outline.stepOf.has(id)) id = outline.stepOf.get(id);
   const entry = outline.byId.get(id);
   if (!entry) return false;
-  if (pageId === null) return entry.depth < levels;
   if (entry.id === pageId) return true;
+  if (isHiddenEntry(outline, entry)) return false;
+  if (pageId === null) return entry.depth < levels;
   for (let p = entry.parent; p; p = p.parent) {
     if (p.id === pageId) return entry.depth - p.depth <= levels;
   }
@@ -1638,14 +1669,16 @@ export function documentPageShows(outline, pageId, levels, id) {
 
 /**
  * The entries a page writes out, in reading order: the page's own entry (none
- * for the top level) and everything up to `levels` levels below it.
+ * for the top level) and everything up to `levels` levels below it, but for
+ * the entries that hide their content (`isHiddenEntry`), which are left out
+ * themselves while their children, when the page reaches them, are not.
  */
 export function documentPageEntries(outline, pageId, levels) {
   const out = [];
   const walk = (list, left) => {
     if (left <= 0) return;
     for (const e of list) {
-      out.push(e);
+      if (!isHiddenEntry(outline, e)) out.push(e);
       walk(e.children, left - 1);
     }
   };

@@ -197,6 +197,32 @@ def structuralChecks (b : Blueprint) : Array Check := Id.run do
         cs := cs.push <| Check.warning "multi-parent"
           s!"{o.source.file}: '{o.id}' has {ps.size} '{k}' parents ({String.intercalate ", " ps.toList}); it is counted under each"
           (#[o.id] ++ ps)
+  -- `hide_content`: a yes or a no, and only on what has a page of its own,
+  -- which is what has children under some collapse kind
+  let hiders := b.objects.filter fun o => (o.attr? "hide_content").isSome
+  if !hiders.isEmpty then
+    let collapses := b.schema.collapseKinds.map (Collapse.of b ·)
+    for o in hiders do
+      let says : Option Bool := match o.attr? "hide_content" with
+        | some (.bool v) => some v
+        | some (.str s) => match (trim s).toLower with
+          | "yes" => some true
+          | "no" => some false
+          | _ => none
+        | _ => none
+      match says with
+      | none =>
+        cs := cs.push <| Check.error "bad-attr"
+          s!"{o.source.file}: '{o.id}' has hide_content = {(o.attr? "hide_content").get!}; it takes true, false, \"yes\" or \"no\"" #[o.id]
+      | some false => pure ()
+      | some true =>
+        let hasPage := match b.findIdx? o.id with
+          | some i => collapses.any fun c => !c.children[i]!.isEmpty
+          | none => false
+        if !hasPage then
+          cs := cs.push <| Check.error "hide-content-without-page"
+            s!"{o.source.file}: '{o.id}' hides its content, but nothing is under it, so it has no page of its own to be read on"
+            #[o.id]
   -- links in prose
   for o in b.objects do
     for l in sortDedup (extractLinks o.body) do

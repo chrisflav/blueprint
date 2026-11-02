@@ -317,7 +317,10 @@ object as `src`. Links in the body of the form `[slug]` are resolved and
 validated but create no edges.
 
 The linear document view orders sections by the `order` attribute and their
-children likewise, so a blueprint still reads as a paper.
+children likewise, so a blueprint still reads as a paper. `hide_content =
+true` (or `"yes"`), allowed on every kind, leaves an entry that has a page of
+its own off its parent's page, heading and prose, and out of the PDF; it is
+read on its own page, and keeps its number and its place in the contents.
 
 Verso was considered as the text language. It is deferred: it would let prose
 reference Lean names with checking, but raises the barrier for contributors

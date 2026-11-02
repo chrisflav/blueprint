@@ -19,6 +19,12 @@ def defaultNodeAttrs : Array String :=
 def defaultEdgeAttrs : Array String :=
   #["title", "review", "tags", "order", "aliases", "owner"]
 
+/-- Attributes every kind permits, whatever its `attrs` say: they are about
+how the website shows an object, not about what the object is.
+`hide_content` leaves an entry with a page of its own off its parent's page
+of the document (and out of the PDF); `true`, `false`, `"yes"` or `"no"`. -/
+def universalAttrs : Array String := #["hide_content"]
+
 /-- Cardinality "exactly one". -/
 def cardOne : Cardinality := { min := 1, max := some 1 }
 

@@ -47,6 +47,10 @@ Within the chosen part:
   `model.js`), not at the top of the document where the collapse order
   alone would put it;
 * `hidden` text is set in place as bare prose, unnumbered;
+* an entry with `hide_content = true` is left out as the website leaves it
+  off its parent's page: no heading, prose, proofs or steps of its own, while
+  its children, its number and its line in the PDF's contents stay.  As the
+  part exported it is written out, as on its own page;
 * sugar edges with nothing to say (`refines/a/b`, a bare `uses`) are
   structure and are not set;
 * **an object with several parents is written out once**, at the first place

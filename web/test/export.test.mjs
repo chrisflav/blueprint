@@ -158,6 +158,28 @@ await check('a section is that section and what is below it, nothing else', () =
   eq(res.fileName, 'paper-2-1-covers', 'its file name');
 });
 
+await check('hide_content leaves an entry\'s heading and prose out, and keeps its children and its line in the contents', async () => {
+  const snap = JSON.parse(paperText);
+  const o = snap.objects.find((x) => x.id === 'spaces');
+  o.attrs = { ...(o.attrs || {}), hide_content: true };
+  const m = M.buildModel(snap);
+  const res = exportLatex(m, {});
+  const tex = res.tex;
+  ok(/^% object: spaces .*content hidden$/m.test(tex), 'the hidden chapter is not marked as such');
+  ok(!/\\section\*\{\\texorpdfstring\{2\\quad Covers and compact spaces/.test(tex), 'its heading is written');
+  ok(/\\addcontentsline\{toc\}\{section\}\{\\texorpdfstring\{2\\quad Covers and compact spaces/.test(tex), 'its line in the contents is gone');
+  ok(written(tex).includes('def-cover') && /2\.2\\quad Compact spaces/.test(tex), 'its children are gone');
+  ok(!tex.includes(m.byId.get('spaces').body.trim().slice(0, 30)), 'its prose is written');
+  // Every label referred to is set: nothing points at a heading not written.
+  const set = new Set([...tex.matchAll(/\\label\{(bp\d+)\}/g)].map((x) => x[1]));
+  for (const [, l] of tex.matchAll(/\\(?:hyperref\[|pageref\{)(bp\d+)/g)) ok(set.has(l), `${l} is referred to and never set`);
+  // The dialog's count leaves it out; the part itself shows it.
+  const whole = planExport(m, {}).stats.entries;
+  eq(whole, planExport(paper(), {}).stats.entries - 1, 'the hidden entry is counted');
+  const part = exportLatex(m, { scope: 'spaces' }).tex;
+  ok(/\\section\*\{\\texorpdfstring\{2\\quad Covers and compact spaces/.test(part), 'exported as the part, it heads it');
+});
+
 await check('a shared lemma whose first place is elsewhere is written out in full', () => {
   const m = paper();
   const res = exportLatex(m, { scope: 'products' });
