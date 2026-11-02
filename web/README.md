@@ -134,7 +134,7 @@ nowhere.
 The graph route carries its full view state as query parameters:
 `collapse=<kind>`, `expand=<comma separated ids>`, `ekinds=<edge kinds>`,
 `status=<derived statuses>`, `q=<search>`, `sel=<selected id>`,
-`reduce=0` when *hide implied* is off, `inner=1` when *arcs of contents*
+`reduce=1` when *hide implied* is on, `inner=1` when *arcs of contents*
 is on, and `appendix=0` when *hide appendix* is on.
 
 The graph is drawn from `graphModel` in `model.js`: the snapshot without the
@@ -149,12 +149,24 @@ snapshot; there an appendix is a section and a hidden object is text (see
 below), and an object the graph never draws says so instead of offering
 *Show in graph*.
 
+By default the graph draws, for two nodes A and B (statements and collapsed
+sections, at any depth; an expanded section is a box, never an end), an arc
+A → B exactly when
+
+1. A, or something inside A, has an arc to B itself, or
+2. A itself has an arc to B or to something inside B.
+
+An arc between two things both shut inside other nodes is not drawn, and an
+arc stands for every relation between its ends, however many, with no count
+on it; its tooltip names them. A test checks the rule against `ownEdges`
+over many expanded sets (`model.test.mjs`).
+
 Each visible object draws its own arcs (`ownEdges` in `model.js`): an object
 is drawn when every end of it is visible as itself, not lifted to the
 collapsed object it is hidden in. So a collapsed section shows the edges
-declared on the section and not those of the statements inside it, and its
-"×n" counts only its own edges. A relation with one end visible as itself is
-drawn too, its other end on the collapsed section that end is shut in: open a
+declared on the section and not those of the statements inside it. A
+relation with one end visible as itself is drawn too, its other end on the
+collapsed section that end is shut in: open a
 section, and a statement inside it that uses something in a section still
 shut gets an arc to that section (and the other way round), which can be
 opened in turn to see where it lands. Between two shut sections nothing of
@@ -166,7 +178,10 @@ section's edge, a hollow head when nothing inside does. *Arcs of contents*
 statements' edges lifted onto their sections and dashed where no section edge
 declares them; the status line counts the arcs of contents it hid.
 
-*Hide implied* (on by default) draws the transitive reduction of the graph as
+Both options that change which arcs are drawn are off by default, and the
+*Filters* button carries its dot while either is on.
+
+*Hide implied* (off by default) draws the transitive reduction of the graph as
 drawn: an arc is left out when a longer path of the same kind already joins
 its ends, so of "A uses B, B uses C, A uses C" only the first two are drawn.
 The reduction (`transitiveReduction` in `model.js`) works
