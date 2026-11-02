@@ -279,7 +279,7 @@ export function zoomLayers(p, count, zoom = ZOOM) {
 }
 
 /** The directory the snapshot is read from, which the intro's addresses are relative to. */
-function snapshotBase(app) {
+export function snapshotBase(app) {
   if (app.baseUrl) return app.baseUrl;
   try {
     return new URL('.', new URL(app.dataUrlOriginal || 'blueprint.json', location.href)).href;

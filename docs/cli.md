@@ -545,8 +545,10 @@ descend = ["MyProject", "MyLib"]    # optional: where the dependency walk goes
 "\\poly" = "#1[T]"
 
 [site]
-theme  = "outline"                  # the style the website opens in
-assets = "site-assets"              # copied into the site as assets/
+theme   = "outline"                 # the style the website opens in
+assets  = "site-assets"             # copied into the site as assets/
+logo    = "assets/logo.svg"         # left of the title in the top bar
+logoInk = true                      # drawn in the title's colour, default false
 
 [site.intro]                        # shown as the website opens, then the graph
 file     = "intro.md"               # Markdown; or body = """…""" inline
@@ -665,6 +667,14 @@ the graph is drawn, rather than the page waiting blank for a large snapshot.
 site` copies into the site as `assets/`: the place for the intro's pictures.
 It is not part of the snapshot.  A relative address in the intro is resolved
 against the directory holding `blueprint.json`, which is the site's root.
+
+`[site] logo` is a picture the website shows left of its title in the top
+bar, in place of its own mark and in every style: an address the site
+serves, such as `assets/logo.svg`, resolved as the intro's are.  It is drawn
+a little taller than the title's letters.  With `logoInk = true` only its
+shape counts: it is filled with the title's colour, so a one-colour logo
+follows the style and dark mode; otherwise it keeps its own colours.  They
+reach the snapshot as `project.logo` and `project.logoInk`.
 
 ### The default schema
 

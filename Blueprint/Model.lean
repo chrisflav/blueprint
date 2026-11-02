@@ -305,6 +305,14 @@ structure Project where
   `[site] theme` in `blueprint.toml`: the id of one of the website's themes,
   empty for its default.  Handed to the website as `project.theme`. -/
   theme : String := ""
+  /-- `[site] logo`: a picture the website shows left of the title in its top
+  bar, the address of a file the site serves (`assets/…`); empty for the
+  website's own mark.  Handed to the website as `project.logo`. -/
+  logo : String := ""
+  /-- `[site] logoInk`: draw `logo` in the colour of the title, as a mask, so
+  that a one-colour logo follows the style and dark mode; otherwise it is
+  shown with its own colours.  Handed to the website as `project.logoInk`. -/
+  logoInk : Bool := false
   /-- What the website shows in the middle of the screen as it opens, before
   the graph: `[site.intro]` in `blueprint.toml`, Markdown with maths, pictures
   and HTML, read from its `file` or given as its `body`.  Empty for none.

@@ -9,7 +9,8 @@ import { setupPreviews, closePreviews } from './preview.js';
 import { setupExport, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
 import { setupPrefetch, pausePrefetch, resumePrefetch, prefetchModule } from './prefetch.js';
-import { introOf, wantsIntro, showIntro, replayIntro, earlyIntro, introDecided, proseReady } from './intro.js';
+import { introOf, wantsIntro, showIntro, replayIntro, earlyIntro, introDecided, proseReady,
+  resolveUrl, snapshotBase } from './intro.js';
 
 // The pages, each loaded the first time it is shown: a reader who opens an
 // object page never downloads the graph.  `prepare`, where a page has one, is
@@ -970,10 +971,36 @@ function watchTopbar() {
   else if (typeof window.addEventListener === 'function') window.addEventListener('resize', set);
 }
 
+/**
+ * The project's logo left of the title (`project.logo`) in place of the
+ * website's own mark.  With `logoInk` it is a mask filled with the title's
+ * colour, so a one-colour logo follows the style and dark mode; otherwise the
+ * picture as it is.  The address is resolved as the intro's pictures are.
+ */
+function brandLogo(project) {
+  const brand = document.querySelector('.brand');
+  const holder = brand && brand.querySelector('.brand-logo');
+  if (!holder) return;
+  const logo = project && typeof project.logo === 'string' ? project.logo : '';
+  const href = logo ? resolveUrl(logo, snapshotBase(app)) : '';
+  const ink = !!(project && project.logoInk);
+  if (holder.dataset.href === href && holder.classList.contains('ink') === ink) return;
+  holder.dataset.href = href;
+  clear(holder);
+  holder.hidden = !href;
+  brand.classList.toggle('has-logo', !!href);
+  holder.classList.toggle('ink', !!href && ink);
+  holder.style.removeProperty('--brand-logo');
+  if (!href) return;
+  if (ink) holder.style.setProperty('--brand-logo', `url(${JSON.stringify(href)})`);
+  else holder.appendChild(el('img', { src: href, alt: '', decoding: 'async' }));
+}
+
 function updateChrome() {
   const title = (app.model && (app.model.project.title || app.model.project.name)) || 'Blueprint';
   document.getElementById('project-title').textContent = title;
   document.title = title;
+  brandLogo(app.model && app.model.project);
 
   const aside = document.getElementById('topbar-aside');
   clear(aside);
