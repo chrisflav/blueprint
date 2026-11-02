@@ -1675,6 +1675,14 @@ label.chk.st-chip.status-proved_with_axioms { border-color: var(--st-proved_with
 .doc-entry.is-section .prose { margin-top: .6rem; }
 .doc-entry.is-text { margin: 1.1rem 0; }
 .doc-entry.is-text > .prose { margin-top: 0; }
+/* A bibliography entry, as a paper sets one: the label in a column of its
+   own, the entry beside it, consecutive entries close together. */
+.doc-entry.is-reference { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: .8em; margin: .35rem 0; }
+.doc-entry.is-reference > .bib-label { min-width: 4.5em; font-variant-numeric: tabular-nums; }
+.doc-entry.is-reference > .bib-text > p { margin: 0; }
+.doc-entry.is-reference > .bib-text > p + p { margin-top: .35em; }
+.cite > a.cite-label { white-space: nowrap; text-decoration: none; }
+.cite > a.cite-label:hover { text-decoration: underline; }
 /* A grid track sized 1fr still has min-width:auto, so one wide formula or an
    unbreakable token pushes the prose column past the viewport. */
 .doc-layout > * { min-width: 0; }

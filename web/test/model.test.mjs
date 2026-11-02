@@ -1521,6 +1521,93 @@ check('hide_content leaves an entry with a page off its parent\'s page, and noth
   eq(M.documentPageShows(out, 'sec-foundations', 1, 'def-compact'), true, 'the leaf is shown');
 });
 
+// A copy of the sample with a References section of bibliography entries,
+// and a definition that cites them.
+function withReferences() {
+  const snap = JSON.parse(JSON.stringify(snapshot));
+  const add = (o) => snap.objects.push({ boundary: [], attrs: {}, body: '', depth: 0, ...o });
+  add({ id: 'sec-refs', kind: 'section', attrs: { title: 'References', order: 99 } });
+  const ref = (id, attrs, body = '') => {
+    add({ id, kind: 'reference', attrs, body });
+    add({ id: `refines/${id}/sec-refs`, kind: 'refines', depth: 1,
+      boundary: [{ role: 'src', id }, { role: 'tgt', id: 'sec-refs' }] });
+  };
+  ref('del80', { author: ['P. Deligne'], title: 'La conjecture de Weil. II', journal: 'Publ. Math. IHÉS', volume: '52', year: '1980', pages: '137-252' });
+  ref('del74', { author: ['P. Deligne'], title: 'La conjecture de Weil. I', journal: 'Publ. Math. IHÉS', volume: '43', year: '1974', pages: '273-307', url: 'https://example.org/del74' });
+  ref('bbd', { author: ['A. Beilinson', 'J. Bernstein', 'P. Deligne'], title: 'Faisceaux pervers', series: 'Astérisque', volume: '100', publisher: 'Soc. Math. France', year: '1982', type: 'book' });
+  ref('sga4', { label: 'SGA4', editor: ['M. Artin', 'A. Grothendieck', 'J.-L. Verdier'], title: 'Théorie des topos', series: 'Lecture Notes in Mathematics', volume: '269, 270, 305', publisher: 'Springer', year: '1972–1973', type: 'book' });
+  ref('x1', { author: 'A. Bhatt and P. Scholze', title: 'B', year: '2015' });
+  ref('x2', { author: ['A. Bhatt', 'P. Scholze'], title: 'A', year: '2015' });
+  ref('many', { author: ['A. One', 'B. Two', 'C. Three', 'D. Four', 'E. Five'], title: 'Many', year: '2001' });
+  ref('free', {}, 'Some free-form entry, [online](https://example.org).');
+  return M.buildModel(snap);
+}
+
+check('references: alphabetic labels as BibTeX alpha makes them', () => {
+  const m = withReferences();
+  const L = (id) => M.referenceLabelOf(m, id);
+  eq(L('del74'), 'Del74', 'one author: three letters and the year');
+  eq(L('del80'), 'Del80', 'the same author, another year');
+  eq(L('bbd'), 'BBD82', 'two to four authors: their initials');
+  eq(L('sga4'), 'SGA4', 'an explicit label');
+  eq(L('x2'), 'BS15a', 'a clash is told apart by a, b in the order of the titles');
+  eq(L('x1'), 'BS15b', '"A and B" is a list of names too');
+  eq(L('many'), 'OTT+01', 'more than four: three initials and +');
+  eq(M.referenceLabelOf(m, 'def-compact'), null, 'not a reference');
+});
+
+check('references: a label of its own is never taken again or suffixed', () => {
+  const mk = (objs) => ({ objects: objs, byId: new Map(objs.map((o) => [o.id, o])) });
+  const r = (id, attrs) => ({ id, kind: 'reference', boundary: [], attrs, body: '' });
+  const L = (objs) => [...M.referenceLabels(mk(objs))].map(([id, l]) => id + '=' + l).sort().join(' ');
+  eq(L([r('f', { author: ['P. Deligne'], year: '1974' }), r('e', { author: ['P. Deligne'], year: '1974', label: 'Del74' })]),
+    'e=Del74 f=Del74a', 'the explicit one keeps it, whatever the order');
+  eq(L([r('e', { author: ['P. Deligne'], year: '1974', title: 'A' }), r('f', { author: ['P. Deligne'], year: '1974', title: 'B' }), r('k', { author: ['P. Deligne'], year: '1974', title: 'C' })]),
+    'e=Del74a f=Del74b k=Del74c', 'a three-way clash');
+  eq(L([r('x', { author: ['P. Deligne'], year: '1974', title: 'A' }), r('y', { author: ['P. Deligne'], year: '1974', title: 'B' }), r('z', { label: 'Del74a' })]),
+    'x=Del74b y=Del74c z=Del74a', 'a suffix is not given twice');
+  eq(L([r('c1', { label: 'del80' }), r('c2', { author: ['P. Deligne'], year: '1980' })]), 'c1=del80 c2=Del80a', 'case aside');
+  eq(L([r('o', { author: 'A. Alpha and B. Beta and others', year: '2001' }), r('j', { author: ['J. Smith Jr.'], year: '1990' }), r('s', { author: ['A. Bee'], year: '1974/75' })]),
+    'j=Smi90 o=AB+01 s=Bee75', '"and others", "Jr.", the last two digits');
+});
+
+check('references: an entry in the order and punctuation of alpha', () => {
+  const m = withReferences();
+  const md = (id) => M.referenceMarkdown(m.byId.get(id));
+  eq(md('del74'), 'P. Deligne. [La conjecture de Weil. I](https://example.org/del74). *Publ. Math. IHÉS*, 43:273–307, 1974.', 'an article, its title linked');
+  eq(md('bbd'), 'A. Beilinson, J. Bernstein, and P. Deligne. *Faisceaux pervers*, volume 100 of *Astérisque*. Soc. Math. France, 1982.', 'a book in a series');
+  eq(md('sga4'), 'M. Artin, A. Grothendieck, and J.-L. Verdier, editors. *Théorie des topos*, volumes 269, 270, 305 of *Lecture Notes in Mathematics*. Springer, 1972–1973.', 'editors, several volumes');
+  eq(md('free'), 'Some free-form entry, [online](https://example.org).', 'no title: the prose alone');
+  eq(M.displayBody(m.byId.get('del80')), md('del80'), 'what a reference reads as');
+});
+
+check('references: citations name references, and only references', () => {
+  const m = withReferences();
+  const c = (s) => JSON.stringify(M.parseCitation(m, s));
+  eq(c('del74, del80'), JSON.stringify({ items: ['del74', 'del80'], locator: '' }), 'two references');
+  eq(c('sga4, Exp. X, Cor. 4.3'), JSON.stringify({ items: ['sga4'], locator: 'Exp. X, Cor. 4.3' }), 'one with a locator');
+  eq(M.parseCitation(m, '0, 1'), null, 'an interval');
+  eq(M.parseCitation(m, 'def-compact, 2'), null, 'an object that is not a reference');
+  const re = new RegExp(M.CITE_PATTERN);
+  eq(re.exec('see [sga4, Exp. X] there')[1], 'sga4, Exp. X', 'the pattern finds it');
+  eq(re.test('see [sga4] there'), false, 'a single id is SLUG_PATTERN\'s');
+  eq(re.test('[sga4, x](https://e.org)'), false, 'not a Markdown link');
+});
+
+check('references: read in place under their labels, sorted by them', () => {
+  const m = withReferences();
+  const out = M.documentOutline(m, 'refines');
+  const sec = out.byId.get('sec-refs');
+  eq(sec.children.map((e) => e.id).join(' '), 'bbd x2 x1 del74 del80 free many sga4', 'by label: BBD82 BS15a BS15b Del74 Del80 fre OTT+01 SGA4');
+  const e = out.byId.get('del74');
+  eq(e.text && e.reference, true, 'text, and a reference');
+  eq(e.number, null, 'no number');
+  eq(e.label, 'Del74', 'its label');
+  const ref = M.referenceOf(out, 'del74');
+  eq(ref.cite && ref.number, 'Del74', 'a reference to it is its label');
+  eq(out.byId.get('sec-refs').number !== null, true, 'the section is numbered as before');
+});
+
 check('hiding the appendix takes its contents and their relations along', () => {
   const m = M.buildModel(appendixSnapshot());
   sameSet(M.outOfGraph(m, { hideOptional: true }), [

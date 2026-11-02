@@ -579,6 +579,12 @@ default order on the object page. The slug stays the link's tooltip.
   object with several parents is referred to by its one number. A slug that
   resolves nowhere is a broken link exactly as before, and explicit link text,
   `[text](…)`, is markdown's and untouched.
+* A reference (kind `reference`) is cited as a paper cites it: `[id]` reads
+  "[Del74]", `[a, b]` "[Del74, Del80]", `[a, Exp. X]` "[SGA4, Exp. X]" (the
+  `.cite` span, `citationNode` in `app.js`), each label a link to its entry
+  with a preview on hover. The document sets the entries as a bibliography:
+  unnumbered, under their alphabetic labels, sorted by them
+  (`referenceLabels`, `referenceMarkdown` and `parseCitation` in `model.js`).
 
 ### Export PDF
 

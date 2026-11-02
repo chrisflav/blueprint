@@ -967,6 +967,50 @@ const refLinks = () => [...root.querySelectorAll('.body-prose a.objlink')].map((
 }));
 const refTo = (slug) => refLinks().find((r) => r.title === slug);
 
+await check('a citation reads as a paper sets it, "[Del74, Exp. X]", each label a link to its entry', async () => {
+  const saved = { model: app.model, snapshot: app.snapshot };
+  const snap = JSON.parse(JSON.stringify(app.snapshot));
+  const add = (o) => snap.objects.push({ boundary: [], attrs: {}, body: '', depth: 0, ...o });
+  add({ id: 'sec-refs', kind: 'section', attrs: { title: 'References', order: 99 } });
+  for (const [id, attrs] of [
+    ['del74', { author: ['P. Deligne'], title: 'La conjecture de Weil. I', journal: 'Publ. Math. IHÉS', volume: '43', year: '1974' }],
+    ['del80', { author: ['P. Deligne'], title: 'La conjecture de Weil. II', journal: 'Publ. Math. IHÉS', volume: '52', year: '1980' }],
+    ['sga4', { label: 'SGA4', title: 'Théorie des topos', year: '1972' }],
+  ]) {
+    add({ id, kind: 'reference', attrs });
+    add({ id: `refines/${id}/sec-refs`, kind: 'refines', depth: 1, boundary: [{ role: 'src', id }, { role: 'tgt', id: 'sec-refs' }] });
+  }
+  app.snapshot = snap;
+  app.model = modelMod1.buildModel(snap);
+  try {
+    const div = dom.document.createElement('div');
+    app.renderBody(div, 'As [del74] and [del74, del80] show, see [sga4, Thm. $x$, *Cor.* 4.3]; but [m, n] and [def-compact, 2] stay.', app.knownIds());
+    // `[id]` is linked in the text, after marked and KaTeX.
+    const single = div.querySelectorAll('.cite');
+    eq(single.map((c) => c.textContent).join(' | '), '[Del74]', 'a single citation');
+    eq(single[0].querySelector('a.cite-label').getAttribute('href'), '#/document/sec-refs?collapse=refines&focus=del74', 'to the entry, on its page');
+    eq(single[0].querySelector('a.cite-label').getAttribute('data-ref'), 'del74', 'with a preview on hover');
+    // `[a, b]` and `[a, locator]` become HTML before marked runs, so that a
+    // locator with maths or emphasis is still one citation; the shim keeps
+    // the markup marked was given as the element's HTML.
+    const html = div.innerHTML;
+    ok(html.includes('<span class="cite">&#91;<a class="objlink ref cite-label" href="#/document/sec-refs?collapse=refines&amp;focus=del74" title="del74" data-ref="del74">Del74</a>, ' +
+      '<a class="objlink ref cite-label" href="#/document/sec-refs?collapse=refines&amp;focus=del80" title="del80" data-ref="del80">Del80</a>&#93;</span>'), `several at once: ${html}`);
+    ok(html.includes('data-ref="sga4">SGA4</a>, Thm. $x$, *Cor.* 4.3&#93;</span>'), 'a locator, its Markdown left to marked');
+    ok(html.includes('but [m, n] and [def-compact, 2] stay'), 'brackets that cite nothing stay text');
+    eq(div.querySelectorAll('a.objlink.broken').length, 0, 'and are not broken links');
+    await go('#/document/sec-refs');
+    await app.rendered;
+    const items = root.querySelectorAll('.doc-entry.is-reference');
+    eq(items.map((i) => i.querySelector('.bib-label').textContent).join(' '), '[Del74] [Del80] [SGA4]', 'the bibliography, by label');
+    eq(items[0].getAttribute('id'), 'doc-del74', 'each entry an anchor');
+  } finally {
+    app.model = saved.model;
+    app.snapshot = saved.snapshot;
+  }
+  await go('#/object/def-compact');
+});
+
 await check('on an object page a reference reads "Definition 1.2" and leads to its level in the document', async () => {
   await go('#/object/def-compact');
   const r = refTo('def-filter');
