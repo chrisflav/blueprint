@@ -166,10 +166,9 @@ label.chk {
   font-weight: 600;
 }
 
-.gsearch input[type="search"] {
-  font-size: .95rem;
-  background: var(--panel);
-}
+/* The search box's text, and Export PDF's beside it (style.css). */
+.topbar-tools { --tools-font: .95rem; }
+.gsearch input[type="search"] { background: var(--panel); }
 
 .badge {
   font-size: .82rem;

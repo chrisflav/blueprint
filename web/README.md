@@ -217,7 +217,8 @@ faded.
 The top bar has two rows. The first is the title, the tabs and, at its
 right, the *Style* menu and *Show progress*, which wrap under the tabs as a
 whole when the row is short of room rather than crowd the title. The second
-is the search box and *Export PDF* on every page but the graph; on the graph
+is the search box and *Export PDF*, at its right, on every page but the
+graph; on the graph
 it is the graph's toolbar instead, set as that row is: the same padding, the
 line above it inset as between the two rows, and its controls the size and
 colour of the top bar's (`html[data-view="graph"]` in `style.css`; app.js
