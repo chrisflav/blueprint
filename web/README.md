@@ -506,9 +506,12 @@ and the legend fade in (`intro-playing`, `intro-chrome` and `intro-landed`
 on `<html>`). Meanwhile every layer, the background, each picture and last
 the graph's own `<svg>`, grows by `ZOOM` per step out of and into the middle
 of the graph's stage, at one speed (`zoomProgress`, `zoomLayers`; steps of
-lengths of their own grow by `zoomFactors`, less for a shorter one). A title
-`<svg>` with SMIL animations is paused at time 0 until the title has grown
-in. A title element marked `data-intro-logo` lands on the top bar's logo
+lengths of their own grow by `zoomFactors`, less for a shorter one). A layer
+fades out, and the next in, within the first `CROSSFADE` of a step, and a
+picture at rest takes at most `PICTURE_FIT` of the stage, so that it is gone
+before it fills the screen. A title `<svg>` with SMIL animations is paused at
+time 0 and played as the intro opens, without the title growing in (`.film`).
+A title element marked `data-intro-logo` lands on the top bar's logo
 instead of the title on its title (`intro-logo` on `<html>`: the logo shows
 from `intro-landed` on, the title with the bar). The
 pictures are drawn by `sketch` in `graph.js`, with the graph's ELK options,

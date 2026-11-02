@@ -1885,6 +1885,8 @@ html.intro-playing .graph-stage > svg { opacity: 0; }
   cursor: pointer;
   animation: intro-title-in .7s cubic-bezier(.2, .7, .2, 1) backwards;
 }
+/* A title that moves (an animated <svg>) shows itself, without growing in. */
+.intro-line.film { animation: none; }
 .intro-words { display: inline-block; }
 .intro-words :is(h1, h2, h3, h4, h5, h6, p) { font: inherit; margin: 0; }
 .intro-wait {
