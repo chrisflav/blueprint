@@ -2804,7 +2804,12 @@ await check('each layer of the zoom grows by the same factor per step', () => {
     '[[10,0],[1,1],[0.1,0],[0.01,0]]', 'after one step: the first picture at rest');
   const mid = at(1.5);
   eq(r(mid[1].scale / mid[2].scale), 10, 'the picture going out is ten times the one coming in');
-  ok(mid[1].opacity > 0 && mid[2].opacity > 0, 'both shown, half way');
+  eq(JSON.stringify([mid[1].opacity, mid[2].opacity]), '[0,1]', 'half way: the old one gone, the new one in');
+  const cross = at(1 + intro.CROSSFADE / 2);
+  ok(cross[1].opacity > 0 && cross[1].opacity < 1 && cross[2].opacity > 0 && cross[2].opacity < 1,
+    'early in the step: the two cross');
+  eq(r(cross[1].opacity + cross[2].opacity), 1, 'one fades out as the other fades in');
+  eq(at(1 + intro.CROSSFADE)[1].opacity, 0, 'gone after the first CROSSFADE of the step');
   eq(JSON.stringify(at(3).map((l) => [r(l.scale), r(l.opacity)])),
     '[[1000,0],[100,0],[10,0],[1,1]]', 'at the end: the graph at rest');
   eq(r(at(5)[3].scale), 1, 'the last layer stays at rest');

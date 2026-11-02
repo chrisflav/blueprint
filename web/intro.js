@@ -32,8 +32,9 @@
 // a shorter step grows less: the longest grow `ZOOM` times (`zoomFactors`).
 //
 // The title may be a picture that moves: an `<svg>` with SMIL animations in
-// it starts from its time 0 once the title has grown in, and `holdMs` is then
-// best its length.  And it may land on the project's logo (`project.logo`)
+// it starts from its time 0 at once, without the title growing in (it shows
+// itself as it likes, writing itself say), and `holdMs` is then best its
+// length.  And it may land on the project's logo (`project.logo`)
 // rather than on the top bar's title: the part of it marked
 // `data-intro-logo`, an element framing the drawing of the logo, flies onto
 // the top bar's logo, which is not there before it lands, while the top bar's
@@ -61,6 +62,8 @@ export const FILM_END_S = 3600; // a moving title's time with reduced motion: it
 export const TITLE_IN_MS = 700; // the title growing in: `intro-title-in` in style.css
 export const ZOOM = 10; // how much bigger each step of the zoom makes everything
 export const PICTURE_MAX = 2; // the largest a picture is drawn, in units of the graph's
+export const PICTURE_FIT = 0.45; // and at most this share of the stage's width and height, at rest
+export const CROSSFADE = 0.3; // the share of a step in which one picture fades out and the next in
 export const WAIT_MS = 15000; // how long the title waits for the graph once the snapshot is in
 
 function positive(x, d) {
@@ -312,9 +315,11 @@ export function zoomFactors(lengths, zoom = ZOOM) {
  * Each of the `count` layers of the zoom at progress `p` (`zoomProgress`), as
  * `{scale, opacity}`.  Layer 0 is the background and the last is the graph;
  * layer i is at rest, at scale 1 and fully shown, at p = i.  On its way in it
- * grows from 1/zoom and fades in, on its way out it grows on to zoom and
- * fades out, so every layer grows by the same factor in the same time.  The
- * first has no way in and the last no way out.  `zoom` may instead list each
+ * grows from 1/zoom, on its way out it grows on to zoom, so every layer grows
+ * by the same factor in the same time.  The fading is quicker: in the first
+ * `CROSSFADE` of a step the layer going out fades away, gone well before it
+ * fills the screen, while the next fades in out of its point.  The first has
+ * no way in and the last no way out.  `zoom` may instead list each
  * step's factor (`zoomFactors`): a layer comes in by the factor of the step
  * before it and goes out by that of its own.
  */
@@ -325,7 +330,8 @@ export function zoomLayers(p, count, zoom = ZOOM) {
     let d = p - i;
     if (i === 0 && d < 0) d = 0;
     if (i === count - 1 && d > 0) d = 0;
-    const opacity = d <= -1 || d >= 1 ? 0 : d <= 0 ? 1 - d * d : (1 - d) * (1 - d);
+    const ease = (x) => { const y = Math.max(0, Math.min(1, x)); return y * y * (3 - 2 * y); };
+    const opacity = d <= 0 ? ease((d + 1) / CROSSFADE) : 1 - ease(d / CROSSFADE);
     out.push({ scale: Math.pow(factor(d < 0 ? i - 1 : i), d), opacity });
   }
   return out;
@@ -390,7 +396,8 @@ function playZoom(app, intro, { host }) {
 
   // A title that moves holds still until it has grown in; with reduced
   // motion it is shown as it ends.
-  const films = [...words.querySelectorAll('svg')].filter((f) => typeof f.pauseAnimations === 'function');
+  const films = [...words.querySelectorAll('svg')].filter((f) => typeof f.pauseAnimations === 'function'
+    && f.querySelector('animate, set, animateTransform, animateMotion'));
   for (const f of films) {
     try {
       f.pauseAnimations();
@@ -399,7 +406,10 @@ function playZoom(app, intro, { host }) {
   }
 
   const t0 = performance.now();
-  const holdUntil = t0 + TITLE_IN_MS + intro.holdMs;
+  // A title that moves shows itself; any other grows in first.
+  const titleIn = films.length ? 0 : TITLE_IN_MS;
+  if (films.length) title.querySelector('.intro-line').classList.add('film');
+  const holdUntil = t0 + titleIn + intro.holdMs;
   let left = false;
   let started = false;
   let pictures = null;
@@ -410,7 +420,7 @@ function playZoom(app, intro, { host }) {
   if (!reduced) {
     later(() => {
       for (const f of films) try { f.unpauseAnimations(); } catch (e) { /* as it is */ }
-    }, TITLE_IN_MS);
+    }, titleIn);
   }
 
   import('./graph.js')
@@ -424,7 +434,7 @@ function playZoom(app, intro, { host }) {
   document.addEventListener('graphdrawn', onDrawn);
   later(maybeStart, holdUntil - performance.now());
   // A snapshot slow to arrive: say so under the title.
-  later(() => { if (!started) title.classList.add('waiting'); }, TITLE_IN_MS + intro.holdMs + 600);
+  later(() => { if (!started) title.classList.add('waiting'); }, titleIn + intro.holdMs + 600);
 
   function maybeStart() {
     if (left || started || !drawn || !pictures || performance.now() < holdUntil - 5) return;
@@ -448,7 +458,7 @@ function playZoom(app, intro, { host }) {
     if (bg) bg.style.transformOrigin = `${cx}px ${cy}px`;
     layers.push(bg);
     for (const pic of pictures) {
-      const k = Math.min(PICTURE_MAX, (r.width - 80) / pic.box.w, (r.height - 80) / pic.box.h);
+      const k = Math.min(PICTURE_MAX, (r.width * PICTURE_FIT) / pic.box.w, (r.height * PICTURE_FIT) / pic.box.h);
       pic.svg.setAttribute('width', Math.max(1, pic.box.w * k));
       pic.svg.setAttribute('height', Math.max(1, pic.box.h * k));
       const holder = el('div.intro-pic', { style: { left: cx + 'px', top: cy + 'px' } }, pic.svg);
