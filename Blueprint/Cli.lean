@@ -789,8 +789,9 @@ def serverCandidates (dir : System.FilePath) (port : Nat) :
 
 /-- `blueprint serve [--port p] [--site dir] [--comments dir]`: refresh the
 site, then serve it.  With `python3` at hand that is the comment server of
-`web/`, which also keeps the comments posted on object pages, one JSON file
-per object under `--comments` (default `<root>/comments`); otherwise it is
+`web/`, which also keeps the comments posted on object pages and the
+document's pages, one JSON file per object (and one for the top of the
+document) under `--comments` (default `<root>/comments`); otherwise it is
 whatever static file server is at hand, and the pages say comments are off. -/
 def cmdServe (root : System.FilePath) (args : Args) : IO UInt32 := do
   let dir : System.FilePath := (args.get? "--site").getD (root / "_site").toString

@@ -730,6 +730,41 @@ await check('depth=1 on the top page writes out the top level, one level deep', 
   eq(root.querySelectorAll('.doc-pager').length, 0, 'no siblings at the top');
 });
 
+await check('every page of the document ends with the comments of its entry, the top page with its own', async () => {
+  const routes = dom.net.routes;
+  const asked = () => dom.net.fetches.map((f) => f.url).filter((u) => u.startsWith('api/comments/')).join(' ');
+  routes.push((u) => u === 'api/comments/sec-main'
+    ? [200, JSON.stringify({ comments: [{ n: 1, name: 'Ada', body: 'On **this** chapter.', date: '2026-11-02T08:00:00+00:00' }] }), 'application/json']
+    : u.startsWith('api/comments/') ? [200, '{"comments": []}', 'application/json'] : null);
+  try {
+    dom.net.fetches.length = 0;
+    await go('#/document/sec-main');
+    const panel = root.querySelector('.doc-layout .comments');
+    ok(panel, 'no comment section on a chapter page');
+    eq(asked(), 'api/comments/sec-main', 'the thread of the page\'s own entry');
+    eq(panel.querySelector('h3').textContent, 'Comments (1)', 'its heading counts the comments');
+    eq(panel.querySelectorAll('article.comment').length, 1, 'the comment is listed');
+    ok(panel.querySelector('form.comment-form textarea') && panel.querySelector('form.comment-form button[type=submit]'),
+      'the form of the object page');
+    const kids = [...panel.parentNode.children];
+    eq(kids[kids.length - 1], panel, 'it is the last thing on the page');
+    ok(kids.indexOf(panel) > kids.indexOf(root.querySelector('.doc-layout .doc-flow')), 'after the entries');
+
+    dom.net.fetches.length = 0;
+    await go('#/object/sec-main');
+    eq(asked(), 'api/comments/sec-main', 'the object page shows the same thread');
+    eq(root.querySelector('.comments h3').textContent, 'Comments (1)', 'with the same comment');
+
+    dom.net.fetches.length = 0;
+    await go('#/document');
+    ok(root.querySelector('.doc-layout .comments'), 'no comment section on the top page');
+    eq(asked(), 'api/comments/' + encodeURIComponent(':document'), 'the top page has a thread of its own');
+    eq(root.querySelector('.comments h3').textContent, 'Comments (0)', 'empty so far');
+  } finally {
+    routes.length = 0;
+  }
+});
+
 await check('depth=2 inlines a second level', async () => {
   await go('#/document?depth=2');
   ok(entryIds().includes('doc-sec-main-induction'), 'sections are written out');

@@ -41,6 +41,7 @@
 // appended, which is what the page used to do.
 
 import * as M from './model.js';
+import { commentsPanel, DOCUMENT_THREAD } from './comments.js';
 
 // How much is built before the first paint, and how much per frame afterwards.
 const FIRST_CHUNK = 40;
@@ -157,8 +158,14 @@ export function render(root, app) {
   if (pagerTop) body.appendChild(pagerTop);
   body.appendChild(flow);
 
+  // The comments of the page's own entry, the thread its object page shows
+  // too; the top of the document has a thread of its own.  Under everything
+  // else, once the page is built.
+  const comments = () => commentsPanel(app, pageEntry ? pageEntry.object.id : DOCUMENT_THREAD);
+
   if (!entries.length) {
     body.appendChild(el('p.empty', 'Nothing to read: no object carries prose.'));
+    body.appendChild(comments());
     return;
   }
 
@@ -299,6 +306,7 @@ export function render(root, app) {
   const finish = () => {
     const pagerBottom = pager(app, outline, pageEntry, href);
     if (pagerBottom) body.appendChild(pagerBottom);
+    body.appendChild(comments());
   };
 
   if (eager < entries.length) {

@@ -422,7 +422,7 @@ shows it.
 Runs `site` first (with `--pdf` if given), so what is served is fresh, then
 serves `dir` (default `<root>/_site`) on `--port` (default 8000).  With
 `python3` at hand that is `web/comments-server.py`, which also keeps the
-comments of object pages and makes, on demand, a PDF the site was not built
+comments of object pages and of the document's pages and makes, on demand, a PDF the site was not built
 with (`POST api/export`, `docs/pdf-export.md`), reading images from the
 project root; otherwise it is the first of these that is installed:
 
