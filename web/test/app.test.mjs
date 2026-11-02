@@ -1621,7 +1621,7 @@ await check('the graph opens with its toolbar folded and no sidebar, until the r
     eq(button('.tb-zoom').textContent, 'Fit+\u2212', 'the zoom is kept');
     const folded = button('.tb-filters');
     eq(bar().querySelectorAll('select').length, 0, 'no choice of collapse order');
-    ok(folded.querySelectorAll('button').some((b) => /^Expand all/.test(b.textContent)), 'Expand all is behind Filters');
+    ok(!bar().querySelectorAll('button').some((b) => /Expand all/.test(b.textContent)), 'there is still an Expand all');
     ok(!folded.querySelectorAll('button').some((b) => b.textContent === 'Collapse all'), 'Collapse all is folded away');
     ok(folded.querySelectorAll('label.chk').length > 0, 'the filters are behind Filters');
     ok(!bar().classList.contains('open'), 'the filters start unfolded');

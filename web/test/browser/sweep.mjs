@@ -612,22 +612,23 @@ async function graphChecks(d, f) {
     };
   });
 
-  // --- expand all / collapse all ------------------------------------------
-  await check(d, 'graph/expand-all', async () => {
-    const btn = await d.js(elBoxByText('.toolbar button', 'Expand all'));
-    if (!btn) return { ok: false, evidence: 'no "Expand all" button' };
+  // --- every section open / collapse all -----------------------------------
+  // The toolbar has no Expand all; a link naming every section still opens
+  // them all, which the title checks below are made on.
+  await check(d, 'graph/no-expand-all-every-section-by-link', async () => {
+    const offered = await d.js(`return Array.prototype.some.call(document.querySelectorAll('.toolbar button'),
+      function (b) { return /Expand all/.test(b.textContent); })`);
+    if (offered) return { ok: false, evidence: 'the toolbar still has an Expand all button' };
     const before = await d.js(GRAPH_COUNTS);
-    await d.click(btn.x, btn.y);
-    await sleep(500);
-    const status = await waitFor(d, GRAPH_IDLE, { timeout: 300000, interval: 500, label: 'expand-all layout' });
+    const status = await gotoGraph(d, new URLSearchParams({ collapse: f.kind, expand: [...f.order.expandable].join(',') }).toString());
     const after = await d.js(GRAPH_COUNTS);
     return {
       ok: after.nodes > before.nodes * 2 && !after.error,
-      evidence: `${j(btn.text)}: nodes ${before.nodes}->${after.nodes}, edges ${before.edges}->${after.edges}, status=${j(status)}, error=${j(after.error)}`,
+      evidence: `no Expand all button; expand= every section: nodes ${before.nodes}->${after.nodes}, edges ${before.edges}->${after.edges}, status=${j(status)}, error=${j(after.error)}`,
     };
   });
 
-  await d.shot(`${SHOTS}/${d.name}-graph-expand-all.png`);
+  await d.shot(`${SHOTS}/${d.name}-graph-every-section.png`);
 
   // Titles are never cut: each node shows the whole of it, wrapped if need
   // be, inside its box and clear of the kind mark and the expander.

@@ -211,8 +211,8 @@ still show. The reader goes back up with *↑ Back to …* at the top left of th
 stage or the section's own −. Going down another level does the same again,
 one level at a time. The section entered is the innermost of the open ones
 when they nest one inside the next (`enteredSection` in `graph.js`); with
-sections open side by side, as after *Expand all*, there is no one level to
-be in and nothing is faded.
+sections open side by side there is no one level to be in and nothing is
+faded.
 
 The top bar has two rows. The first is the title, the tabs and, at its
 right, the *Style* menu and *Show progress*, which wrap under the tabs as a
@@ -225,8 +225,8 @@ sets `data-view`, and index.html already before the page loads, so the
 graph never shows the second row while it loads).
 
 The graph opens on the graph alone. Of the toolbar only *Collapse all*, the
-highlight search, Fit, `+` and `−` show; *Expand all* and the edge, *hide
-implied* and status filters fold behind *Filters*, which
+highlight search, Fit, `+` and `−` show; the edge, *hide implied* and
+status filters fold behind *Filters*, which
 carries a dot while anything is filtered out. The side panel is hidden too,
 and the stage takes its column; *Show sidebar* at the right end of the
 toolbar brings it back, and *Hide sidebar* hides it again. *Replay intro*,
@@ -836,8 +836,8 @@ The shape the pages are built for:
 
 * the graph's default view is the fully collapsed one — the top of the
   hierarchy, tens of nodes. Everything below it arrives as the reader expands
-  into it, and only "Expand all" (which says how many objects that is) puts
-  thousands of nodes on screen;
+  into it, a section at a time; there is no *Expand all*, and only a link
+  whose `expand=` names every section puts thousands of nodes on screen;
 * the document is split into pages, so a page is one level of the hierarchy
   rather than the whole project; and a page that is still large (a section
   with hundreds of statements, or `depth=all`) appends its headings a chunk

@@ -5,8 +5,9 @@
 //
 // Size.  The default view is the fully collapsed one — a handful of chapters —
 // and the reader expands into it, so the page normally lays out tens of nodes.
-// A reader who asks for "Expand all" on a few-thousand-object blueprint gets
-// what they asked for, and that costs seconds of ELK time, so:
+// A link that opens every section (`expand=` naming them all) of a
+// few-thousand-object blueprint still gets what it asks for, and that costs
+// seconds of ELK time, so:
 //
 //   * the graph handed to ELK carries no back-references into the model (see
 //     `plainGraph`); the metadata is looked up again by id after layout;
@@ -23,8 +24,7 @@
 //     back to the main thread, which fetches the whole of elkjs,
 //     elk.bundled.js, only then, and yields to the event loop between phases
 //     so the status line is painted before the browser freezes;
-//   * the status line says how many nodes are being laid out, and the
-//     "Expand all" button says so up front.
+//   * the status line says how many nodes are being laid out.
 
 import * as M from './model.js';
 import { prefetchFile } from './prefetch.js';
@@ -317,20 +317,9 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => writeState(app, { expand: [] }) }, 'Collapse all')));
   const filters = bar.appendChild(el('div.tb-filters'));
 
-  // The collapse order has no control: the snapshot's default, or the one
+  // There is no Expand all: the reader opens the sections one at a time.  The
+  // collapse order has no control either: the snapshot's default, or the one
   // the link says (`collapse=`).
-  const order = M.collapseOrder(m, st.collapse);
-  // Expanding everything is the one action that can put thousands of nodes on
-  // screen, so the button says so rather than springing it on the reader.
-  const whenExpanded = drawnNodeCount(m);
-  const big = whenExpanded >= BIG_GRAPH;
-  filters.appendChild(el('div.group',
-    el('button', {
-      onclick: () => writeState(app, { expand: [...order.expandable] }),
-      title: `lay out all ${whenExpanded.toLocaleString()} objects at once`,
-    }, big ? `Expand all (${whenExpanded.toLocaleString()})` : 'Expand all')));
-
-  filters.appendChild(el('div.sep'));
 
   // edge kind filter
   const eks = M.edgeKinds(m).filter((k) => k !== st.collapse);
@@ -438,14 +427,6 @@ function sideToggle(app) {
 /** Is there anything the "hide appendix" checkbox would hide? */
 function hasAppendix(m) {
   return m.objects.some((o) => M.graphHint(m, o.kind) === 'optional');
-}
-
-/** How many nodes the fully expanded view would draw: every object that is
- *  drawn as a box rather than as an arc. */
-function drawnNodeCount(m) {
-  let n = 0;
-  for (const kind of M.nodeKinds(m)) n += M.objectsOfKind(m, kind).length;
-  return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -2081,7 +2062,7 @@ function keepClearOfSheet(id) {
  * The section the reader is in: the innermost open section, when the open
  * sections nest one inside the next, as they do when each was opened from
  * inside the last.  Null with nothing open, or with sections open side by
- * side (Expand all): then there is no one level to be in.
+ * side: then there is no one level to be in.
  */
 export function enteredSection(view) {
   const open = [...view.expanded];
