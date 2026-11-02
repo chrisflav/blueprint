@@ -1011,17 +1011,23 @@ await check('the side panel reads prose first and folds the long listings', asyn
   eq(listings[0].querySelectorAll('ul.objlist li').length, 6, 'the incident rows are there, only shut');
 });
 
-await check('the side panel heads with the title and the object page link, and no id', async () => {
+await check('the side panel heads with the title and the link into the document, and no id', async () => {
   await go('#/graph?sel=sec-foundations');
   const head = root.querySelector('aside.side .side-head');
   ok(head, 'no heading row');
   eq(head.getAttribute('data-id'), 'sec-foundations', 'the row names the object it is for');
   eq(head.querySelector('h2').textContent, modelMod.titleOf(app.model.byId.get('sec-foundations')), 'the title');
   const a = head.querySelector('a.side-open');
-  ok(a, 'no object page link beside the title');
-  eq(a.getAttribute('href'), '#/object/sec-foundations', 'it leads to the object page');
-  eq(root.querySelectorAll('aside.side a').filter((x) => /Open object page/.test(x.textContent)).length, 1,
+  ok(a, 'no document link beside the title');
+  eq(a.textContent, 'Open in document \u2192', 'its words');
+  eq(a.getAttribute('href'), '#/document?collapse=refines&focus=sec-foundations',
+    'a chapter: the top level of the document, scrolled to it');
+  eq(root.querySelectorAll('aside.side a').filter((x) => /Open in document/.test(x.textContent)).length, 1,
     'the link is there more than once');
+  await go('#/graph?sel=sec-main-induction&expand=sec-main');
+  eq(root.querySelector('aside.side .side-head a.side-open').getAttribute('href'),
+    '#/document/sec-main?collapse=refines&focus=sec-main-induction', 'a section: its chapter\'s page, with its siblings');
+  await go('#/graph?sel=sec-foundations');
   eq(root.querySelector('aside.side .obj-id'), null, 'the id is still shown under the title');
   const top = [head, root.querySelector('aside.side .meta')].map((n) => n.textContent).join(' ');
   ok(!top.includes('sec-foundations'), `the id is written at the top of the panel: ${JSON.stringify(top)}`);
@@ -1417,6 +1423,29 @@ await check('by default a collapsed section draws its own arcs, not its contents
   ok(own.nodes.has('j:uses/thm-tychonoff/lem-ultrafilter'), 'the way into the prose edge\'s lemmas');
 });
 
+await check('an expanded section draws its contents\' arcs to the sections still shut, both ways', () => {
+  const model = app.model;
+  const st = { collapse: 'refines', expand: [], ekinds: null, status: null, q: '', sel: null, reduce: false, inner: false };
+  const arcsOf = (expand) => {
+    const view = M.makeView(model, 'refines', expand);
+    const g = graphMod.buildElk({ model }, { ...st, expand }, view, M.quotient(view));
+    return g.graph.edges.filter((e) => e.bp.kind === 'edge').map((e) => e.bp.entity);
+  };
+  const ids = (arcs) => arcs.map((e) => `${e.src}->${e.tgt}`);
+  const open = arcsOf(['sec-applications']);
+  // Stone-Čech uses the ultrafilter lemma, shut inside sec-foundations; the
+  // diagonal lemma uses the finite subcover lemma, shut inside sec-main.
+  ok(ids(open).includes('thm-stone-cech->sec-foundations'), `out of the open section to a shut one: ${ids(open)}`);
+  ok(ids(open).includes('lem-diagonal->sec-main'), `and to another: ${ids(open)}`);
+  // Between the two shut sections, only the arc declared on them.
+  const shut = open.find((e) => e.src === 'sec-main' && e.tgt === 'sec-foundations');
+  eq(shut.members.map((x) => x.id).join(' '), 'uses/sec-main/sec-foundations', 'a shut section drew its contents\' arc');
+  // The other way: with sec-main open, Heine-Borel (shut in sec-applications)
+  // is an instance of Tychonoff.
+  const other = ids(arcsOf(['sec-main']));
+  ok(other.includes('sec-applications->thm-tychonoff'), `from a shut section into the open one: ${other}`);
+});
+
 await check('"arcs of contents" is a checkbox written to the URL', async () => {
   await go('#/graph?collapse=refines');
   const box = [...root.querySelectorAll('.toolbar label.chk')].find((l) => l.textContent === 'arcs of contents');
@@ -1719,6 +1748,26 @@ await check('inside a section the level it was opened from is faded but in reach
   ok(!layer.classList.contains('entered'), 'at the top nothing is entered');
   eq(outside('.gnode').length + outside('.gtitle').length + outside('.gedge').length, 0, 'and something faded');
   eq(back.hidden, true, 'nor a way back');
+});
+
+await check('the key shows the dashed line when an expanded section draws a dashed arc to a collapsed one', async () => {
+  const w = dom.workers.created[dom.workers.created.length - 1];
+  const layout = async (hash) => {
+    await go(hash);
+    const req = lastLayoutMessage(w);
+    w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await tick(5);
+  };
+  const stage = () => root.querySelector('.graph-stage');
+  const dashed = () => root.querySelectorAll('.gedge').filter((g) => g.classList.contains('state-derived-only'));
+  await layout('#/graph?collapse=refines');
+  eq(dashed().length, 0, 'collapsed, nothing is dashed');
+  ok(!stage().classList.contains('derived-arcs'), 'and the key has no dashed line');
+  await layout('#/graph?collapse=refines&expand=sec-applications');
+  ok(dashed().length > 0, 'the arcs out of sec-applications into the collapsed sections are not dashed');
+  ok(stage().classList.contains('derived-arcs'), 'the key does not show the dashed line');
+  await layout('#/graph?collapse=refines');
+  ok(!stage().classList.contains('derived-arcs'), 'collapsed again, the key still shows it');
 });
 
 await check('a blocked worker falls back to laying out on the main thread', async () => {

@@ -1104,19 +1104,19 @@ async function graphChecks(d, f) {
     };
   });
 
-  await check(d, 'graph/side-panel-open-object-link', async () => {
-    // Beside the title, at the top of the panel.
-    const a = await d.js(elBoxByText('aside.side .side-head a', 'Open object page'));
-    if (!a) return { ok: false, evidence: 'no "Open object page" link (is anything selected?)' };
-    await d.click(a.x, a.y);
-    await sleep(700);
-    const r = await d.js(`
-      return { hash: location.hash, h1: (document.querySelector('.obj-head h1') || {}).textContent,
-               objId: (document.querySelector('.page > .obj-id') || {}).textContent };
-    `);
+  await check(d, 'graph/side-panel-open-in-document-link', async () => {
+    // Beside the title, at the top of the panel; it leads to the document's
+    // page with the selected object's level, scrolled to it.
+    const id = await d.js(`var h = document.querySelector('aside.side .side-head'); return h && h.getAttribute('data-id');`);
+    const a = await d.js(elBoxByText('aside.side .side-head a', 'Open in document'));
+    if (!a) return { ok: false, evidence: `no "Open in document" link (selected: ${j(id)})` };
+    await clickAndWait(d, a, `return location.hash.indexOf('#/document') === 0
+      && !!document.getElementById(${j(anchorOf(id))})`, 'document page from the graph');
+    await sleep(900);
+    const r = await d.js(ENTRY_IN_VIEW(id));
     return {
-      ok: r.hash.startsWith('#/object/') && !!r.h1,
-      evidence: `clicked ${j(a.text)}: hash=${j(decodeURIComponent(r.hash))}, h1=${j(r.h1)}, .obj-id=${j(r.objId)}`,
+      ok: r.found && r.inView && new URLSearchParams(r.hash.split('?')[1] || '').get('focus') === id,
+      evidence: `clicked ${j(a.text)} on ${j(id)}: -> ${j(r.hash)}: entry top=${r.top}px, scrollY=${r.scrollY}, in view=${r.inView}`,
     };
   });
 

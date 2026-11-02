@@ -972,12 +972,19 @@ export function quotient(view, options = {}) {
 
 /**
  * The drawn entities of a quotient that belong to the visible objects
- * themselves: an object is drawn only when every end of it is visible as
- * itself (an end that is an edge object being, in turn, one of these), never
- * lifted to whatever collapsed object it is hidden in.  So a collapsed section
- * keeps the arcs declared on it and drops those of its contents, a grouped
- * arc keeps only such members (and its "×n" counts only them), and the
- * synthesised derived-only arcs, which stand for contents alone, go.
+ * themselves: an object is drawn when every end of it is visible as itself
+ * (an end that is an edge object being, in turn, one of these), not lifted to
+ * whatever collapsed object it is hidden in.  So a collapsed section keeps the
+ * arcs declared on it and drops those of its contents, a grouped arc keeps
+ * only such members (and its "×n" counts only them), and the synthesised
+ * derived-only arcs, which stand for contents alone, go.
+ *
+ * One exception: a relation between plain objects (no end an edge object)
+ * with at least one end visible as itself is drawn too, its other ends lifted
+ * to the collapsed objects they are hidden in.  That is what opening a
+ * section shows of its contents' relations to the sections still shut: an
+ * arc from the object inside to the shut section, which can be opened in turn
+ * to see where it lands.  With every end hidden it is still contents.
  *
  * An edge object with contents of its own (one the view can expand) is a node
  * of the view whatever its ends: it stays, as the way into those contents.
@@ -1000,10 +1007,18 @@ export function ownEdges(view, edges) {
     memo.set(id, yes);
     return yes;
   };
+  // A relation of plain objects, one end of it visible as itself.
+  const reachesOut = (id) => {
+    const o = model.byId.get(id);
+    if (!o || !o.boundary.length) return false;
+    const ends = o.boundary.map((b) => model.byId.get(view.anchor(b.id)));
+    return ends.every((end) => !!end && end.boundary.length === 0) &&
+      ends.some((end) => view.isVisible(end.id));
+  };
   const out = [];
   for (const e of edges) {
     if (e.synthetic) continue;
-    const members = e.members.filter((it) => own(it.id));
+    const members = e.members.filter((it) => own(it.id) || reachesOut(it.id));
     if (!members.length) continue;
     out.push(members.length === e.members.length ? e : { ...e, members });
   }
