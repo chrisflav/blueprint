@@ -353,6 +353,17 @@ its chain, back to the top, its previous and next siblings, and the contents
 in a sidebar. A top-level entry with nothing under it (an introduction, say)
 has its own page too.
 
+`hide_content = true` (or `"yes"`) in an entry's front matter leaves it off
+its parent's page: its heading and its prose, and a repeat of it, are not
+written out there, while on a page that writes out more than one level its
+children still are. It is read on its own page, which is unchanged, so every
+link to it — a contents row, the sidebar, a reference, an old `?focus=` —
+leads there (`isHiddenEntry` and `documentLevelOf` in `model.js`). Its number
+and its place in the contents and the sidebar stay. Only an entry with
+entries under it has a page to be read on: elsewhere `blueprint check`
+reports the attribute (`hide-content-without-page`) and the site ignores it.
+The PDF export leaves the same heading and prose out (below).
+
 The table of contents is a page of its own, `#/contents` (`contents.js`), the
 *Contents* tab of the top bar: the whole document as a tree, along the same
 order and under the same numbers, a row per entry — a section or a

@@ -680,6 +680,22 @@ if "$BP" build --root "$TMP/logo" -o "$TMP/logo.json" > /dev/null 2>&1 \
 else
   bad "[site] logo and logoInk reach the snapshot, and only when given"
 fi
+# `hide_content` is an attribute of every kind; it takes a yes or a no, and
+# only on what has a page of its own (something under it)
+cp -r examples/minimal "$TMP/hide"
+sed -i 's/^order = 1$/order = 1\nhide_content = true/' "$TMP/hide/blueprint/_section.md"
+sed -i 's/^title = "Addition"$/title = "Addition"\nhide_content = "yes"/' "$TMP/hide/blueprint/add.md"
+sed -i 's/^title = "The natural numbers"$/title = "The natural numbers"\nhide_content = "maybe"/' "$TMP/hide/blueprint/nat.md"
+"$BP" build --root "$TMP/hide" -o "$TMP/hide.json" > "$TMP/hide.out" 2>&1
+if grep -q '"hide_content": true' "$TMP/hide.json" \
+   && ! grep -q "unknown-attr" "$TMP/hide.out" \
+   && ! grep -q "'basics' hides its content" "$TMP/hide.out" \
+   && grep -q "error: \[hide-content-without-page\] .*'add' hides its content" "$TMP/hide.out" \
+   && grep -q "error: \[bad-attr\] .*'nat' has hide_content = maybe" "$TMP/hide.out"; then
+  ok "hide_content: kept on a section, refused on a leaf and as anything but a yes or a no"
+else
+  bad "hide_content: kept on a section, refused on a leaf and as anything but a yes or a no"; cat "$TMP/hide.out"
+fi
 cp -r examples/minimal "$TMP/badlogo"
 printf '\n[site]\nlogoInk = true\n' >> "$TMP/badlogo/blueprint.toml"
 cp -r examples/minimal "$TMP/badink"

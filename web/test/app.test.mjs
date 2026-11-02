@@ -765,6 +765,36 @@ await check('every page of the document ends with the comments of its entry, the
   }
 });
 
+await check('hide_content takes an entry off its parent\'s page, and leads every link to its own', async () => {
+  const o = app.model.byId.get('sec-main');
+  const before = o.attrs;
+  o.attrs = { ...(o.attrs || {}), hide_content: true };
+  try {
+    await go('#/document');
+    ok(!entryIds().includes('doc-sec-main'), 'chapter 2 is still on the top page');
+    ok(entryIds().includes('doc-sec-foundations') && entryIds().includes('doc-sec-applications'), 'the other chapters are');
+    ok(root.querySelector('nav.toc a[data-id="sec-main"]'), 'the sidebar no longer lists it');
+    eq(root.querySelector('nav.toc a[data-id="sec-main"]').getAttribute('href'), '#/document/sec-main?collapse=refines&focus=sec-main',
+      'the sidebar leads to its own page');
+    await go('#/document?depth=2');
+    ok(!entryIds().includes('doc-sec-main') && entryIds().includes('doc-sec-main-induction'), 'two levels: its children stay');
+    await go('#/document/sec-main');
+    eq(entryIds()[0], 'doc-sec-main', 'its own page heads with it');
+    ok(root.querySelector('#doc-sec-main .prose'), 'with its prose');
+    // An old link to it on the top page goes to its own page.
+    await go('#/document?focus=sec-main');
+    eq(location.hash, '#/document/sec-main?collapse=refines&focus=sec-main', 'a focus on it goes to its own page');
+    await go('#/contents?collapse=refines');
+    const link = root.querySelectorAll('a.contents-link').find((a) => /focus=sec-main$/.test(a.getAttribute('href')));
+    ok(link, 'it left the contents');
+    eq(link.getAttribute('href'), '#/document/sec-main?collapse=refines&focus=sec-main', 'its row leads to its own page');
+    ok(/^2(?![.\d])/.test(link.textContent.trim()), `with its number: ${JSON.stringify(link.textContent)}`);
+  } finally {
+    o.attrs = before;
+    await go('#/document');
+  }
+});
+
 await check('depth=2 inlines a second level', async () => {
   await go('#/document?depth=2');
   ok(entryIds().includes('doc-sec-main-induction'), 'sections are written out');

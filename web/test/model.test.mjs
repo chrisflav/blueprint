@@ -1485,6 +1485,42 @@ check('the arcs between nodes are exactly the rule, in every expanded set', () =
   ok(arcs > 100, `the rule has arcs to check: ${arcs}`);
 });
 
+check('hide_content leaves an entry with a page off its parent\'s page, and nothing else', () => {
+  const snap = JSON.parse(JSON.stringify(snapshot));
+  const set = (id, v) => { const o = snap.objects.find((x) => x.id === id); o.attrs = { ...(o.attrs || {}), hide_content: v }; };
+  set('sec-main', true);
+  set('sec-main-induction', 'Yes');
+  set('def-compact', true); // a leaf: no page of its own, never hidden
+  const m = M.buildModel(snap);
+  const out = M.documentOutline(m, 'refines');
+  eq(M.hidesContent(m.byId.get('sec-main')), true, 'true');
+  eq(M.hidesContent(m.byId.get('sec-main-induction')), true, '"yes", in any case');
+  eq(M.hidesContent(m.byId.get('sec-foundations')), false, 'not set');
+  eq(M.hidesContent({ attrs: { hide_content: 'no' } }), false, '"no"');
+  eq(M.isHiddenEntry(out, out.byId.get('sec-main')), true, 'a chapter');
+  eq(M.isHiddenEntry(out, out.byId.get('def-compact')), false, 'a leaf is never hidden');
+  // Numbers and the contents are untouched.
+  eq(out.byId.get('sec-main').number, '2', 'its number');
+  eq(out.byId.get('thm-heine-borel').number, '3.1', 'the numbers after it');
+  // Links lead to its own page, where it is the head.
+  eq(M.documentLevelOf(out, 'sec-main'), 'sec-main', 'a hidden chapter is read on its own page');
+  eq(M.documentLevelOf(out, 'sec-main-induction'), 'sec-main-induction', 'so is a hidden section');
+  eq(M.documentLevelOf(out, 'thm-tychonoff'), 'sec-main', 'its children are read where they were');
+  eq(M.documentLevelOf(out, 'def-compact'), 'sec-foundations', 'and so is the leaf');
+  // The top page leaves it out; its own page shows it; its children stay.
+  const ids = (page, levels) => M.documentPageEntries(out, page, levels).map((e) => e.id);
+  ok(!ids(null, 1).includes('sec-main'), 'on the top page');
+  ok(ids(null, 1).includes('sec-foundations') && ids(null, 1).includes('def-compact') === false, 'the others are there');
+  ok(ids(null, 2).includes('thm-tychonoff') && !ids(null, 2).includes('sec-main-induction'),
+    'two levels down: its children, but not the hidden one among them');
+  eq(ids('sec-main', 1)[0], 'sec-main', 'its own page heads with it');
+  ok(!ids('sec-main', 1).includes('sec-main-induction') && ids('sec-main', 1).includes('thm-tychonoff'), 'and leaves out 2.1');
+  eq(ids('sec-main-induction', 1)[0], 'sec-main-induction', '2.1 on its own page');
+  eq(M.documentPageShows(out, null, 1, 'sec-main'), false, 'the top page does not show it');
+  eq(M.documentPageShows(out, 'sec-main', 1, 'sec-main'), true, 'its own page does');
+  eq(M.documentPageShows(out, 'sec-foundations', 1, 'def-compact'), true, 'the leaf is shown');
+});
+
 check('hiding the appendix takes its contents and their relations along', () => {
   const m = M.buildModel(appendixSnapshot());
   sameSet(M.outOfGraph(m, { hideOptional: true }), [

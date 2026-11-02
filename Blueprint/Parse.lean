@@ -190,8 +190,8 @@ def readPreObj (schema : Schema) (raw : RawFile) : PreObj := Id.run do
     -- a key that the kind permits as an attribute is an attribute; otherwise a
     -- key naming a sugar kind expands to edges; anything else is an error
     let isAttr := match spec with
-      | some s => s.attrs.contains k
-      | none => !sugarSpec.any KindSpec.sugar
+      | some s => s.attrs.contains k || universalAttrs.contains k
+      | none => universalAttrs.contains k || !sugarSpec.any KindSpec.sugar
     if isAttr then
       match v.toAttr? with
       | some a => attrs := attrs.push (k, a)

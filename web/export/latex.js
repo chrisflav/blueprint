@@ -161,14 +161,17 @@ export function requestKey(req) {
 
 /**
  * The export as a tree of nodes, in reading order:
- *   {type: 'entry', entry, rel, children, parent, omitted, displaced}
+ *   {type: 'entry', entry, rel, children, parent, omitted, displaced, hidden}
  *   {type: 'text', entry, rel, parent}
  *   {type: 'pointer', entry, rel, parent, target}
  * `rel` is the level below the scope (the scope is 0; for the whole blueprint
  * the top-level entries are 1).  `entry` is always the first, written-out
  * entry of the outline, so its number, children and parent are the full
  * document's; `displaced` says the full document writes it out somewhere
- * else.  Returns {nodes, written, height, appendices}: `written` maps an id
+ * else; `hidden` that the entry hides its content (`M.isHiddenEntry`) and is
+ * not the scope: its heading, prose, proofs and steps are left out, as the
+ * website leaves it off its parent's page, while its children and its line in
+ * the contents stay.  Returns {nodes, written, height, appendices}: `written` maps an id
  * to its node, `height` is the deepest `rel` written with depth all (at
  * least 1), `appendices` whether an appendix other than the scope was met.
  */
@@ -185,12 +188,19 @@ function planTree(model, outline, scopeEntry, depth, appendices) {
     }
     const real = e.duplicate ? outline.byId.get(e.id) : e;
     if (!real) return null;
-    if (written.has(real.id)) return { type: 'pointer', entry: real, rel, parent, target: written.get(real.id) };
+    if (written.has(real.id)) {
+      const target = written.get(real.id);
+      if (target.hidden) return null; // nothing of it is written out to point at
+      return { type: 'pointer', entry: real, rel, parent, target };
+    }
     if (real !== scopeEntry && isAppendix(model, real.object)) {
       sawAppendix = true;
       if (!appendices) return null;
     }
-    const node = { type: 'entry', entry: real, rel, parent, children: [], omitted: 0, displaced: e !== real };
+    const node = {
+      type: 'entry', entry: real, rel, parent, children: [], omitted: 0, displaced: e !== real,
+      hidden: real !== scopeEntry && M.isHiddenEntry(outline, real),
+    };
     written.set(real.id, node);
     height = Math.max(height, rel);
     if (rel < depth) {
@@ -243,8 +253,10 @@ export function planExport(model, request) {
   const walk = (nodes) => {
     for (const n of nodes) {
       if (n.type !== 'entry') continue;
-      entries += 1;
-      proofs += (outline.proofs.get(n.entry.id) || []).length + (n.entry.object.kind === 'proof' ? 1 : 0);
+      if (!n.hidden) {
+        entries += 1;
+        proofs += (outline.proofs.get(n.entry.id) || []).length + (n.entry.object.kind === 'proof' ? 1 : 0);
+      }
       walk(n.children);
     }
   };
@@ -474,7 +486,7 @@ export function exportLatex(model, request, options = {}) {
     }
   };
   for (const [id, node] of plan.written) {
-    if (node.type === 'pointer') continue;
+    if (node.type === 'pointer' || node.hidden) continue;
     for (const p of outline.proofs.get(id) || []) { filedHere.add(p.id); fileSteps(p.id); }
     fileSteps(id);
   }
@@ -631,9 +643,22 @@ export function exportLatex(model, request, options = {}) {
     const number = e.number;
     const isSection = M.isSectionKind(o.kind);
     const label = labelOf(o.id);
-    comment(`object: ${o.id}` + (o.source && o.source.file ? ` (${o.source.file})` : ''));
+    comment(`object: ${o.id}` + (o.source && o.source.file ? ` (${o.source.file})` : '') + (node.hidden ? ', content hidden' : ''));
     current = o.id;
     const title = entryTitle(model, outline, e);
+    if (node.hidden) {
+      // Its line in the contents and a place for references to land, then
+      // its children; nothing of its own.
+      out.push(`\\phantomsection\\label{${label}}%`);
+      if (level < 3) tocLine(level, escapeText(number), titleTex(title), plainTitle(title));
+      for (const c of node.children) writeNode(c);
+      if (node.omitted) {
+        const n = node.omitted;
+        out.push(`\\bpomitted{${n} ${n === 1 ? 'entry' : 'entries'} below ${escapeText(number)} ${n === 1 ? 'is' : 'are'} left out at this detail level.}`);
+      }
+      out.push('');
+      return;
+    }
     if (isSection) {
       const cmd = HEADINGS[Math.min(level, HEADINGS.length - 1)];
       out.push(`\\${cmd}*{\\texorpdfstring{${escapeText(number)}\\quad ${titleTex(title)}}{${escapePdf(number + ' ' + plainTitle(title))}}}`);
