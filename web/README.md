@@ -505,7 +505,12 @@ the top bar, where `#project-title` is, and the top bar, the graph's tools
 and the legend fade in (`intro-playing`, `intro-chrome` and `intro-landed`
 on `<html>`). Meanwhile every layer, the background, each picture and last
 the graph's own `<svg>`, grows by `ZOOM` per step out of and into the middle
-of the graph's stage, at one speed (`zoomProgress`, `zoomLayers`). The
+of the graph's stage, at one speed (`zoomProgress`, `zoomLayers`; steps of
+lengths of their own grow by `zoomFactors`, less for a shorter one). A title
+`<svg>` with SMIL animations is paused at time 0 until the title has grown
+in. A title element marked `data-intro-logo` lands on the top bar's logo
+instead of the title on its title (`intro-logo` on `<html>`: the logo shows
+from `intro-landed` on, the title with the bar). The
 pictures are drawn by `sketch` in `graph.js`, with the graph's ELK options,
 shapes and classes. The zoom starts only once the graph is drawn (the
 `graphdrawn` event of `graph.js`): `blueprint site` writes the intro to
@@ -513,7 +518,8 @@ shapes and classes. The zoom starts only once the graph is drawn (the
 is up at once and a large snapshot is waited for under it, with a bar under
 the title once the wait is long; without `intro.json` it starts once the
 snapshot is in. Until `intro.json` has answered, `index.html` keeps the page
-blank (`intro-pending`). With `prefers-reduced-motion` the layers only fade.
+blank (`intro-pending`), and `showIntro` lifts that only once the zoom has
+hidden the top bar, which would otherwise be drawn for a frame. With `prefers-reduced-motion` the layers only fade.
 
 ### Cross references
 

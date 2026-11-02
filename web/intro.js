@@ -4,7 +4,8 @@
 // blueprint.toml, which reaches the snapshot as `project.intro`:
 //
 //   "intro": { "body": "…Markdown…", "durationMs": 3000,
-//              "background": "assets/page.jpg", "holdMs": 500, "stepMs": 1000,
+//              "background": "assets/page.jpg", "holdMs": 500,
+//              "stepMs": 1000 (or one per step: [1000, 1500, 1500]),
 //              "zoom": [ { "nodes": [{"id", "title", "kind"}], "arrows": [["a", "b"]] } ] }
 //
 // The body is rendered as any object's prose is (`renderBody`), so it may carry
@@ -26,7 +27,19 @@
 // graph draws them; it grows on and fades while the next one grows out of the
 // middle, and so on, the last being the graph itself.  Every step takes
 // `stepMs` and makes everything `ZOOM` times bigger, so the zoom keeps one
-// speed throughout.  The title stays until the snapshot is in and the graph
+// speed throughout.  `stepMs` may instead give each step a length of its own
+// (the last one standing for any steps after it); the speed is still one, so
+// a shorter step grows less: the longest grow `ZOOM` times (`zoomFactors`).
+//
+// The title may be a picture that moves: an `<svg>` with SMIL animations in
+// it starts from its time 0 once the title has grown in, and `holdMs` is then
+// best its length.  And it may land on the project's logo (`project.logo`)
+// rather than on the top bar's title: the part of it marked
+// `data-intro-logo`, an element framing the drawing of the logo, flies onto
+// the top bar's logo, which is not there before it lands, while the top bar's
+// title fades in with the rest of the bar.
+//
+// The title stays until the snapshot is in and the graph
 // is drawn, so a large snapshot is waited for here rather than on a blank
 // page: `blueprint site` writes the intro to intro.json as well, which
 // index.html asks for beside the snapshot (`earlyIntro`).
@@ -44,6 +57,7 @@ export const DEFAULT_MS = 3000;
 export const FADE_MS = 700; // the `.intro.leaving` transition in style.css
 export const HOLD_MS = 500; // how long a zooming intro's title stays, at least
 export const STEP_MS = 1000; // how long each step of the zoom takes
+export const FILM_END_S = 3600; // a moving title's time with reduced motion: its end
 export const TITLE_IN_MS = 700; // the title growing in: `intro-title-in` in style.css
 export const ZOOM = 10; // how much bigger each step of the zoom makes everything
 export const PICTURE_MAX = 2; // the largest a picture is drawn, in units of the graph's
@@ -52,6 +66,12 @@ export const WAIT_MS = 15000; // how long the title waits for the graph once the
 function positive(x, d) {
   const n = Number(x);
   return Number.isFinite(n) && n > 0 ? n : d;
+}
+
+/** The lengths of the steps of a zoom: `stepMs` as one length or a list of them. */
+function stepsOf(x) {
+  const list = (Array.isArray(x) ? x : [x]).map((n) => positive(n, 0)).filter((n) => n > 0);
+  return list.length ? list : [STEP_MS];
 }
 
 /** The pictures of a zooming intro, each `{nodes, arrows}`, every arrow between two of its nodes. */
@@ -77,7 +97,9 @@ function zoomOf(zoom) {
 
 /**
  * The project's intro as `{body, durationMs, background, holdMs, stepMs,
- * zoom}`, or null when it has none.  `zoom` is empty for the single node.
+ * stepsMs, zoom}`, or null when it has none.  `zoom` is empty for the single
+ * node.  `stepsMs` lists the steps' lengths, the last standing for the steps
+ * after it; `stepMs` is the first.
  */
 export function introOf(project) {
   const i = project && project.intro;
@@ -87,7 +109,8 @@ export function introOf(project) {
     durationMs: positive(i.durationMs, DEFAULT_MS),
     background: typeof i.background === 'string' ? i.background : '',
     holdMs: positive(i.holdMs, HOLD_MS),
-    stepMs: positive(i.stepMs, STEP_MS),
+    stepMs: stepsOf(i.stepMs)[0],
+    stepsMs: stepsOf(i.stepMs),
     zoom: zoomOf(i.zoom),
   };
 }
@@ -179,9 +202,18 @@ function resolveUrls(root, base) {
  */
 export function showIntro(app, { host = document.body, project = app.model && app.model.project } = {}) {
   const intro = introOf(project);
+  if (!intro || !host) {
+    introDecided();
+    return null;
+  }
+  if (intro.zoom.length) {
+    // Shown only once the zoom has hidden the top bar: shown first, it would
+    // be drawn for a frame and fade out (`playZoom` reads computed styles).
+    const zoom = playZoom(app, intro, { host });
+    introDecided();
+    return zoom;
+  }
   introDecided();
-  if (!intro || !host) return null;
-  if (intro.zoom.length) return playZoom(app, intro, { host });
   const { el } = app;
 
   const body = el('div.intro-body');
@@ -247,15 +279,33 @@ export function replayIntro(app, { atLanding, host = document.body, landing = '#
  * How far the zoom has got after `t` of its `steps` steps: one step per unit
  * of `t`, except that the first step starts from rest and the last comes to
  * rest, each joining the steady part at its speed.  Clamped to [0, steps].
+ * `steps` may instead be the steps' lengths, `t` then counted in their unit:
+ * each step takes its length, the first still from rest and the last to rest.
  */
 export function zoomProgress(t, steps) {
-  const u = Math.max(0, Math.min(steps, t));
-  const out = (x) => x + x * x - x * x * x; // speed 1 down to 0
-  const into = (x) => 1 - out(1 - x); // speed 0 up to 1
-  if (steps <= 1) return u * u * (3 - 2 * u);
-  if (u < 1) return into(u);
-  if (u > steps - 1) return steps - 1 + out(u - (steps - 1));
-  return u;
+  const lengths = Array.isArray(steps) ? steps : Array.from({ length: Math.max(0, steps) }, () => 1);
+  const n = lengths.length;
+  if (!n) return 0;
+  const total = lengths.reduce((a, b) => a + b, 0);
+  let u = Math.max(0, Math.min(total, t));
+  let i = 0;
+  while (i < n - 1 && u >= lengths[i]) { u -= lengths[i]; i += 1; }
+  const x = Math.min(1, u / lengths[i]);
+  const out = (y) => y + y * y - y * y * y; // speed 1 down to 0
+  const into = (y) => 1 - out(1 - y); // speed 0 up to 1
+  if (n === 1) return x * x * (3 - 2 * x);
+  if (i === 0) return into(x);
+  if (i === n - 1) return n - 1 + out(x);
+  return i + x;
+}
+
+/**
+ * How much each step of the zoom grows everything, for steps of `lengths`:
+ * one speed for all, at which the longest grow `zoom` times.
+ */
+export function zoomFactors(lengths, zoom = ZOOM) {
+  const longest = Math.max(...lengths);
+  return lengths.map((l) => Math.pow(zoom, l / longest));
 }
 
 /**
@@ -264,16 +314,19 @@ export function zoomProgress(t, steps) {
  * layer i is at rest, at scale 1 and fully shown, at p = i.  On its way in it
  * grows from 1/zoom and fades in, on its way out it grows on to zoom and
  * fades out, so every layer grows by the same factor in the same time.  The
- * first has no way in and the last no way out.
+ * first has no way in and the last no way out.  `zoom` may instead list each
+ * step's factor (`zoomFactors`): a layer comes in by the factor of the step
+ * before it and goes out by that of its own.
  */
 export function zoomLayers(p, count, zoom = ZOOM) {
+  const factor = (k) => (Array.isArray(zoom) ? zoom[Math.max(0, Math.min(zoom.length - 1, k))] : zoom);
   const out = [];
   for (let i = 0; i < count; i += 1) {
     let d = p - i;
     if (i === 0 && d < 0) d = 0;
     if (i === count - 1 && d > 0) d = 0;
     const opacity = d <= -1 || d >= 1 ? 0 : d <= 0 ? 1 - d * d : (1 - d) * (1 - d);
-    out.push({ scale: Math.pow(zoom, d), opacity });
+    out.push({ scale: Math.pow(factor(d < 0 ? i - 1 : i), d), opacity });
   }
   return out;
 }
@@ -297,7 +350,6 @@ function playZoom(app, intro, { host }) {
   const { el } = app;
   const root = document.documentElement;
   const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const zoom = reduced ? 1 : ZOOM;
   const step = intro.stepMs;
   const base = snapshotBase(app);
 
@@ -312,11 +364,16 @@ function playZoom(app, intro, { host }) {
   if (window.marked) {
     app.renderBody(words, intro.body, app.knownIds());
     if (base) resolveUrls(words, base);
+  } else if (/^\s*</.test(intro.body)) {
+    // HTML, such as a picture that moves, needs no Markdown.
+    words.innerHTML = intro.body;
+    if (base) resolveUrls(words, base);
   } else {
     // No Markdown to be had: the words, without the marks of a heading.
     words.textContent = intro.body.replace(/^\s*#+\s*/gm, '').trim();
   }
   const title = el('div.intro-title', el('div.intro-line', words), el('div.intro-wait', { 'aria-hidden': 'true' }));
+  root.classList.add('intro-playing');
   // The title is set in the top bar's, which it becomes.
   const brandText = document.getElementById('project-title');
   if (brandText) {
@@ -327,10 +384,19 @@ function playZoom(app, intro, { host }) {
     } catch (e) { /* the stylesheet's own */ }
   }
   root.style.setProperty('--intro-step', step + 'ms');
-  root.classList.add('intro-playing');
   host.appendChild(layer);
   host.appendChild(title);
   try { layer.focus({ preventScroll: true }); } catch (e) { /* an old browser */ }
+
+  // A title that moves holds still until it has grown in; with reduced
+  // motion it is shown as it ends.
+  const films = [...words.querySelectorAll('svg')].filter((f) => typeof f.pauseAnimations === 'function');
+  for (const f of films) {
+    try {
+      f.pauseAnimations();
+      f.setCurrentTime(reduced ? FILM_END_S : 0);
+    } catch (e) { /* no SMIL: a still picture */ }
+  }
 
   const t0 = performance.now();
   const holdUntil = t0 + TITLE_IN_MS + intro.holdMs;
@@ -341,6 +407,11 @@ function playZoom(app, intro, { host }) {
   let giveUp = null;
   const timers = [];
   const later = (f, ms) => timers.push(setTimeout(f, Math.max(0, ms)));
+  if (!reduced) {
+    later(() => {
+      for (const f of films) try { f.unpauseAnimations(); } catch (e) { /* as it is */ }
+    }, TITLE_IN_MS);
+  }
 
   import('./graph.js')
     .then((g) => Promise.all(intro.zoom.map((l) => g.sketch(app, l))))
@@ -388,10 +459,27 @@ function playZoom(app, intro, { host }) {
     if (graphSvg) graphSvg.style.transformOrigin = `${cx - r.left}px ${cy - r.top}px`;
     layers.push(graphSvg);
 
-    // The title flies into the top bar and turns into its title there, while
-    // the top bar and the graph's tools fade in.
+    // The title flies into the top bar and turns into its title there, or,
+    // marked so, onto its logo, while the top bar and the graph's tools fade in.
     const line = title.querySelector('.intro-line');
-    if (brandText && line && !reduced && typeof line.animate === 'function') {
+    const mark = line && line.querySelector('[data-intro-logo]');
+    const logo = document.querySelector('.brand.has-logo .brand-logo:not([hidden])');
+    if (mark && logo) root.classList.add('intro-logo');
+    if (mark && logo && line && !reduced && typeof line.animate === 'function') {
+      const box = line.getBoundingClientRect();
+      const from = mark.getBoundingClientRect();
+      const to = logo.getBoundingClientRect();
+      const s = Math.min(to.width / (from.width || 1), to.height / (from.height || 1));
+      const fx = from.left + from.width / 2;
+      const fy = from.top + from.height / 2;
+      const dx = to.left + to.width / 2 - fx;
+      const dy = to.top + to.height / 2 - fy;
+      line.style.transformOrigin = `${fx - box.left}px ${fy - box.top}px`;
+      line.animate([{ transform: 'none' }, { transform: `translate(${dx}px, ${dy}px) scale(${s})` }],
+        { duration: step, easing: 'cubic-bezier(.45, 0, .2, 1)', fill: 'forwards' });
+      line.animate([{ opacity: 1 }, { opacity: 1, offset: 0.75 }, { opacity: 0 }],
+        { duration: step, fill: 'forwards' });
+    } else if (brandText && line && !reduced && typeof line.animate === 'function') {
       const from = line.getBoundingClientRect();
       const to = brandText.getBoundingClientRect();
       const fromSize = parseFloat(getComputedStyle(line).fontSize) || 1;
@@ -412,11 +500,14 @@ function playZoom(app, intro, { host }) {
     later(() => root.classList.add('intro-landed'), step * 0.7);
 
     const count = layers.length;
+    const lengths = Array.from({ length: count - 1 },
+      (_, i) => intro.stepsMs[Math.min(i, intro.stepsMs.length - 1)]);
+    const factors = reduced ? lengths.map(() => 1) : zoomFactors(lengths);
     const z0 = performance.now();
     const frame = (now) => {
       if (left) return;
-      const p = zoomProgress((now - z0) / step, count - 1);
-      const at = zoomLayers(p, count, zoom);
+      const p = zoomProgress(now - z0, lengths);
+      const at = zoomLayers(p, count, factors);
       for (let i = 0; i < count; i += 1) {
         const node = layers[i];
         if (!node) continue;
@@ -456,7 +547,7 @@ function playZoom(app, intro, { host }) {
     window.removeEventListener('hashchange', leave);
     const graphSvg = document.querySelector('.graph-stage > svg');
     if (graphSvg) for (const k of ['transform', 'transformOrigin', 'opacity', 'visibility']) graphSvg.style[k] = '';
-    root.classList.remove('intro-playing', 'intro-chrome', 'intro-landed');
+    root.classList.remove('intro-playing', 'intro-chrome', 'intro-landed', 'intro-logo');
     root.style.removeProperty('--intro-step');
   }
 

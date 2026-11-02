@@ -334,9 +334,10 @@ structure Project where
   website's default.  Handed to the website as `project.intro.holdMs`. -/
   introHoldMs : Option Nat := none
   /-- `[site.intro] step`, in milliseconds (given in seconds): how long each
-  step of a zooming intro takes; `none` for the website's default.  Handed to
-  the website as `project.intro.stepMs`. -/
-  introStepMs : Option Nat := none
+  step of a zooming intro takes, one length for all or a list of lengths, one
+  per step; empty for the website's default.  Handed to the website as
+  `project.intro.stepMs`, a number for one length and an array for a list. -/
+  introStepMs : Array Nat := #[]
   /-- `[[site.intro.zoom]]`: the pictures the intro zooms through, between its
   title and the graph.  With none, the intro is the single node of `intro`;
   with some, `intro` is the title the zoom starts from.  Handed to the website

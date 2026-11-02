@@ -204,6 +204,26 @@ def decodeIntroSeconds (it : TValue) (k : String) : Except String (Option Nat) :
     else throw s!"'[site.intro] {k}' must be positive, got {f}"
   | some v => throw s!"'[site.intro] {k}' must be a number of seconds, got a {v.typeName}"
 
+/-- `[site.intro] step`: one number of seconds, or a non-empty array of them
+(one per step of the zoom), each in milliseconds; empty when not given. -/
+def decodeIntroSteps (it : TValue) : Except String (Array Nat) :=
+  match it.get? "step" with
+  | none => pure #[]
+  | some (.arr xs) => do
+    if xs.isEmpty then throw "'[site.intro] step' must not be an empty array"
+    xs.mapM fun
+      | .int n =>
+        if n > 0 then pure (n.toNat * 1000)
+        else throw s!"'[site.intro] step' must be positive, got {n}"
+      | .float f =>
+        if f > 0 then pure (f * 1000).round.toUInt64.toNat
+        else throw s!"'[site.intro] step' must be positive, got {f}"
+      | v => throw s!"'[site.intro] step' must be numbers of seconds, got a {v.typeName}"
+  | some _ => do
+    match ← decodeIntroSeconds it "step" with
+    | some ms => pure #[ms]
+    | none => pure #[]
+
 /-- The `n`th (from 1) `[[site.intro.zoom]]`: `nodes`, each a title or a table
 `{ id, title, kind }`, and `arrows`, each a pair of their ids. -/
 def decodeIntroLayer (n : Nat) (l : TValue) : Except String IntroLayer := do
@@ -303,7 +323,7 @@ def decodeConfig (t : TValue) (defaultName : String) :
   let assets ← siteStr "assets"
   let (intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom) ←
     match site.bind (·.get? "intro") with
-    | none => pure ("", "", none, "", none, none, #[])
+    | none => pure ("", "", none, "", none, #[], #[])
     | some it@(.table _) => do
       let str (k : String) : Except String String :=
         match it.get? k with
@@ -320,7 +340,7 @@ def decodeConfig (t : TValue) (defaultName : String) :
       let ms ← decodeIntroSeconds it "duration"
       let background ← str "background"
       let hold ← decodeIntroSeconds it "hold"
-      let step ← decodeIntroSeconds it "step"
+      let step ← decodeIntroSteps it
       let zoom ← match it.get? "zoom" with
         | none => pure #[]
         | some (.arr ls) => do

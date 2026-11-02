@@ -729,7 +729,10 @@ for bad_intro in 'file = "nowhere.md"|no .*nowhere.md' \
                  'body = "x"\nfile = "intro.md"|not both' \
                  'duration = 3|needs a .body' \
                  'body = "x"\nduration = 0|must be positive' \
-                 'body = "x"\nduration = "3s"|must be a number of seconds'; do
+                 'body = "x"\nduration = "3s"|must be a number of seconds' \
+                 'body = "x"\nstep = []|must not be an empty array' \
+                 'body = "x"\nstep = [1, 0]|must be positive' \
+                 'body = "x"\nstep = [1, "2"]|must be numbers of seconds'; do
   conf="${bad_intro%%|*}"; want="${bad_intro#*|}"
   rm -rf "$TMP/badintro"; cp -r examples/minimal "$TMP/badintro"
   printf "\n[site.intro]\n$conf\n" >> "$TMP/badintro/blueprint.toml"
@@ -786,6 +789,17 @@ for bad_zoom in 'nodes = []|.nodes. is empty' \
     bad "a [[site.intro.zoom]] with $(printf "$conf" | tr '\n' ' ') is refused"; cat "$TMP/badzoom.out"
   fi
 done
+rm -rf "$TMP/introsteps"; cp -r examples/minimal "$TMP/introsteps"
+printf '\n[site.intro]\nbody = "x"\nstep = [1, 1.5]\n' >> "$TMP/introsteps/blueprint.toml"
+if "$BP" build --root "$TMP/introsteps" -o "$TMP/introsteps.json" > "$TMP/introsteps.out" 2>&1 \
+   && grep -q '"stepMs": \[1000, 1500\]' "$TMP/introsteps.json" \
+   && "$BP" read "$TMP/introsteps.json" -o "$TMP/introsteps.again.json" > /dev/null 2>&1 \
+   && grep -q '"stepMs": \[1000, 1500\]' "$TMP/introsteps.again.json"; then
+  ok "[site.intro] step as a list reaches the snapshot as a list, and reads back"
+else
+  bad "[site.intro] step as a list reaches the snapshot as a list, and reads back"
+  cat "$TMP/introsteps.out"; grep -A8 '"intro"' "$TMP/introsteps.json"
+fi
 rm -rf "$TMP/badassets"; cp -r examples/minimal "$TMP/badassets"
 printf '\n[site]\nassets = "nowhere"\n' >> "$TMP/badassets/blueprint.toml"
 if ! "$BP" site --root "$TMP/badassets" -o "$TMP/badassets.site" > "$TMP/badassets.out" 2>&1 \

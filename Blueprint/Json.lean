@@ -125,7 +125,10 @@ def Project.introJson (p : Project) : Json :=
     (match p.introMs with | some ms => [("durationMs", nat ms)] | none => []) ++
     (if p.introBackground.isEmpty then [] else [("background", Json.str p.introBackground)]) ++
     (match p.introHoldMs with | some ms => [("holdMs", nat ms)] | none => []) ++
-    (match p.introStepMs with | some ms => [("stepMs", nat ms)] | none => []) ++
+    (match p.introStepMs with
+      | #[] => []
+      | #[ms] => [("stepMs", nat ms)]
+      | mss => [("stepMs", Json.arr (mss.map nat))]) ++
     (if p.introZoom.isEmpty then [] else [("zoom", Json.arr (p.introZoom.map layer))]))
 
 /-- A snapshot as JSON, exactly as `docs/snapshot-format.md` describes it. -/
@@ -313,7 +316,10 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
       introMs := introNat "durationMs"
       introBackground := fieldStrD intro "background" ""
       introHoldMs := introNat "holdMs"
-      introStepMs := introNat "stepMs"
+      introStepMs := match field? intro "stepMs" with
+        | some (.arr xs) => xs.filterMap (·.getNat?.toOption)
+        | some v => (v.getNat?.toOption).toArray
+        | none => #[]
       introZoom }
   let schema := Schema.ofJson ((field? j "schema").getD Json.null)
   let objects ← match field? j "objects" with

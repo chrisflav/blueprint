@@ -27,7 +27,7 @@ by editing this file first. Version 1.
       "durationMs": 4000,                        // optional
       "background": "assets/page.jpg",           // optional, the rest only for a zoom
       "holdMs": 500,                             // optional
-      "stepMs": 1000,                            // optional
+      "stepMs": 1000,                            // optional, or [1000, 1500, 1500]
       "zoom": [                                  // optional
         { "nodes": [{ "id": "a", "title": "Preliminaries", "kind": "section" },
                     { "id": "b", "title": "Part I", "kind": "section" }],
@@ -130,7 +130,9 @@ Notes
   With `zoom`, a non-empty array of pictures, the intro is a zoom instead:
   `body` is its title, `background` the address of a picture behind it,
   `holdMs` how long the title stays (default 500) and `stepMs` how long each
-  step of the zoom takes (default 1000); `durationMs` is then unused.  Each
+  step of the zoom takes (default 1000), a number or an array with one length
+  per step (the last standing for any steps after it); `durationMs` is then
+  unused.  Each
   picture has `nodes`, each with an `id` (unique in the picture), a `title`
   and the `kind` it is drawn as, and `arrows`, pairs of their ids, drawn
   from the first to the second.  Each optional key is left out when unset.
