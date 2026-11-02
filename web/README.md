@@ -298,10 +298,15 @@ once per snapshot. Two places use it:
 
 Every object page ends with a comment section, after the Stacks project's: a
 name, a comment in Markdown with LaTeX maths and `[label]` references, a
-preview, and the comments so far. They are kept by `comments-server.py`, which
+preview, and the comments so far (`comments.js`). Every page of the document
+ends with the same section, under its bottom pager: a chapter's or a section's
+page has the thread of its own entry, the one its object page shows, and the
+top page, `#/document`, a thread of its own, `:document` (a colon is no slug
+character, so no object is expected to be named so). They are kept by `comments-server.py`, which
 `blueprint serve` runs instead of a plain static server when `python3` is at
 hand: it serves the site and answers `GET`/`POST api/comments/<id>`, keeping
-one JSON file per object under `--comments` (default `<root>/comments`). Comment
+one JSON file per object under `--comments` (default `<root>/comments`), and
+`%3Adocument.json` for the top page of the document. Comment
 HTML is parsed in an inert document and cut down to the tags markdown produces
 before it is shown. Served without that server, the section says comments are
 unavailable. `blueprint site` leaves the script out of the published site. The same
@@ -585,6 +590,7 @@ the pages knowing about it.
 | `app.js` | data loading, hash router, the top bar's search box, and the DOM helpers handed to the pages in the `app` context object |
 | `graph.js` | ELK compound layout plus hand-written SVG rendering, pan/zoom, filters, side panel |
 | `object.js` | the object page |
+| `comments.js` | the comment section, at the foot of an object page and of every page of the document |
 | `contents.js` | the table of contents: the document as a tree that unfolds, each row a link into the document |
 | `document.js` | the linear document, one page per entry of the collapse order |
 | `progress.js` | the dashboard, the hand-drawn SVG line chart, the time slider, and the searchable, filterable listing of every countable object |

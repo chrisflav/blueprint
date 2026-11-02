@@ -8,11 +8,12 @@ serves the assembled site exactly as `python3 -m http.server` would, plus
     GET  /api/comments/<id>   -> {"comments": [{"n", "name", "body", "date"}, ...]}
     POST /api/comments/<id>   <- {"name": "...", "body": "..."}   (JSON)
 
-for the comment section at the foot of every object page.  The comments of
-one object are one file, `<comments dir>/<id, percent-encoded>.json`, written
-atomically, so the directory can be read, edited, backed up or put under
-version control by hand.  Only ids the site's `blueprint.json` knows are
-accepted.
+for the comment section at the foot of every object page and of every page
+of the document.  The comments of one object are one file,
+`<comments dir>/<id, percent-encoded>.json`, written atomically, so the
+directory can be read, edited, backed up or put under version control by
+hand.  Only ids the site's `blueprint.json` knows are accepted, and
+`DOCUMENT_THREAD`, the thread of the top page of the document.
 
     GET  /api/export          -> {"available": true|false, "reason": "..."}
     POST /api/export          <- {"snapshot": "blueprint.json" | "data/<sha>.json",
@@ -54,6 +55,10 @@ MAX_NAME = 100
 MAX_BODY = 20000
 MAX_REQUEST = 64 * 1024
 MAX_ID = 200
+# The thread of the top page of the document, which is no object.  A colon is
+# no slug character (`isIdChar` in Blueprint/Attr.lean), so no blueprint is
+# expected to have an object so named.  The site's comments.js names it too.
+DOCUMENT_THREAD = ":document"
 
 EXPORT_PATH = "/api/export"
 EXPORT_JOBS = 2  # compilations at once
@@ -262,7 +267,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(400, {"error": "bad object id"})
             return None
         ids = self.known.get()
-        if ids is not None and object_id not in ids:
+        if ids is not None and object_id not in ids and object_id != DOCUMENT_THREAD:
             self.send_json(404, {"error": f"no object '{object_id}' in this blueprint"})
             return None
         return object_id

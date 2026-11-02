@@ -1194,6 +1194,16 @@ if command -v node > /dev/null 2>&1; then
     else
       bad "the export API refuses a bad request before running anything"; cat "$TMP/api.out"; tail "$TMP/api.log"
     fi
+    # Comments: an object's thread, the top page of the document's, nothing else.
+    say () { curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+      --data '{"name":"Ada","body":"A comment."}' "http://127.0.0.1:$port/api/comments/$1"; }
+    if [ "$(say products)" = 201 ] && [ "$(say %3Adocument)" = 201 ] && [ "$(say no-such)" = 404 ] \
+       && curl -s "http://127.0.0.1:$port/api/comments/%3Adocument" | grep -q '"A comment."' \
+       && [ -f "$TMP/comments.api/%3Adocument.json" ]; then
+      ok "the comment API keeps an object's thread and the document's, and refuses an unknown id"
+    else
+      bad "the comment API keeps an object's thread and the document's, and refuses an unknown id"; tail "$TMP/api.log"
+    fi
     if command -v pdflatex > /dev/null 2>&1; then
       code=$(post '{"snapshot":"blueprint.json","scope":"products","depth":"all","appendices":true}')
       pdf=$(sed -n 's/.*"pdf": *"\([^"]*\)".*/\1/p' "$TMP/api.out")
