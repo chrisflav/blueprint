@@ -1504,7 +1504,7 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .legend .shp.definition { border-radius: 1px; }
 .legend .shp.statement { border-radius: 999px; }
 .legend .shp.remark { border-radius: 0; clip-path: polygon(0 0, 70% 0, 100% 35%, 100% 100%, 0 100%); }
-.graph-stage:not(.inner-arcs) .legend .lg-derived { display: none; }
+.graph-stage:not(.inner-arcs):not(.derived-arcs) .legend .lg-derived { display: none; }
 .graph-stage:not(.searching) .legend .lg-search { display: none; }
 .legend .shp.hit { color: var(--graph-hl); border-width: 2.5px; border-radius: 2px; box-shadow: 0 0 4px var(--graph-hl); }
 .legend .lg-badge {

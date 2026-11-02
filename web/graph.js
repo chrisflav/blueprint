@@ -241,7 +241,8 @@ function legend(app, progress) {
     el('b', { style: { marginTop: '.3em' } }, 'lines'),
     el('div.row', sample(line(), head(false)), 'declared + derived'),
     el('div.row', sample(line('hollow'), head(true)), 'declared, unwitnessed'),
-    // Only the contents of collapsed objects draw these (`arcs of contents`).
+    // Only arcs into the contents of collapsed objects are drawn so (`arcs of
+    // contents`, or out of an expanded section into a collapsed one).
     el('div.row.lg-derived', sample(line('dashed'), head(false)), 'derived, undeclared'),
     // Only while the graph is searched (`applyHighlight`).
     el('b.lg-search', { style: { marginTop: '.3em' } }, 'search'),
@@ -1611,6 +1612,9 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
   // The view this drawing is of: `render` moves `ui.view` on as soon as the
   // state changes, before the new layout is drawn.
   ui.drawnView = view;
+  // The key's dashed row, for as long as a dashed arc is drawn: the arcs of
+  // contents, or an expanded section's arcs to a collapsed one.
+  ui.stage.classList.toggle('derived-arcs', !!ui.layer.querySelector('.gedge.state-derived-only'));
   applyLevel(app, view);
   applyHighlight(app, st.q);
   applySelection(app, st.sel);

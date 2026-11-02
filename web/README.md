@@ -150,10 +150,15 @@ below), and an object the graph never draws says so instead of offering
 *Show in graph*.
 
 Each visible object draws its own arcs (`ownEdges` in `model.js`): an object
-is drawn only when every end of it is visible as itself, never lifted to the
+is drawn when every end of it is visible as itself, not lifted to the
 collapsed object it is hidden in. So a collapsed section shows the edges
 declared on the section and not those of the statements inside it, and its
-"×n" counts only its own edges. An edge object with contents of its own (one
+"×n" counts only its own edges. A relation with one end visible as itself is
+drawn too, its other end on the collapsed section that end is shut in: open a
+section, and a statement inside it that uses something in a section still
+shut gets an arc to that section (and the other way round), which can be
+opened in turn to see where it lands. Between two shut sections nothing of
+their contents is drawn. An edge object with contents of its own (one
 that can be expanded) stays whatever its ends, as the way into them. The arcs
 still carry their consistency state: solid when the contents witness the
 section's edge, a hollow head when nothing inside does. *Arcs of contents*

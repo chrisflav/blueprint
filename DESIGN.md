@@ -390,7 +390,10 @@ by CI. Separate TypeScript package under `web/`.
   status, filters by kind and collapse kind. By default each visible object
   draws only its own arcs: an object is drawn when all its ends are visible
   themselves, so a collapsed section shows the edges declared on it and not
-  the quotiented edges of its contents (§3's derived arcs). Those are one
+  the quotiented edges of its contents (§3's derived arcs).  A relation with
+  one end visible is drawn too, its other ends lifted to the sections they
+  are shut in, so that an expanded section's statements show what they use
+  in the sections still collapsed. Those are one
   checkbox away, *arcs of contents*, which is where the undeclared-detail lint
   shows as dashed arcs; the consistency state of an own arc is still §3's.
   A kind's `graph` display hint keeps objects out of the picture: an

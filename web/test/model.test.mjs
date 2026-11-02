@@ -442,12 +442,40 @@ check('collapsed: each section keeps its own arcs and drops its contents\'', () 
   }
 });
 
-check('expanded: arcs between visible leaves are theirs, arcs into a collapsed section are not', () => {
+check('expanded: arcs between visible leaves are theirs, and so are their arcs into a collapsed section', () => {
   const own = ownArcs(qTwo);
   const ids = arcIds(own);
   has(ids, 'thm-heine-borel->thm-tychonoff', 'leaf to leaf, both visible');
-  for (const id of ids) ok(!id.endsWith('->sec-foundations'), `${id}: an arc of sec-foundations' contents`);
+  // A visible leaf's relation to something shut inside a collapsed section is
+  // drawn to that section: thm-stone-cech uses lem-ultrafilter, inside
+  // sec-foundations; lem-diagonal uses lem-finite-subcover, inside
+  // sec-main-induction.
+  has(ids, 'thm-stone-cech->sec-foundations', 'a leaf into a collapsed section');
+  has(ids, 'thm-heine-borel->sec-foundations', 'another');
+  has(ids, 'lem-diagonal->sec-main-induction', 'into a collapsed section inside an expanded one');
+  const into = own.find((e) => e.src === 'thm-stone-cech' && e.tgt === 'sec-foundations');
+  sameSet(into.members.map((x) => x.id), ['uses/thm-stone-cech/lem-ultrafilter'], 'the leaf\'s own relation');
+  // One junction too: def-compact, its far end, is inside sec-foundations.
+  ok(own.some((e) => e.type === 'junction' && e.members[0].id === 'uses/thm-heine-borel/def-compact'),
+    'a junction with one end visible');
   eq(own.filter((e) => e.synthetic).length, 0, 'no synthesised arc');
+});
+
+check('collapsed sections draw no arc between their contents, whatever is expanded', () => {
+  // With only sec-main expanded, sec-foundations and sec-applications stay
+  // shut: what their contents use of each other is still theirs alone.
+  const v = M.makeView(model, 'refines', ['sec-main']);
+  const own = M.ownEdges(v, M.quotient(v).edges);
+  for (const e of own) {
+    for (const it of e.members) {
+      ok(it.object.boundary.some((b) => v.isVisible(v.anchor(b.id))) || (v.isVisible(it.id) && v.isExpandable(it.id)),
+        `${it.id}: drawn with no end visible`);
+    }
+  }
+  ok(!arcIds(own).some((id) => id === 'sec-applications->sec-foundations'), 'contents to contents');
+  // An arc into the expanded section from a collapsed one is drawn too: Heine-Borel
+  // is an instance of Tychonoff.
+  has(arcIds(own), 'sec-applications->thm-tychonoff', 'a collapsed section into a visible leaf');
 });
 
 check('a uses written on a proof is its statement\'s own arc while the statement is visible', () => {
