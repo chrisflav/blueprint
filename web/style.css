@@ -1825,6 +1825,14 @@ html.intro-chrome .graph-page > :not(.graph-stage),
 html.intro-chrome .graph-stage > :not(svg) { opacity: 1; }
 html.intro-playing .brand { opacity: 0; transition: opacity calc(var(--intro-step, 1s) * .3) ease; }
 html.intro-landed .brand { opacity: 1; }
+/* A title landing on the logo (`intro-logo`): the top bar's title comes with
+   the bar, and its logo only when the title lands there. */
+html.intro-playing.intro-logo .brand { opacity: 1; }
+html.intro-playing.intro-logo .brand-logo {
+  opacity: 0;
+  transition: opacity calc(var(--intro-step, 1s) * .3) ease;
+}
+html.intro-playing.intro-logo.intro-landed .brand-logo { opacity: 1; }
 html.intro-playing .graph-stage > svg { opacity: 0; }
 
 .intro.zoom {

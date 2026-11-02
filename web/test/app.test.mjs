@@ -2780,6 +2780,35 @@ await check('each layer of the zoom grows by the same factor per step', () => {
   eq(r(at(5)[3].scale), 1, 'the last layer stays at rest');
 });
 
+await check('a zoom whose steps have lengths of their own keeps one speed', () => {
+  const steps = intro.introOf({ intro: { body: 'W', stepMs: [1000, 1500, 1500] } });
+  eq(JSON.stringify(steps.stepsMs), '[1000,1500,1500]', 'the lengths');
+  eq(steps.stepMs, 1000, 'stepMs is the first');
+  eq(JSON.stringify(intro.introOf({ intro: { body: 'W', stepMs: 1200 } }).stepsMs), '[1200]', 'one length');
+  eq(JSON.stringify(intro.introOf({ intro: { body: 'W', stepMs: [0, 'x'] } }).stepsMs), JSON.stringify([intro.STEP_MS]),
+    'nonsense is the default');
+  const lengths = [1000, 1500, 1500];
+  eq(intro.zoomProgress(0, lengths), 0, 'starts at 0');
+  eq(intro.zoomProgress(4000, lengths), 3, 'ends at the last step');
+  eq(intro.zoomProgress(1750, lengths), 1.5, 'half way through the second step');
+  const r = (x) => Math.round(x * 1000) / 1000;
+  const f = intro.zoomFactors(lengths, 10);
+  eq(r(f[1]), 10, 'the longest grow ten times');
+  eq(r(f[0]), r(Math.pow(10, 2 / 3)), 'a shorter one grows less');
+  // One speed: the growth per millisecond, in the steady part of each step.
+  const h = 1;
+  const rate = (t, layer) => {
+    const a = intro.zoomLayers(intro.zoomProgress(t - h, lengths), 4, f)[layer].scale;
+    const b = intro.zoomLayers(intro.zoomProgress(t + h, lengths), 4, f)[layer].scale;
+    return Math.log(b / a) / (2 * h);
+  };
+  ok(Math.abs(rate(1000, 1) - rate(1750, 1)) < 1e-4, 'into the second step and in it: one speed');
+  ok(Math.abs(rate(1750, 2) - Math.log(10) / 1500) < 1e-4, 'the steady speed');
+  const at1 = intro.zoomLayers(1, 4, f);
+  eq(r(at1[0].scale), r(f[0]), 'the background went out by the first factor');
+  eq(r(at1[2].scale), 0.1, 'the next comes in by the second');
+});
+
 await check('the intro is shown on the landing page only, and ?intro=0 leaves it out', () => {
   const p = { intro: { body: 'Welcome' } };
   const at = (raw) => ({ view: raw.startsWith('/graph') ? 'graph' : raw.slice(1).split('/')[0], raw });

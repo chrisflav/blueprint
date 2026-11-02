@@ -653,12 +653,23 @@ into the middle of the screen: the background grows and fades while the
 first picture grows out of a point, then that picture grows on and fades
 while the next grows out of its middle, and so on, the last being the graph
 itself.  Each step takes `step` seconds (default 1) and makes everything ten
-times bigger, so the zoom keeps one speed throughout.  A picture is a few
+times bigger, so the zoom keeps one speed throughout.  `step` may instead be
+a list, one length per step (`step = [1, 1.5, 1.5]`, the last standing for
+any steps after it); the zoom still keeps one speed, at which the longest
+steps grow ten times, so a shorter step grows less.  A picture is a few
 boxes and arrows, laid out and drawn as the graph lays out and draws its
 nodes and arcs: `nodes` lists them, each a title or a table with a `title`,
 an `id` for `arrows` to name (default: the title) and the `kind` it is drawn
 as (default `section`, drawn as a collapsed section); `arrows` lists pairs of
 ids, each drawn from the first to the second.  `duration` is unused then.
+The title may move: an `<svg>` in it with SMIL animations (`<animate>`,
+`<set>`) starts from its time 0 once the title has grown in, so `hold` is
+best the length of its animation; with reduced motion it is shown as it
+ends.  And it may land on the top bar's logo (`[site] logo`) rather than on
+its title: an element of the title marked `data-intro-logo`, framing a
+drawing of the logo as the logo's picture is framed, flies onto the logo,
+which the top bar shows only once it has landed, while the top bar's title
+fades in with the rest of the bar.
 `blueprint site` writes the intro to `intro.json` beside the snapshot as
 well, so that the title shows at once and stays until the snapshot is in and
 the graph is drawn, rather than the page waiting blank for a large snapshot.
