@@ -652,13 +652,14 @@ its title, the top bar and the graph's tools fade in, and the view zooms
 into the middle of the screen: the background grows and fades while the
 first picture grows out of a point, then that picture grows on and fades
 while the next grows out of its middle, and so on, the last being the graph
-itself.  The fading is quick, in the first third of a step or so, so that a
-picture is gone well before it fills the screen; a picture at rest takes at
-most about half of the screen.  Each step takes `step` seconds (default 1) and makes everything ten
-times bigger, so the zoom keeps one speed throughout.  `step` may instead be
-a list, one length per step (`step = [1, 1.5, 1.5]`, the last standing for
-any steps after it); the zoom still keeps one speed, at which the longest
-steps grow ten times, so a shorter step grows less.  A picture is a few
+itself.  The fading is quick, within the first third of a step's growth, so
+that a picture is gone well before it fills the screen; a picture at rest
+takes at most about half of the screen.  Each step takes `step` seconds
+(default 1) and makes everything ten times bigger, quickly at first and then
+settling slowly: what comes in reaches about 60% of its size in the first 40%
+of the step.  `step` may instead be a list, one length per step (`step = [1,
+1.5, 1.5]`, the last standing for any steps after it); every step then grows
+at the same pace, the longest ten times, so a shorter step grows less.  A picture is a few
 boxes and arrows, laid out and drawn as the graph lays out and draws its
 nodes and arcs: `nodes` lists them, each a title or a table with a `title`,
 an `id` for `arrows` to name (default: the title) and the `kind` it is drawn

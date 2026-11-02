@@ -516,8 +516,9 @@ the top bar, where `#project-title` is, and the top bar, the graph's tools
 and the legend fade in (`intro-playing`, `intro-chrome` and `intro-landed`
 on `<html>`). Meanwhile every layer, the background, each picture and last
 the graph's own `<svg>`, grows by `ZOOM` per step out of and into the middle
-of the graph's stage, at one speed (`zoomProgress`, `zoomLayers`; steps of
-lengths of their own grow by `zoomFactors`, less for a shorter one). A layer
+of the graph's stage, each step quick at first and settling slowly
+(`zoomProgress`, `SETTLE`; `zoomLayers`; steps of lengths of their own grow
+by `zoomFactors`, less for a shorter one). A layer
 fades out, and the next in, within the first `CROSSFADE` of a step, and a
 picture at rest takes at most `PICTURE_FIT` of the stage, so that it is gone
 before it fills the screen. A title `<svg>` with SMIL animations is paused at

@@ -2776,23 +2776,24 @@ await check('a zooming intro: its pictures, hold and step', () => {
   eq(JSON.stringify(z.zoom[1].arrows), '[["a","B"]]', 'only arrows between two of its nodes');
 });
 
-await check('the zoom keeps one speed, from rest to rest', () => {
+await check('each step of the zoom is quick at first and settles slowly', () => {
   const steps = 3;
   eq(intro.zoomProgress(0, steps), 0, 'starts at 0');
+  eq(intro.zoomProgress(1, steps), 1, 'a step ends where the next begins');
   eq(intro.zoomProgress(steps, steps), steps, 'ends at the last step');
   eq(intro.zoomProgress(-1, steps), 0, 'clamped below');
   eq(intro.zoomProgress(9, steps), steps, 'clamped above');
-  eq(intro.zoomProgress(1.5, steps), 1.5, 'steady in the middle');
   const h = 1e-4;
   const speed = (t) => (intro.zoomProgress(t + h, steps) - intro.zoomProgress(t - h, steps)) / (2 * h);
-  ok(speed(h) < 0.01, 'from rest');
-  ok(Math.abs(speed(1) - 1) < 0.01, 'into the steady speed without a jolt');
-  ok(Math.abs(speed(2) - 1) < 0.01, 'out of it without a jolt');
-  ok(speed(steps - h) < 0.01, 'to rest');
+  ok(speed(1.05) > 2 * speed(1.5) && speed(1.5) > 2 * speed(1.95), 'quick, then slower and slower');
+  ok(speed(steps - h) < 0.01, 'to rest at the end');
   for (let t = 0; t < steps; t += 0.05) {
     ok(intro.zoomProgress(t + 0.05, steps) >= intro.zoomProgress(t, steps), 'never backwards at ' + t);
   }
-  eq(intro.zoomProgress(0.5, 1), 0.5, 'one step: symmetric');
+  // What comes in, ten times smaller at the start of its step: about 60% of
+  // its size 40% into the step.
+  const size = intro.zoomLayers(intro.zoomProgress(1.4, steps), 4, 10)[2].scale;
+  ok(size > 0.55 && size < 0.65, 'about 60% of its size 40% into the step, ' + size);
 });
 
 await check('each layer of the zoom grows by the same factor per step', () => {
@@ -2825,20 +2826,20 @@ await check('a zoom whose steps have lengths of their own keeps one speed', () =
   const lengths = [1000, 1500, 1500];
   eq(intro.zoomProgress(0, lengths), 0, 'starts at 0');
   eq(intro.zoomProgress(4000, lengths), 3, 'ends at the last step');
-  eq(intro.zoomProgress(1750, lengths), 1.5, 'half way through the second step');
+  eq(intro.zoomProgress(1000, lengths), 1, 'the first step takes its length');
+  eq(intro.zoomProgress(2500, lengths), 2, 'and so does the second');
   const r = (x) => Math.round(x * 1000) / 1000;
   const f = intro.zoomFactors(lengths, 10);
   eq(r(f[1]), 10, 'the longest grow ten times');
   eq(r(f[0]), r(Math.pow(10, 2 / 3)), 'a shorter one grows less');
-  // One speed: the growth per millisecond, in the steady part of each step.
+  // One pace: the growth per millisecond at the same point of each step.
   const h = 1;
   const rate = (t, layer) => {
     const a = intro.zoomLayers(intro.zoomProgress(t - h, lengths), 4, f)[layer].scale;
     const b = intro.zoomLayers(intro.zoomProgress(t + h, lengths), 4, f)[layer].scale;
     return Math.log(b / a) / (2 * h);
   };
-  ok(Math.abs(rate(1000, 1) - rate(1750, 1)) < 1e-4, 'into the second step and in it: one speed');
-  ok(Math.abs(rate(1750, 2) - Math.log(10) / 1500) < 1e-4, 'the steady speed');
+  ok(Math.abs(rate(400, 1) - rate(1000 + 600, 2)) < 1e-4, 'the first and second steps alike, 40% in');
   const at1 = intro.zoomLayers(1, 4, f);
   eq(r(at1[0].scale), r(f[0]), 'the background went out by the first factor');
   eq(r(at1[2].scale), 0.1, 'the next comes in by the second');
