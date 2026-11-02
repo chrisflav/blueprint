@@ -976,8 +976,8 @@ export function quotient(view, options = {}) {
  * (an end that is an edge object being, in turn, one of these), not lifted to
  * whatever collapsed object it is hidden in.  So a collapsed section keeps the
  * arcs declared on it and drops those of its contents, a grouped arc keeps
- * only such members (and its "×n" counts only them), and the synthesised
- * derived-only arcs, which stand for contents alone, go.
+ * only such members, and the synthesised derived-only arcs, which stand for
+ * contents alone, go.
  *
  * One exception: a relation between plain objects (no end an edge object)
  * with at least one end visible as itself is drawn too, its other ends lifted
@@ -985,6 +985,11 @@ export function quotient(view, options = {}) {
  * section shows of its contents' relations to the sections still shut: an
  * arc from the object inside to the shut section, which can be opened in turn
  * to see where it lands.  With every end hidden it is still contents.
+ *
+ * Between nodes A and B of the view (expanded objects are none) this draws
+ * A -> B exactly when A, or something inside A, has an edge to B itself, or
+ * A itself has an edge to B or to something inside B; model.test.mjs checks
+ * that against every expanded set of the sample.
  *
  * An edge object with contents of its own (one the view can expand) is a node
  * of the view whatever its ends: it stays, as the way into those contents.

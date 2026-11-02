@@ -1436,6 +1436,55 @@ check('the graph never draws a hidden object, or what touches it', () => {
   eq(M.documentPageShows(top, null, 1, 'intro'), true, 'the top level written out does');
 });
 
+check('the arcs between nodes are exactly the rule, in every expanded set', () => {
+  // For nodes A and B of a view: A -> B exactly when A, or something inside
+  // A, has an edge to B itself, or A itself has one to B or to something
+  // inside B.  An arc drawn through a junction (an edge with lemmas of its
+  // own) counts as drawn; arcs to or from such junction nodes are not between
+  // two nodes and are left out on both sides.
+  const kind = 'refines';
+  const order = M.collapseOrder(model, kind);
+  const expandable = [...order.expandable];
+  const inside = (id) => new Set([id, ...M.descendantsOf(order, id)]);
+  let states = 0;
+  let arcs = 0;
+  for (let mask = 0; mask < 1 << expandable.length; mask += 1) {
+    const v = M.makeView(model, kind, expandable.filter((_, i) => mask & (1 << i)));
+    const nodes = [...v.visible].filter((id) => model.byId.get(id).boundary.length === 0);
+    const isNode = new Set(nodes);
+    const drawn = new Set();
+    for (const e of M.ownEdges(v, M.quotient(v).edges)) {
+      if (e.type === 'edge' && e.directed) {
+        if (isNode.has(e.src) && isNode.has(e.tgt)) drawn.add(`${e.src} -> ${e.tgt} ${e.kind}`);
+      } else if (e.type === 'junction') {
+        const ends = e.members[0].ends.filter((x) => isNode.has(x.id));
+        for (const a of ends.filter((x) => x.roles.includes('src'))) {
+          for (const b of ends.filter((x) => x.roles.includes('tgt'))) {
+            if (a.id !== b.id) drawn.add(`${a.id} -> ${b.id} ${e.kind}`);
+          }
+        }
+      }
+    }
+    const want = new Set();
+    for (const o of model.objects) {
+      if (o.kind === kind || !M.isBinaryKind(model, o.kind)) continue;
+      const s = v.anchor(M.boundaryEntry(o, 'src'));
+      const t = v.anchor(M.boundaryEntry(o, 'tgt'));
+      for (const a of nodes) {
+        for (const b of nodes) {
+          if (a !== b && ((inside(a).has(s) && t === b) || (s === a && inside(b).has(t)))) want.add(`${a} -> ${b} ${o.kind}`);
+        }
+      }
+    }
+    const key = [...v.expanded].sort().join(',') || 'nothing';
+    sameSet([...drawn], [...want], `expanded: ${key}`);
+    states += 1;
+    arcs += want.size;
+  }
+  eq(states, 32, 'every expanded set');
+  ok(arcs > 100, `the rule has arcs to check: ${arcs}`);
+});
+
 check('hiding the appendix takes its contents and their relations along', () => {
   const m = M.buildModel(appendixSnapshot());
   sameSet(M.outOfGraph(m, { hideOptional: true }), [

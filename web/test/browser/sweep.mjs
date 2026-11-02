@@ -788,7 +788,7 @@ async function graphChecks(d, f) {
     const back = await d.js(ARCS);
     return {
       ok: own.dashed === 0 && own.counted === 0 && own.legend === 'none' && /arcs? of contents hidden/.test(own.status)
-        && /[?&]inner=1/.test(inner.hash) && inner.edges >= own.edges && inner.legend !== 'none'
+        && /[?&]inner=1/.test(inner.hash) && inner.edges >= own.edges && inner.legend !== 'none' && inner.counted === 0
         && back.edges === own.edges && !/inner=/.test(back.hash),
       evidence: `own: ${own.edges} .gedge, ${own.dashed} dashed, ${own.counted} "×n", legend row ${own.legend}, status=${j(own.status)}; `
         + `arcs of contents on: ${inner.edges} .gedge, ${inner.dashed} dashed, ${inner.counted} "×n", legend row ${inner.legend}, hash=${j(inner.hash)}; `
@@ -868,10 +868,10 @@ async function graphChecks(d, f) {
     return { ok: allOk, evidence: log.join(' | ') };
   });
 
-  // "hide implied", on by default: the status line counts the arcs it hides, a
-  // real click on the checkbox must bring back exactly that many, the off state
-  // must reach the URL and survive a reload, and a second click must hide them
-  // again and drop the flag.
+  // "hide implied", off by default: a real click on the checkbox hides arcs,
+  // exactly as many as the status line then counts, the on state must reach
+  // the URL and survive a reload, and a second click must bring them back and
+  // drop the flag.
   await check(d, 'graph/hide-implied-arcs', async () => {
     const box = `
       var l = document.querySelector('.toolbar .group.reduce label.chk');
@@ -881,29 +881,29 @@ async function graphChecks(d, f) {
     `;
     const pos = await d.js(box);
     if (!pos) return { ok: false, evidence: 'no "hide implied" checkbox' };
-    if (!pos.checked) return { ok: false, evidence: 'it is off by default' };
+    if (pos.checked) return { ok: false, evidence: 'it is on by default' };
+    const off = await d.js(GRAPH_COUNTS);
+    await d.click(pos.x, pos.y);
+    await sleep(350);
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, interval: 200, label: 'relayout with implied arcs hidden' });
     const on = await d.js(GRAPH_COUNTS);
     const m = /(\d+) implied arcs? hidden/.exec(on.status);
     const n = m ? Number(m[1]) : -1;
-    await d.click(pos.x, pos.y);
-    await sleep(350);
-    await waitFor(d, GRAPH_IDLE, { timeout: 90000, interval: 200, label: 'relayout with every arc' });
-    const off = await d.js(GRAPH_COUNTS);
-    await d.open(ORIGIN + '/' + off.hash);
+    await d.open(ORIGIN + '/' + on.hash);
     await d.installHooks();
     await waitFor(d, GRAPH_IDLE, { timeout: 90000, interval: 300, label: 'layout after reload' });
     const reloaded = await d.js(GRAPH_COUNTS);
     const pos2 = await d.js(box);
     await d.click(pos2.x, pos2.y);
     await sleep(350);
-    await waitFor(d, GRAPH_IDLE, { timeout: 90000, interval: 200, label: 'relayout with implied arcs hidden' });
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, interval: 200, label: 'relayout with every arc' });
     const back = await d.js(GRAPH_COUNTS);
     return {
-      ok: n >= 0 && off.edges - on.edges === n && /[?&]reduce=0/.test(off.hash) &&
-        !pos2.checked && reloaded.edges === off.edges && back.edges === on.edges &&
+      ok: n >= 0 && off.edges - on.edges === n && /[?&]reduce=1/.test(on.hash) && !/implied arc/.test(off.status) &&
+        pos2.checked && reloaded.edges === on.edges && back.edges === off.edges &&
         !/reduce=/.test(back.hash) && off.nodes === on.nodes && !on.error && !off.error,
-      evidence: `edges ${on.edges} (status: ${n} hidden) -> off ${off.edges} -> reload ${reloaded.edges}, ` +
-        `checked=${pos2.checked} -> on ${back.edges}; nodes ${on.nodes}/${off.nodes}; hash=${j(off.hash)}`,
+      evidence: `edges ${off.edges} -> on ${on.edges} (status: ${n} hidden) -> reload ${reloaded.edges}, ` +
+        `checked=${pos2.checked} -> off ${back.edges}; nodes ${off.nodes}/${on.nodes}; hash=${j(on.hash)}`,
     };
   });
 

@@ -1878,6 +1878,43 @@ await check('the key shows the dashed line when an expanded section draws a dash
   ok(!stage().classList.contains('derived-arcs'), 'collapsed again, the key still shows it');
 });
 
+await check('every option that changes the arcs starts off, the Filters dot shows when one is on, and no arc carries a count', async () => {
+  const w = dom.workers.created[dom.workers.created.length - 1];
+  const layout = async (hash) => {
+    await go(hash);
+    const req = lastLayoutMessage(w);
+    w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await tick(5);
+  };
+  const bar = () => root.querySelector('.toolbar');
+  const box = (group, n = 0) => bar().querySelectorAll(`.group.${group} input`)[n];
+  const dot = () => bar().querySelector('.tb-toggle').classList.contains('filtered');
+  await layout('#/graph?collapse=refines');
+  ok(box('reduce') && !box('reduce').hasAttribute('checked'), '"hide implied" starts ticked');
+  ok(box('reduce', 1) && !box('reduce', 1).hasAttribute('checked'), '"arcs of contents" starts ticked');
+  ok(!dot(), 'the Filters dot shows with nothing filtered');
+  ok(!/implied arc/.test(root.querySelector('.graph-status').textContent), 'the status line counts hidden implied arcs');
+  fire(box('reduce'), 'change', { target: { checked: true } });
+  await tick(5);
+  const req = lastLayoutMessage(w);
+  w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+  await tick(5);
+  eq(new URLSearchParams(location.hash.split('?')[1]).get('reduce'), '1', 'ticking it writes reduce=1');
+  for (const hash of ['#/graph?collapse=refines&reduce=1', '#/graph?collapse=refines&inner=1']) {
+    await layout(hash);
+    ok(dot(), `no Filters dot with ${hash.split('&')[1]}`);
+  }
+  // With the arcs of contents several relations share one arc: still no count.
+  const lifted = graphMod.buildElk({ model: app.model },
+    { collapse: 'refines', expand: [], ekinds: null, status: null, q: '', sel: null, reduce: false, inner: true },
+    modelMod.makeView(app.model, 'refines', []), modelMod.quotient(modelMod.makeView(app.model, 'refines', [])));
+  ok([...lifted.edgeMeta.values()].some((m) => m.kind === 'edge' && m.entity.members.length > 1),
+    'no arc stands for several relations here');
+  const counts = root.querySelectorAll('.gedge .elabel').filter((t) => /^×/.test(t.textContent));
+  eq(counts.length, 0, 'an arc carries a count');
+  await layout('#/graph?collapse=refines');
+});
+
 await check('a blocked worker falls back to laying out on the main thread', async () => {
   dom.workers.enabled = false;
   dom.workers.created.length = 0;
