@@ -14,9 +14,12 @@
    level and the entry opened, that entry's entries indented below it, this
    page shaded.  The selectors name `toc-up` and `toc-entry` so that they
    outrank pretext.css's blocks, which this sheet imports. */
-/* Wide screens only: below 901px style.css sets the document in one column. */
+/* The page's margins are the default style's (style.css), not pretext.css's
+   narrow column in the middle: the sidebar at the left of the page and the
+   text across the rest of it.  Wide screens only: below 901px style.css sets
+   the document in one column. */
 @media (min-width: 901px) {
-  .doc-layout { grid-template-columns: 17rem minmax(0, 40rem); gap: 3rem; justify-content: center; }
+  .doc-layout { grid-template-columns: 15rem minmax(0, 1fr); gap: 2rem; justify-content: normal; }
 }
 .toc-outline .toc-head { display: none; }
 .toc-outline .toc-levels, .toc-outline .toc-levels ul { margin: 0; padding: 0; border: 0; }
