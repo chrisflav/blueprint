@@ -2,9 +2,10 @@
 //
 // The whole document as a tree, along the same collapse order and under the
 // same numbers as the document (`documentOutline` in model.js): a row per
-// entry, a section or a statement, each a link to the place it is read in the
-// document, its level written out and scrolled to it
-// (`app.documentLevelHref`).  A row with entries below it has a small
+// entry, a section or a statement, each a link into the document: to the
+// page the entry heads, chapter 2 to the page of 2 with 2.1, 2.2, …, and a
+// statement, which heads none, to the page it is read on, scrolled to it
+// (`app.documentPageHref`).  A row with entries below it has a small
 // triangle beside it that unfolds them, and folds them again; the top level
 // starts unfolded no further.  What the reader unfolded is kept while the
 // site is open, so coming back from the document finds the tree as it was
@@ -90,7 +91,7 @@ export function render(root, app) {
     const isSection = M.isSectionKind(o.kind);
     const prog = M.progressMixOf(m, kind, o.id);
     const status = M.badgeStatusOf(m, o.id);
-    const a = el('a.contents-link', { href: app.documentLevelHref(outline, kind, o.id) || app.objectHref(o.id) },
+    const a = el('a.contents-link', { href: app.documentPageHref(outline, kind, o.id) || app.objectHref(o.id) },
       el('span.num', e.number),
       el('span.contents-title',
         isSection ? null : [el('span.kindword', M.kindWord(o.kind)), ' '],

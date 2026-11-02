@@ -1619,7 +1619,10 @@ async function pageChecks(d, f) {
   const TREE_ROW = (id) => `
     var li = Array.prototype.slice.call(document.querySelectorAll('.contents-tree li')).filter(function (x) {
       var a = x.querySelector('a.contents-link');
-      return a && new URLSearchParams(a.getAttribute('href').split('?')[1]).get('focus') === ${j(id)}; })[0];
+      if (!a) return false;
+      var href = a.getAttribute('href');
+      var page = /^#\\/document\\/([^?]+)/.exec(href);
+      return (new URLSearchParams(href.split('?')[1]).get('focus') || (page && decodeURIComponent(page[1]))) === ${j(id)}; })[0];
     if (!li) return null;
     var t = li.querySelector('.contents-row > button.contents-toggle');
     var sub = li.querySelector(':scope > ol');
@@ -1646,8 +1649,8 @@ async function pageChecks(d, f) {
     };
   });
 
-  // A contents row leads to its level: the top level written out, scrolled
-  // to the chapter, which the sidebar shows opened on its entries.
+  // A contents row leads to the page its entry heads: a chapter to its own
+  // page, at the top, the sidebar the chapter over its entries.
   const SIDEBAR = `
     var own = function (li) { return li.querySelector('a').getAttribute('data-id'); };
     return { ups: Array.prototype.map.call(document.querySelectorAll('nav.toc li.toc-up'), own),
@@ -1660,49 +1663,80 @@ async function pageChecks(d, f) {
     await d.js('window.scrollTo(0, 0); return 0;');
     const box = await d.js(`
       var a = Array.prototype.slice.call(document.querySelectorAll('.contents-tree a.contents-link')).filter(function (x) {
-        return decodeURIComponent(x.getAttribute('href')).indexOf(${j('focus=' + f.chapter)}) >= 0; })[0];
+        return decodeURIComponent(x.getAttribute('href')).indexOf(${j(docPath(f.chapter))}) === 0; })[0];
       if (!a) return null;
       var r = inView(a);
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: (a.textContent || '').trim() };
       ${IN_VIEW}
     `);
     if (!box) return { ok: false, evidence: `no contents row for ${f.chapter} on the contents page` };
-    await clickAndWait(d, box, `return document.querySelectorAll('.doc-entry').length > 0 && !!document.querySelector('nav.toc li.open')`, 'the top level');
+    await clickAndWait(d, box, `return decodeURIComponent(location.hash).indexOf(${j(docPath(f.chapter))}) === 0
+      && !!document.querySelector('.doc-entry.page-head')`, 'the chapter page');
     await sleep(900);
     const s = await d.js(PAGE_STATE);
     const side = await d.js(SIDEBAR);
     const r = await d.js(ENTRY_IN_VIEW(f.chapter));
     const kids = entry.children.filter((c) => !c.duplicate && !c.text).map((c) => c.id);
+    const want = M.documentPageEntries(out, f.chapter, 1).length;
     return {
-      ok: s.hash.startsWith('#/document?') && s.entries === out.roots.length && !s.pageHead
-        && side.ups.length === 0 && side.opened.join() === f.chapter && kids.every((k) => side.links.includes(k)) && r.inView,
-      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (top level ${out.roots.length}), ${entry.number} in view=${r.inView}; `
-        + `sidebar chain ${j(side.ups)}, opened ${j(side.opened)}, its ${kids.length} entries listed=${kids.every((k) => side.links.includes(k))}`,
+      ok: !/focus=/.test(s.hash) && s.ids[0] === anchorOf(f.chapter) && s.entries === want
+        && side.ups.join() === f.chapter && kids.every((k) => side.links.includes(k)) && r.inView,
+      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, first entry #${s.ids[0]}, ${s.entries} entries (want ${want}), ${entry.number} in view=${r.inView}; `
+        + `sidebar chain ${j(side.ups)}, its ${kids.length} entries listed=${kids.every((k) => side.links.includes(k))}`,
     };
   });
 
-  // An entry of the opened chapter leads to its level: the chapter's page.
+  // An entry of the chapter with entries of its own leads to its own page,
+  // a level down; then back to the chapter's page for the checks after it.
   await check(d, 'document/sidebar-goes-down-a-level', async () => {
     if (!f.chapter) return { skip: true, evidence: 'no chapter fixture' };
     const entry = out.byId.get(f.chapter);
-    const child = entry.children.find((c) => !c.duplicate && !c.text);
+    const child = entry.children.find((c) => !c.duplicate && !c.text && c.children.length);
+    if (!child) return { skip: true, evidence: `nothing under ${f.chapter} has entries of its own` };
     const box = await d.js(`
       var a = document.querySelector('nav.toc a[data-id="${child.id}"]');
       if (!a) return null; a.scrollIntoView({ block: 'nearest' });
       var r = a.getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height / 2, text: (a.textContent || '').trim() };
     `);
     if (!box) return { ok: false, evidence: `no sidebar link to ${child.id}` };
-    await clickAndWait(d, box, `return decodeURIComponent(location.hash).indexOf(${j(docPath(f.chapter))}) === 0
-      && !!document.querySelector('.doc-entry.page-head')`, 'chapter page');
+    await clickAndWait(d, box, `return decodeURIComponent(location.hash).indexOf(${j(docPath(child.id))}) === 0
+      && !!document.querySelector('.doc-entry.page-head')`, 'section page');
     await sleep(900);
     const s = await d.js(PAGE_STATE);
     const side = await d.js(SIDEBAR);
-    const want = M.documentPageEntries(out, f.chapter, 1).length;
+    const want = M.documentPageEntries(out, child.id, 1).length;
+    await route(d, docPath(f.chapter) + new URLSearchParams({ collapse: f.kind }).toString());
+    await waitFor(d, `return !!document.querySelector('.doc-entry.page-head')`, { timeout: 30000, label: 'back to the chapter' });
     return {
-      ok: s.entries === want && s.crumbs >= 1 && s.pagers >= 1 && side.ups.join() === f.chapter && side.opened.join() === child.id
+      ok: s.ids[0] === anchorOf(child.id) && s.entries === want && s.crumbs >= 2 && s.pagers >= 1
+        && side.ups.join() === [f.chapter, child.id].join()
         && !side.links.includes(out.roots.find((e) => e !== entry && !e.text && !e.duplicate).id),
-      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, ${s.entries} entries (want ${want}), ${s.crumbs} breadcrumb links, `
-        + `${s.pagers} pagers; sidebar chain ${j(side.ups)}, opened ${j(side.opened)}`,
+      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, first entry #${s.ids[0]}, ${s.entries} entries (want ${want}), ${s.crumbs} breadcrumb links, `
+        + `${s.pagers} pagers; sidebar chain ${j(side.ups)}`,
+    };
+  });
+
+  // A title stays on its page: clicked, it is scrolled to, the page not left.
+  await check(d, 'document/title-click-stays-on-the-page', async () => {
+    if (!f.chapter) return { skip: true, evidence: 'no chapter fixture' };
+    const entry = out.byId.get(f.chapter);
+    const child = entry.children.filter((c) => !c.duplicate && !c.text).slice(-1)[0];
+    if (!child) return { skip: true, evidence: `nothing under ${f.chapter}` };
+    await d.js('window.scrollTo(0, 0); return 0;');
+    const box = await d.js(`
+      var a = document.querySelector('#${anchorOf(child.id)} .head a.doc-title');
+      if (!a) return null; a.scrollIntoView({ block: 'center' });
+      var r = a.getBoundingClientRect(); return { x: r.left + Math.min(20, r.width / 2), y: r.top + r.height / 2, text: (a.textContent || '').trim() };
+    `);
+    if (!box) return { ok: false, evidence: `no title of ${child.id} on ${f.chapter}'s page` };
+    await d.click(box.x, box.y);
+    await sleep(900);
+    const s = await d.js(PAGE_STATE);
+    const r = await d.js(ENTRY_IN_VIEW(child.id));
+    return {
+      ok: decodeURIComponent(s.hash).indexOf(docPath(f.chapter)) === 0 && new URLSearchParams(s.hash.split('?')[1]).get('focus') === child.id
+        && s.ids[0] === anchorOf(f.chapter) && r.found && r.top > -10 && r.top < 200,
+      evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, first entry #${s.ids[0]}, its heading top=${r.top}px`,
     };
   });
 
@@ -1913,7 +1947,9 @@ async function documentChecks(d, f) {
       var a = document.querySelectorAll('nav.toc a')[2] || document.querySelector('nav.toc a');
       if (!a) return null;
       var href = a.getAttribute('href');
-      var focus = decodeURIComponent((href.split('focus=')[1] || '').split('&')[0]);
+      // Where it leads: the entry scrolled to, or the page it heads.
+      var page = /^#\\/document\\/([^?]+)/.exec(href);
+      var focus = decodeURIComponent((href.split('focus=')[1] || '').split('&')[0]) || (page ? decodeURIComponent(page[1]) : '');
       var r = inView(a);
       return { text: (a.textContent || '').trim(), focus: focus, x: r.left + r.width / 2, y: r.top + r.height / 2 };
       ${IN_VIEW}

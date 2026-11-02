@@ -78,6 +78,13 @@ export function render(root, app) {
   // contents.
   const levelPage = (id) => M.documentLevelOf(outline, id);
   const levelHref = (id) => href(levelPage(id), id);
+  // The page an entry heads (`documentPageOf`), where the contents lead:
+  // chapter 2 to the page of 2 with 2.1, 2.2, …; something with nothing under
+  // it heads none and is read among its siblings, scrolled to.
+  const pageHref = (id) => {
+    const page = M.documentPageOf(outline, id);
+    return href(page, page === id ? null : id);
+  };
   const shown = levels;
 
   // An entry this page does not write out is read somewhere else: go to its
@@ -131,16 +138,28 @@ export function render(root, app) {
   page.appendChild(el('div.doc-layout', toc, body));
   root.appendChild(page);
 
-  // A reference or a heading whose level is this page jumps to the entry
-  // instead of rebuilding the page around the same place.  A jump rather than
-  // a smooth scroll, and pinned: on the way past, bodies render and move the
-  // target, and a smooth scroll in Chromium then ends wherever the target
-  // used to be.
+  // A heading stays on this page: a click brings it to the top, wherever it
+  // is, a repeated entry's heading too.  A reference whose level is this page
+  // jumps to the entry instead of rebuilding the page around the same place.
+  // A jump rather than a smooth scroll, and pinned: on the way past, bodies
+  // render and move the target, and a smooth scroll in Chromium then ends
+  // wherever the target used to be.
   flow.addEventListener('click', (ev) => {
     if (ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return; // a new tab or window
-    const a = ev.target && ev.target.closest ? ev.target.closest('a.ref[data-ref], a.doc-title[data-level]') : null;
+    const a = ev.target && ev.target.closest ? ev.target.closest('a.ref[data-ref], a.doc-title[data-here]') : null;
     if (!a) return;
-    const id = a.getAttribute('data-ref') || a.getAttribute('data-level');
+    if (a.classList.contains('doc-title')) {
+      const here = a.closest('section.doc-entry');
+      if (!here) return;
+      ev.preventDefault();
+      here.scrollIntoView({ block: 'start' });
+      pin(here);
+      flash(here);
+      // The link says so too, for a reload or a copy of it.
+      if (!here.classList.contains('dup')) app.setParams({ focus: a.getAttribute('data-here') }, { silent: true });
+      return;
+    }
+    const id = a.getAttribute('data-ref');
     if (levelPage(id) !== pageId) return;
     const target = document.getElementById('doc-' + cssId(id));
     if (!target) return; // not built yet: let the route build the page to it
@@ -202,14 +221,12 @@ export function render(root, app) {
     // Sections are headings; everything else is a numbered statement in the
     // way a paper sets one: "Definition 1.2.14 (Title)." with the kind as the
     // lead word, and the body indented under it.  The heading, kind, number
-    // and title, is one link, to the level the entry is on (`levelHref`):
-    // Lemma 2.1 leads to 2.1, 2.2, …, and Section 2 to 1, 2, 3, …, whatever
-    // page it is clicked on.  A repeated entry leads to where it is written
-    // out.
+    // and title, is one link, to this very place on this page: clicked, it
+    // stays here, scrolled to the top (the handler above), whatever entry it
+    // is; the page's own heading too.  "Read 1.2 →" beside it leads on.
     const isSection = M.isSectionKind(o.kind);
-    const at = entry.duplicate ? outline.byId.get(o.id) : entry;
     const head = el('div.head',
-      el('h' + hLevel, el('a.doc-title', { href: levelHref(at.id), 'data-level': at.id },
+      el('h' + hLevel, el('a.doc-title', { href: href(pageId, o.id), 'data-here': o.id },
         isSection ? null : [el('span.kindword', M.kindWord(o.kind)), ' '],
         el('span.num', num), ' ',
         el('span.doc-title-text', M.titleOf(o)))),
@@ -282,7 +299,7 @@ export function render(root, app) {
     // sets it its own way.
     if (sidebarMode() === 'outline') toc.classList.add('toc-outline');
     tocShown = true;
-    levelSidebar(app, outline, pageEntry, focus, levelHref, toc);
+    levelSidebar(app, outline, pageEntry, focus, pageHref, toc);
   };
 
   const eager = Math.min(entries.length, FIRST_CHUNK);
@@ -522,12 +539,13 @@ function proofBlock(app, o, outline, known, refs) {
  * 1.2, …, and the sidebar 1 as a heading over 1.1, with 1.1.1, 1.1.2, … under
  * it, then 1.2, ….
  *
- * Every entry, in the list or in the chain, leads to its level that way
- * (`levelHref`): the page of its parent, scrolled to it, and opened.  When
- * that is this page the sidebar only scrolls the page there and opens it.
- * The opened entry, clicked again, folds its entries away.
+ * Every entry, in the list or in the chain, leads to the page it heads, as
+ * the contents do (`pageHref`): chapter 2 to the page of 2 with 2.1, 2.2, ….
+ * Something with nothing under it heads no page and leads to the page it is
+ * read on, scrolled to it and opened; when that is this page the sidebar only
+ * scrolls the page there.  The page's own entry scrolls to the top.
  */
-function levelSidebar(app, outline, pageEntry, focus, levelHref, toc) {
+function levelSidebar(app, outline, pageEntry, focus, pageHref, toc) {
   const { el, clear } = app;
   const pageId = pageEntry ? pageEntry.id : null;
   const kids = (e) => (e ? e.children : outline.roots).filter((c) => !c.duplicate && !c.text);
@@ -560,18 +578,14 @@ function levelSidebar(app, outline, pageEntry, focus, levelHref, toc) {
   };
   const go = (e) => (ev) => {
     if (ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return; // a new tab or window
-    if (e === opened && kids(e).length) {
-      // Clicked again: fold it, and leave the page where it is.
-      ev.preventDefault();
-      opened = null;
-      redraw(e, null);
-      return;
-    }
-    // Its level is this page: scroll there and open it, without a rebuild.
-    const t = (e.parent ? e.parent.id : null) === pageId && document.getElementById('doc-' + cssId(e.id));
-    if (!t) return; // the link goes to its level
+    // The page it heads, or is read on, is this page: scroll there, without a
+    // rebuild.  Anywhere else the link goes there.
+    if (M.documentPageOf(outline, e.id) !== pageId) return;
+    const t = document.getElementById('doc-' + cssId(e.id));
+    if (!t) return;
     ev.preventDefault();
     t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (e === pageEntry) return;
     level = e.parent;
     opened = e;
     redraw(e, e.id);
@@ -579,7 +593,7 @@ function levelSidebar(app, outline, pageEntry, focus, levelHref, toc) {
   const item = (e, cls) => el('li', {
     class: cls + (kids(e).length ? ' has-kids' : '') + (e === pageEntry ? ' current' : '') +
       (e === opened ? ' open' : ''),
-  }, el('a', { href: levelHref(e.id), 'data-id': e.id, onclick: go(e) },
+  }, el('a', { href: pageHref(e.id), 'data-id': e.id, onclick: go(e) },
     el('span.num', e.number), ' ', M.titleOf(e.object)));
 
   const draw = () => {

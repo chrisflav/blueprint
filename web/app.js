@@ -383,6 +383,20 @@ function documentLevelHref(outline, kind, id) {
 }
 
 /**
+ * The document's page where `id` is the head (`documentPageOf`), which the
+ * contents lead to: chapter 2 to the page of 2 with 2.1, 2.2, …, at its top.
+ * Something with nothing under it heads no page and is read among its
+ * siblings, scrolled to.  null when the document leaves it out.
+ */
+function documentPageHref(outline, kind, id) {
+  const page = model.documentPageOf(outline, id);
+  if (page === undefined) return null;
+  const q = new URLSearchParams({ collapse: kind });
+  if (page !== id) q.set('focus', id);
+  return buildHash('document', page, q);
+}
+
+/**
  * Markdown and TeX disagree about `_`, `*`, `\` and blank lines: marked turns
  * `\varpi_E^n` into emphasis and a display formula into two paragraphs
  * before KaTeX ever sees them.  So every maths span is lifted out first and
@@ -653,6 +667,7 @@ const app = {
   /** How a reference to `id` reads here: {word, number, href}, or null. */
   referenceFor: pageReferences,
   documentLevelHref,
+  documentPageHref,
   introButton,
   /**
    * SHA-256 of the bytes of the snapshot on screen (a Promise), which its
