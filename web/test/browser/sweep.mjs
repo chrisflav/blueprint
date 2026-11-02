@@ -558,6 +558,50 @@ async function graphChecks(d, f) {
     };
   });
 
+  // Unfolding or folding fits the graph into the stage, as Fit does: zoomed
+  // in first, the view after it is the one Fit gives (Fit then moves nothing).
+  await check(d, 'graph/unfold-and-fold-fit-the-view', async () => {
+    const TRANSFORM = `var t = (document.querySelector('g.glayer') || { getAttribute: function () { return ''; } }).getAttribute('transform') || '';
+      var m = /translate\\(([-\\d.e]+),\\s*([-\\d.e]+)\\)\\s*scale\\(([-\\d.e]+)\\)/.exec(t);
+      return m ? [+m[1], +m[2], +m[3]] : null;`;
+    const press = (text) => d.js(`var b = Array.prototype.slice.call(document.querySelectorAll('.toolbar button'))
+      .filter(function (x) { return x.textContent === ${j(text)}; })[0]; if (b) b.click(); return !!b;`);
+    const zoomIn = async () => { await press('+'); await press('+'); await press('+'); await sleep(400); };
+    const fitted = async () => {
+      const a = await d.js(TRANSFORM);
+      await press('Fit');
+      await sleep(500);
+      const b = await d.js(TRANSFORM);
+      return { a, b, same: !!a && !!b && a.every((v, k) => Math.abs(v - b[k]) < (k === 2 ? 0.001 : 0.6)) };
+    };
+    await zoomIn();
+    const zoomed = await d.js(TRANSFORM);
+    const opened = await d.js(`
+      var ex = Array.prototype.slice.call(document.querySelectorAll('.gnode .expander'))
+        .filter(function (t) { return (t.textContent || '').indexOf('+') >= 0; });
+      var g = ex.length ? ex[0].parentNode : null;
+      if (!g) return null;
+      (g.querySelector('.shape') || g).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      return g.dataset.id;
+    `);
+    if (!opened) return { ok: false, evidence: 'no collapsed expandable node' };
+    await waitFor(d, `return location.hash.indexOf('expand=') >= 0`, { timeout: 8000, label: 'expand= in hash' });
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, label: 'relayout after unfolding' });
+    await settle();
+    const afterOpen = await fitted();
+    await zoomIn();
+    await press('Collapse all');
+    await sleep(500);
+    await waitFor(d, GRAPH_IDLE, { timeout: 90000, label: 'relayout after folding' });
+    await settle();
+    const afterShut = await fitted();
+    return {
+      ok: afterOpen.same && afterShut.same && !!zoomed && zoomed[2] !== afterOpen.a[2],
+      evidence: `zoomed to ${j(zoomed)}; unfolded ${j(opened)}: ${j(afterOpen.a)}, Fit then ${j(afterOpen.b)}; `
+        + `zoomed again, Collapse all: ${j(afterShut.a)}, Fit then ${j(afterShut.b)}`,
+    };
+  });
+
   await check(d, 'graph/keyboard-space-selects', async () => {
     await d.js(`document.querySelectorAll('.gnode')[0].focus(); return document.activeElement.tagName;`);
     const focused = await d.js(`return { tag: document.activeElement.tagName, id: document.activeElement.dataset ? document.activeElement.dataset.id : null };`);

@@ -1595,7 +1595,15 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
   ui.chain = chain;
 
   ui.bbox = bboxOf(abs);
-  if (!ui.fitted) { fitToView(app); ui.fitted = true; } else applyTransform();
+  // The first drawing is fitted into the stage, and so is every drawing after
+  // something was unfolded or folded (a node's + or −, a double click, the
+  // side panel, Collapse all, a link that opens a section): Fit, done for the
+  // reader.  Anything else (a filter, the search, a selection) keeps the view
+  // where the reader left it.
+  const expandKey = view.kind + ' ' + [...view.expanded].sort().join(',');
+  const toggled = ui.drawnExpand !== undefined && ui.drawnExpand !== expandKey;
+  ui.drawnExpand = expandKey;
+  if (!ui.fitted || toggled) { fitToView(app); ui.fitted = true; } else applyTransform();
   // The view this drawing is of: `render` moves `ui.view` on as soon as the
   // state changes, before the new layout is drawn.
   ui.drawnView = view;

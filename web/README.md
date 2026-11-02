@@ -203,6 +203,11 @@ The reduction (`transitiveReduction` in `model.js`) works
 Hiding everything it says loses no reachability. The status line counts the
 arcs it hid.
 
+Every unfolding or folding — a node's + or −, a double click, the side
+panel's button, *Collapse all*, *↑ Back to …*, a link that opens a section —
+fits the new graph into the stage, as *Fit* does (`draw` in `graph.js`); a
+filter, the search or a selection keeps the view where the reader left it.
+
 Expanding a section enters it: the level it was opened from — every node,
 title and arc drawn outside it — is faded, as selecting a node fades what is
 not its neighbourhood, but stays clickable and reachable with Tab. Arcs with

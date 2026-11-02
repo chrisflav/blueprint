@@ -1967,6 +1967,40 @@ await check('every option that changes the arcs starts off, the Filters dot show
   await layout('#/graph?collapse=refines');
 });
 
+await check('unfolding or folding a node fits the graph into the stage; a filter keeps the view', async () => {
+  const w = dom.workers.created[dom.workers.created.length - 1];
+  const layout = async (hash) => {
+    await go(hash);
+    const req = lastLayoutMessage(w);
+    w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await tick(5);
+  };
+  const transform = () => root.querySelector('g.glayer').getAttribute('transform');
+  const button = (text) => root.querySelectorAll('.toolbar button').find((b) => b.textContent === text);
+  const fit = () => { fire(button('Fit'), 'click'); return transform(); };
+  await layout('#/graph?collapse=refines');
+  const zoomed = () => { fire(button('+'), 'click'); return transform(); };
+  // Zoomed in by hand, a filter keeps the view.
+  const z = zoomed();
+  ok(z !== fit(), 'the zoom did not move the view');
+  zoomed();
+  const before = transform();
+  await layout('#/graph?collapse=refines&reduce=1');
+  eq(transform(), before, 'a filter moved the view');
+  // Unfolding a section fits the new graph, as Fit would.
+  zoomed();
+  await layout('#/graph?collapse=refines&reduce=1&expand=sec-main');
+  const opened = transform();
+  eq(fit(), opened, 'unfolding did not fit the graph');
+  // So does folding it again.
+  zoomed();
+  await layout('#/graph?collapse=refines&reduce=1');
+  const shut = transform();
+  eq(fit(), shut, 'folding did not fit the graph');
+  ok(opened !== shut, 'the two graphs fit the same way: nothing was checked');
+  await layout('#/graph?collapse=refines');
+});
+
 await check('a blocked worker falls back to laying out on the main thread', async () => {
   dom.workers.enabled = false;
   dom.workers.created.length = 0;
