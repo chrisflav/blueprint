@@ -218,7 +218,7 @@ table.grid td { border-bottom-color: var(--border); }
 .proof-head { display: inline; }
 .proof-head + .proof-prose { display: inline; }
 .proof-head + .proof-prose > p:first-child { display: inline; }
-a.proof-word { font-family: var(--ui); font-style: normal; font-weight: 700; color: var(--env-def); }
+.proof-word { font-family: var(--ui); font-style: normal; font-weight: 700; color: var(--env-def); }
 .proof-end { color: var(--fg); margin-top: -1.4em; }
 .proof-head { margin-right: .4em; }
 

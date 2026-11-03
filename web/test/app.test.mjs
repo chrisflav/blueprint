@@ -196,8 +196,13 @@ await check('a proof is set after its statement, with no number of its own', asy
   eq(proofs.length, 1, 'one proof on the page');
   eq(proofs[0].getAttribute('id'), 'doc-proof_thm-heine-borel', 'its anchor');
   eq(proofs[0].querySelector('.proof-word').textContent, 'Proof.', 'the lead word');
+  ok(!proofs[0].querySelector('summary a'), 'not a link: a click on it folds or unfolds the proof');
   eq(proofs[0].querySelector('.proof-end').textContent, '\u220e', 'the end mark');
   ok(!proofs[0].hasAttribute('open'), 'folded by default');
+  await go('#/object/thm-heine-borel');
+  const onObject = root.querySelector('details.proof');
+  ok(onObject && onObject.querySelector('summary .proof-word') && !onObject.querySelector('summary a'),
+    "the statement's page folds its proof on a click too");
   await go('#/object/' + encodeURIComponent('proof/thm-heine-borel'));
   eq(root.querySelectorAll('.error-box').length, 0, 'the proof has an object page');
 });
@@ -449,7 +454,21 @@ await check('the search page lists the results in document order, as a tree', as
   const proof = searchItems().find((li) => li.classList.contains('kind-proof'));
   ok(proof, 'the proof is listed');
   ok(proof.parentNode.parentNode.classList.contains('kind-theorem'), 'under the theorem it proves');
+  eq(itemHref(proof), '#/document/sec-applications?collapse=refines&focus=thm-heine-borel', 'and leads to that theorem');
   eq(searchItems().length, want.length, 'all of them on one page');
+
+  // An unquoted hyphenated word: the Stacks project's hint, and the word
+  // written as one is found too.
+  await go('#/search?query=heine-borel');
+  await app.rendered;
+  const hint = root.querySelector('p.search-alternative');
+  ok(hint && /If the keyword heine-borel is not giving you the results you expect/.test(hint.textContent), 'the hint');
+  eq(new URLSearchParams(hint.querySelector('a').getAttribute('href').split('?')[1]).get('query'), '"heine-borel"',
+    'it links to the phrase');
+  await go('#/search?query=heineborel');
+  await app.rendered;
+  ok(searchItems().some((li) => li.classList.contains('kind-theorem')), 'heineborel finds heine-borel');
+  ok(!root.querySelector('p.search-alternative'), 'with no hint');
 });
 
 await check('the search page: magnifier, folding, statements only, no results', async () => {

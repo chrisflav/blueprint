@@ -721,6 +721,23 @@ check('searchWords: letters and digits, lowercased, accents dropped', () => {
   eq(M.searchWords('').length, 0, 'nothing');
 });
 
+check('searchWords and compoundWords: TeX accents, hyphenated words written as one', () => {
+  eq(M.searchWords("pro-\\'etale, \\'{E}tale, \\v{C}ech").join(' '), 'pro etale etale cech', 'TeX accents dropped');
+  eq(M.compoundWords('the pro-étale site').join(' '), 'proetale', 'pro-étale is proetale');
+  eq(M.compoundWords("pro-\\'etale").join(' '), 'proetale', 'so is pro-\\\'etale');
+  eq(M.compoundWords('small-pro-etale-site').join(' '),
+    'smallpro smallproetale smallproetalesite proetale proetalesite etalesite', 'runs of two to four pieces');
+  eq(M.compoundWords('Stone–Čech, a - b, -x').length, 0, 'not a dash, nor a hyphen between spaces');
+});
+
+check('queryAlternative: the Stacks project\'s hint for an unquoted hyphenated word', () => {
+  eq(M.queryAlternative('proetale'), null, 'nothing to say');
+  eq(M.queryAlternative('"pro-etale" -foo'), null, 'a phrase and an exclusion are meant');
+  const alt = M.queryAlternative('pro-etale site');
+  eq(alt.keywords.join(), 'pro-etale', 'the keyword');
+  eq(alt.alternative, '"pro-etale" site', 'in double quotes');
+});
+
 check('parseQuery: words, wildcards, phrases, exclusions and OR, as on the Stacks project', () => {
   const w = (word, prefix = false) => ({ word, prefix });
   const q = M.parseQuery('a b OR c -d "e f*" quasi-compact');
@@ -747,7 +764,11 @@ check('fullTextSearch: whole words, in document order', () => {
   ok(compact.indexOf('proof/thm-heine-borel') === compact.indexOf('thm-heine-borel') + 1, 'a proof after its statement');
   sameSet(ids('"finite intersection"'), ['def-filter'], 'a phrase');
   eq(ids('"intersection finite"').length, 0, 'a phrase is in order');
-  sameSet(ids('heineBorel'), ['thm-heine-borel'], 'a Lean name');
+  sameSet(ids('heineBorel', { radius: 'statements' }), ['thm-heine-borel'], 'a Lean name');
+  // A hyphenated word written as one, and the other way round.
+  ok(ids('heineborel').includes('thm-heine-borel'), 'heineborel finds heine-borel');
+  ok(ids('heinebor*').includes('thm-heine-borel'), 'so does a prefix of it');
+  ok(ids('"heine-borel"', { radius: 'statements' }).includes('thm-heine-borel'), 'a phrase finds the Lean name heineBorel');
   sameSet(ids('cech'), ids('Čech'), 'accents do not matter');
   ok(ids('compact -tychonoff').every((id) => !ids('tychonoff').includes(id)), 'exclusion');
   const either = ids('ultrafilter OR net');

@@ -38,12 +38,11 @@ let pointer = null; // {x, y}: the last pointer position, to pick a wrapped link
 /**
  * The id of the object a link previews, or null.  Only links to an object
  * that exists; not a broken reference, not a title in a heading (the document
- * writes the object out right under it), not the "Proof." that opens a proof.
+ * writes the object out right under it).
  */
 export function previewTarget(model, a) {
   if (!model || !a || a.tagName !== 'A' || !a.classList) return null;
   if (!a.classList.contains('objlink') || a.classList.contains('broken')) return null;
-  if (a.classList.contains('proof-word')) return null;
   for (let p = a.parentNode; p && p.nodeType === 1; p = p.parentNode) {
     if (/^H[1-6]$/.test(p.tagName)) return null;
     if (p.classList && p.classList.contains('preview')) break;

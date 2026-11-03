@@ -12,7 +12,9 @@
 //
 // Every link leads into the document, as its references do: a chapter or a
 // section to the page it heads, a statement to its section's page, scrolled
-// to it.  Text between statements is found as the section it is read in.
+// to it, a proof to its statement.  Text between statements is found as the
+// section it is read in.  A query with an unquoted hyphenated word gets the
+// Stacks project's hint to try it in double quotes (`model.queryAlternative`).
 //
 // A query that is exactly an object's id goes to that object's page, as a
 // Stacks tag does.  The top bar's box (app.js) asks this page, and the two
@@ -68,6 +70,8 @@ export function render(root, app) {
     main.appendChild(el('h2.search-count', !hits.length ? 'No results'
       : [`${hits.length} ${hits.length === 1 ? 'result' : 'results'} `,
         el('span.search-showing', `(now showing results ${from + 1}–${from + shown.length})`)]));
+    const alt = M.queryAlternative(query);
+    if (alt) main.appendChild(alternativeHint(app, alt, href));
     if (shown.length) main.appendChild(resultTree(app, { outline, kind }, shown));
     pager();
     if (hits.length) aside.appendChild(perPageNav(app, perpage, href));
@@ -113,6 +117,20 @@ function searchForm(app, query, radius, perpage) {
   el('div.search-options',
     el('button.search-submit', { type: 'submit' }, 'Search'),
     el('div.search-radii', ...radii)));
+}
+
+/**
+ * "If the keyword pro-etale is not giving you the results you expect, then
+ * try searching for "pro-etale"." — the Stacks project's words.
+ */
+function alternativeHint(app, alt, href) {
+  const { el } = app;
+  const vars = [];
+  alt.keywords.forEach((k, i) => vars.push(i ? ', ' : null, el('var', k)));
+  return el('p.search-alternative',
+    `If the keyword${alt.keywords.length > 1 ? '(s)' : ''} `, ...vars,
+    ' is not giving you the results you expect, then try searching for ',
+    el('a', { href: href({ query: alt.alternative, page: 1 }) }, el('var', alt.alternative)), '.');
 }
 
 // ------------------------------------------------------------- pagination
@@ -161,6 +179,7 @@ function tips(app) {
       el('li', 'use wildcards: ', v('ideal'), ' doesn’t match ', v('ideals'), ', but ', v('ideal*'), ' matches both;'),
       el('li', 'strings like ', v('quasi-compact'), ' should be enclosed by double quotes, otherwise you are looking for objects containing ',
         v('quasi'), ' but not ', v('compact'), ';'),
+      el('li', 'a hyphenated word is also found written as one: ', v('proetale'), ' finds ', v('pro-étale'), ';'),
       el('li', v('OR'), ' between two words finds objects with either of them;'),
       el('li', 'an object’s id goes straight to its page.')));
 }
@@ -190,15 +209,19 @@ export function headingsForText(outline, hits) {
 
 /**
  * Where a result leads: into the document.  A chapter or a section to the
- * page it heads, under its own title; anything else (a statement, a proof,
- * text, a reference) to the page of the level it is read on, its section's,
- * scrolled to it.  What the document does not hold, to its object page.
+ * page it heads, under its own title; a proof to the statement it proves; anything
+ * else (a statement, text, a reference, a step) to the page of the level it
+ * is read on, its section's, scrolled to it.  What the document does not
+ * hold, to its object page.
  */
 function resultHref(app, doc, o) {
   const { outline, kind } = doc;
-  const inDoc = outline && (M.isSectionKind(o.kind)
-    ? app.documentHeadHref(outline, kind, o.id)
-    : app.documentLevelHref(outline, kind, o.id));
+  let inDoc = null;
+  if (outline) {
+    const host = o.kind === 'proof' ? outline.stepOf.get(o.id) : null;
+    if (M.isSectionKind(o.kind)) inDoc = app.documentHeadHref(outline, kind, o.id);
+    else inDoc = app.documentLevelHref(outline, kind, host || o.id);
+  }
   return inDoc || app.objectHref(o.id);
 }
 

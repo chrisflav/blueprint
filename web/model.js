@@ -2067,21 +2067,48 @@ export function hiddenHits(view, ids) {
 // 6b. The search page's full-text search, after the Stacks project's
 // ---------------------------------------------------------------------------
 
+// TeX's accents in prose, `\'e`, `\'{e}`, `\v{C}`: the letter alone, as the
+// accent is dropped from a letter written with one ("é" is `e`).
+const TEX_ACCENT = /\\(?:['`"^~=.]\s*\{?([A-Za-z])\}?|[vcuH]\{([A-Za-z])\})/g;
+
+// A text as the search reads it: TeX accents and accents dropped, lowercased.
+function searchText(text) {
+  return String(text || '').replace(TEX_ACCENT, (_, a, b) => a || b)
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
 /**
  * The words of a text as the search page reads them: runs of letters and
- * digits, lowercased, accents dropped ("Čech" is `cech`), the way the Stacks
- * project's full-text index (SQLite FTS) splits its text.  A Lean name
- * splits at its dots and underscores: `Nat.succ_le` is `nat succ le`.
+ * digits, lowercased, accents dropped ("Čech" and `\v{C}ech` are `cech`),
+ * the way the Stacks project's full-text index (SQLite FTS) splits its text.
+ * A Lean name splits at its dots and underscores: `Nat.succ_le` is
+ * `nat succ le`.
  */
 export function searchWords(text) {
-  return String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-    .match(/[\p{L}\p{N}]+/gu) || [];
+  return searchText(text).match(/[\p{L}\p{N}]+/gu) || [];
+}
+
+/**
+ * The words a hyphenated word is also found as, written as one: "pro-étale"
+ * (or `pro-\'etale`) is also `proetale`, "w-contractible" `wcontractible`.
+ * Every run of two to four neighbouring pieces counts, so the id
+ * `small-pro-etale-site` has `proetale` too.  These words are not in a
+ * text's sequence of words, so phrases are read as written.
+ */
+export function compoundWords(text) {
+  const out = [];
+  for (const run of searchText(text).match(/[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)+/gu) || []) {
+    const pieces = run.split('-');
+    for (let i = 0; i < pieces.length; i += 1) {
+      for (let k = i + 2; k <= Math.min(pieces.length, i + 4); k += 1) out.push(pieces.slice(i, k).join(''));
+    }
+  }
+  return out;
 }
 
 // The words of a piece of query, each with whether it ends in `*`.
 function queryWords(text) {
-  return (String(text).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-    .match(/[\p{L}\p{N}]+\*?/gu) || [])
+  return (searchText(text).match(/[\p{L}\p{N}]+\*?/gu) || [])
     .map((w) => (w.endsWith('*') ? { word: w.slice(0, -1), prefix: true } : { word: w, prefix: false }));
 }
 
@@ -2097,6 +2124,10 @@ function queryWords(text) {
  *   * `-word` (or `-"a phrase"`) leaves out what has it, which is why an
  *     unquoted `quasi-compact` asks for quasi but not compact;
  *   * `OR` between two terms wants either of them.
+ *
+ * Unlike SQLite's index, a hyphenated word is also found written as one
+ * (`compoundWords`): `proetale` finds "pro-étale", and the phrase
+ * `"pro-etale"` finds "proetale".
  *
  * Returns `{ all, none }`: `all` a list of groups, every group to be matched
  * by one of its terms, and `none` the terms nothing found may match.  A term
@@ -2126,6 +2157,23 @@ export function parseQuery(query) {
   return { all, none };
 }
 
+/**
+ * What the search page suggests when a query may not ask what its writer
+ * meant, as the Stacks project does: an unquoted hyphenated word asks for
+ * the first part but not the rest (`pro-etale` is pro without etale), so the
+ * same query with it in double quotes, a phrase.  `{ keywords, alternative }`,
+ * or null when there is nothing to suggest.
+ */
+export function queryAlternative(query) {
+  const keywords = [];
+  const alternative = String(query || '').replace(/"[^"]*"?|[^\s"]+/g, (t) => {
+    if (t.startsWith('"') || !/^[^-*]+-[^\s]/.test(t) || !/[\p{L}\p{N}]-[\p{L}\p{N}\\]/u.test(t)) return t;
+    keywords.push(t);
+    return '"' + t + '"';
+  });
+  return keywords.length ? { keywords, alternative } : null;
+}
+
 /** Which objects the search page looks through: all of them, or the statements alone. */
 export const SEARCH_RADII = ['all', 'statements'];
 
@@ -2153,9 +2201,11 @@ export function isBareSugar(model, o) {
 function fullTextIndex(model) {
   if (!model._fullText) {
     model._fullText = model.objects.map((o) => {
-      const fields = [searchWords(o.id), searchWords(o.attrs.title), ...leanNamesOf(o).map(searchWords), searchWords(displayBody(o))]
-        .filter((f) => f.length);
-      return { object: o, fields, words: new Set(fields.flat()) };
+      const texts = [o.id, o.attrs.title, ...leanNamesOf(o), displayBody(o)];
+      const fields = texts.map(searchWords).filter((f) => f.length);
+      const words = new Set(fields.flat());
+      for (const t of texts) for (const w of compoundWords(t)) words.add(w);
+      return { object: o, fields, words };
     });
   }
   return model._fullText;
@@ -2170,6 +2220,8 @@ function termMatches(row, term) {
     for (const w of row.words) if (w.startsWith(q.word)) return true;
     return false;
   }
+  // A phrase written as one word: "pro-etale" finds "proetale".
+  if (!term.some((q) => q.prefix) && row.words.has(term.map((q) => q.word).join(''))) return true;
   for (const field of row.fields) {
     for (let i = 0; i + term.length <= field.length; i += 1) {
       let k = 0;
