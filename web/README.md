@@ -543,7 +543,10 @@ time 0 and played as the intro opens, without the title growing in (`.film`).
 While it plays, the page only downloads the snapshot: reading it and drawing
 the graph, which keep the page busy for a second or more, wait for the title
 to have played (`held`, `before` of `loadInto`), so the title never stops in
-mid-stroke; it stays at its end until the graph is drawn.
+mid-stroke; it stays at its end until the graph is drawn. The title, and the
+zoom, run on clocks of their own that go on frame by frame, at most
+`MAX_FRAME_MS` a frame (`filmFrame`), so a busy moment or a hidden tab holds
+them rather than letting them skip ahead.
 A title element marked `data-intro-logo` lands on the top bar's logo
 instead of the title on its title (`intro-logo` on `<html>`: the logo shows
 from `intro-landed` on, the title with the bar). The

@@ -671,7 +671,10 @@ growing in (it shows itself, writing itself say), so `hold` is best the
 length of its animation.  While it plays the website only downloads the
 snapshot; reading it and drawing the graph wait until the title has played,
 so that the title never stops halfway, and it then stays at its end until
-the graph is drawn; with reduced motion it is shown as it
+the graph is drawn.  The title runs on a clock of its own, which goes on
+frame by frame: a moment in which the browser is busy, or the tab is out of
+sight, holds it where it is rather than letting it skip ahead, so it is
+always seen whole; with reduced motion it is shown as it
 ends.  And it may land on the top bar's logo (`[site] logo`) rather than on
 its title: an element of the title marked `data-intro-logo`, framing a
 drawing of the logo as the logo's picture is framed, flies onto the logo,
