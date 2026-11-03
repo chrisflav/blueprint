@@ -358,7 +358,7 @@ The document is the reading order of DESIGN.md §6, numbered as a paper is
 `#/document` is the top level written out — usually the chapters — with the
 text between them. `#/document/<id>` writes out one entry and the levels
 below it. An entry whose children are not on the page links on to its own
-page by a *Read 1.2 →* link beside its title. Each page has breadcrumbs up
+page by a *Show details 1.2 →* link beside its title. Each page has breadcrumbs up
 its chain, back to the top, its previous and next siblings, and the contents
 in a sidebar. A top-level entry with nothing under it (an introduction, say)
 has its own page too.
@@ -390,7 +390,7 @@ scrolled to it (`?focus=`). A heading is one link, the kind, the number and
 the title together, and it stays where it is: clicked, it is scrolled to the
 top of the page it is on, whatever page and whatever entry, the page's own
 title and a repeated entry's included, and the link says so (`?focus=`).
-*Read 1.2 →* beside it leads on to its own page, and the object page is a
+*Show details 1.2 →* beside it leads on to its own page, and the object page is a
 step aside, on the small *object* link.
 
 Every other link to an entry — a cross reference in prose, *In the document →*
@@ -460,7 +460,7 @@ from.
 Every proof is a `<details class="proof">` (`proofDisclosure` in `app.js`)
 whose summary is its "Proof." line, so one click folds or unfolds one proof,
 and *Fold proofs* / *Unfold proofs* (on object pages with a proof) does all
-of them; the choice is kept in `localStorage`
+of them. Proofs start folded; the choice is kept in `localStorage`
 (`blueprint.proofs`). A blueprint not yet migrated to proof objects gets the
 same: `renderBody` turns a body's `## Proof` heading and what follows it, up
 to the next heading of the same level, into that disclosure.

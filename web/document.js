@@ -233,7 +233,8 @@ export function render(root, app) {
     // lead word, and the body indented under it.  The heading, kind, number
     // and title, is one link, to this very place on this page: clicked, it
     // stays here, scrolled to the top (the handler above), whatever entry it
-    // is; the page's own heading too.  "Read 1.2 →" beside it leads on.
+    // is; the page's own heading too.  "Show details 1.2 →" beside it
+    // leads on.
     const isSection = M.isSectionKind(o.kind);
     const head = el('div.head',
       el('h' + hLevel, el('a.doc-title', { href: href(pageId, o.id), 'data-here': o.id },
@@ -242,7 +243,7 @@ export function render(root, app) {
         el('span.doc-title-text', M.titleOf(o)))),
       // An entry whose children are on a page of their own leads on there,
       // beside its title.
-      leadsOn ? el('a.doc-open', { href: href(o.id) }, 'Read ', num, ' →') : null,
+      leadsOn ? el('a.doc-open', { href: href(o.id) }, 'Show details ', num, ' →') : null,
       // The heading leads into the paper; the object page is a step aside.
       // Resting on the link shows the object's Lean names, when it has any,
       // in a card (preview.js), so the heading keeps one word.

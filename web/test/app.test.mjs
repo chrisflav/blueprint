@@ -197,6 +197,7 @@ await check('a proof is set after its statement, with no number of its own', asy
   eq(proofs[0].getAttribute('id'), 'doc-proof_thm-heine-borel', 'its anchor');
   eq(proofs[0].querySelector('.proof-word').textContent, 'Proof.', 'the lead word');
   eq(proofs[0].querySelector('.proof-end').textContent, '\u220e', 'the end mark');
+  ok(!proofs[0].hasAttribute('open'), 'folded by default');
   await go('#/object/' + encodeURIComponent('proof/thm-heine-borel'));
   eq(root.querySelectorAll('.error-box').length, 0, 'the proof has an object page');
 });
@@ -719,7 +720,7 @@ await check('depth=1 on the top page writes out the top level, one level deep', 
   eq(root.querySelectorAll('.doc-entry').length, out.roots.length, 'one entry per top-level object');
   ok(entryIds().includes('doc-sec-main'), 'a chapter is on it');
   ok(!entryIds().includes('doc-thm-tychonoff'), 'its contents are not');
-  // Each chapter leads on to its own page by a "Read" link in its head.
+  // Each chapter leads on to its own page by a "Show details" link in its head.
   ok(hrefs('.doc-entry .head a.doc-open').includes('#/document/sec-main?collapse=refines'), 'a link to the chapter page');
   // Its heading is one link, to its level: the top level, this page.
   const head = root.querySelector('#doc-sec-main .head');

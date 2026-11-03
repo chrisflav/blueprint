@@ -1640,7 +1640,7 @@ async function pageChecks(d, f) {
     const withKids = out.roots.filter((e) => !e.duplicate && e.children.length).length;
     return {
       ok: s.entries === out.roots.length && s.opens === withKids && !s.pageHead && s.crumbs === 0 && s.pagers === 0,
-      evidence: `#/document?depth=1: ${s.entries} .doc-entry (outline roots ${out.roots.length}), ${s.opens} "Read …" links (roots with children ${withKids}), page head ${j(s.pageHead)}, ${s.crumbs} breadcrumbs, ${s.pagers} pagers`,
+      evidence: `#/document?depth=1: ${s.entries} .doc-entry (outline roots ${out.roots.length}), ${s.opens} "Show details …" links (roots with children ${withKids}), page head ${j(s.pageHead)}, ${s.crumbs} breadcrumbs, ${s.pagers} pagers`,
     };
   });
 
@@ -1832,7 +1832,7 @@ async function pageChecks(d, f) {
     const opensOk = s.opens > 0 || !out.roots.some((e) => e.children.some((c) => c.children.length));
     return {
       ok: n === want && /depth=2/.test(s.hash) && opensOk,
-      evidence: `depth 2 on the top page: ${s.entries} entries (want ${want}), hash=${j(s.hash)}, ${s.opens} "Read …" links to third-level pages`,
+      evidence: `depth 2 on the top page: ${s.entries} entries (want ${want}), hash=${j(s.hash)}, ${s.opens} "Show details …" links to third-level pages`,
     };
   });
 
