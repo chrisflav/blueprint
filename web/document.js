@@ -550,6 +550,12 @@ function proofBlock(app, o, outline, known, refs) {
  * 1.2, …, and the sidebar 1 as a heading over 1.1, with 1.1.1, 1.1.2, … under
  * it, then 1.2, ….
  *
+ * The Outline style (`toc-outline`) has the contents unfolded down to the
+ * level instead: every level along the chain listed whole, so on the page of
+ * 2.1 the sidebar is 1, 2, 3, … with 2 unfolded on 2.1, 2.2, …, and 2.1 on
+ * 2.1.1, 2.1.2, ….  There a click on the page's own entry folds its entries
+ * away, and another unfolds them again.
+ *
  * Every entry, in the list or in the chain, leads to the page it heads, as
  * the contents do (`pageHref`): chapter 2 to the page of 2 with 2.1, 2.2, ….
  * Something with nothing under it heads no page and leads to the page it is
@@ -559,6 +565,10 @@ function proofBlock(app, o, outline, known, refs) {
 function levelSidebar(app, outline, pageEntry, focus, pageHref, toc) {
   const { el, clear } = app;
   const pageId = pageEntry ? pageEntry.id : null;
+  // The contents unfolded, every level whole (the Outline style), and whether
+  // the reader has folded the page's own entries away there.
+  const whole = toc.classList.contains('toc-outline');
+  let shut = false;
   const kids = (e) => (e ? e.children : outline.roots).filter((c) => !c.duplicate && !c.text);
   const listed = (e) => !!e && !e.duplicate && !e.text;
   // What the page is scrolled to: an entry below it opens there; a step or
@@ -596,20 +606,51 @@ function levelSidebar(app, outline, pageEntry, focus, pageHref, toc) {
     if (!t) return;
     ev.preventDefault();
     t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (e === pageEntry) return;
+    if (e === pageEntry) {
+      if (whole && kids(e).length) {
+        shut = !shut;
+        draw();
+        const a = toc.querySelector('a[data-id="' + e.id + '"]');
+        if (a && typeof a.focus === 'function') a.focus({ preventScroll: true });
+      }
+      return;
+    }
     level = e.parent;
     opened = e;
     redraw(e, e.id);
   };
   const item = (e, cls) => el('li', {
     class: cls + (kids(e).length ? ' has-kids' : '') + (e === pageEntry ? ' current' : '') +
-      (e === opened ? ' open' : ''),
+      (e === opened ? ' open' : '') + (e === pageEntry && shut ? ' shut' : ''),
   }, el('a', { href: pageHref(e.id), 'data-id': e.id, onclick: go(e) },
     el('span.num', e.number), ' ', M.titleOf(e.object)));
+
+  // The contents unfolded down to the level: the chain, `toc-up`, unfolded
+  // where it stands among its siblings, and the opened entry; the page's own
+  // entry stays folded while the reader keeps it so.
+  const drawWhole = () => {
+    const chain = new Set();
+    for (let e = level; e; e = e.parent) chain.add(e);
+    const list = (parent, ul) => {
+      for (const e of kids(parent)) {
+        const li = ul.appendChild(item(e, chain.has(e) ? 'toc-up' : 'toc-entry'));
+        const unfolded = (chain.has(e) || e === opened) && !(e === pageEntry && shut);
+        if (unfolded && kids(e).length) list(e, li.appendChild(el('ul')));
+      }
+      return ul;
+    };
+    return list(null, el('ul.toc-levels'));
+  };
 
   const draw = () => {
     clear(toc);
     toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
+    if (whole) {
+      const top = drawWhole();
+      app.renderMath(top); // titles carry maths
+      toc.appendChild(top);
+      return;
+    }
     const top = el('ul.toc-levels');
     let into = top;
     const chain = [];

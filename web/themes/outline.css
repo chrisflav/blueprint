@@ -8,12 +8,13 @@
 
 /* ------------------------------------------------------- contents */
 
-/* Kiran's sidebar without its colours, one level at a time (`levelSidebar`
-   in document.js, which marks it `toc-outline` in this style): each entry
-   on its own line under a hairline, a blue bar beside the chain down to the
-   level and the entry opened, that entry's entries indented below it, this
-   page shaded.  The selectors name `toc-up` and `toc-entry` so that they
-   outrank pretext.css's blocks, which this sheet imports. */
+/* Kiran's sidebar without its colours (`levelSidebar` in document.js, which
+   marks it `toc-outline` in this style): the contents unfolded down to the
+   page, each entry on its own line under a hairline, each level indented, a
+   blue bar beside the chain down to the level and the entry opened, that
+   entry's entries indented below it, this page shaded.  The selectors name
+   `toc-up` and `toc-entry` so that they outrank pretext.css's blocks, which
+   this sheet imports. */
 /* The page's margins are the default style's (style.css), not pretext.css's
    narrow column in the middle: the sidebar at the left of the page and the
    text across the rest of it.  Wide screens only: below 901px style.css sets
@@ -52,3 +53,11 @@
 .toc-outline .toc-levels li.open > ul { border-bottom: 1px solid var(--border); padding-bottom: .3em; }
 .toc-outline .toc-levels li.open > ul > li > a { border-bottom: 0; font-size: .87rem; padding-top: .3em; padding-bottom: .3em; }
 .toc-outline .toc-levels li.current > a { background: var(--accent-soft); color: var(--fg); border-left-color: var(--ptx-blue-text); }
+/* The chain stands among its siblings, not above them: it points down where
+   it is unfolded, as an opened entry does, not back up; the page's own entry,
+   folded by a click, points across again. */
+.toc-outline .toc-levels li.toc-up > a::before { content: none; }
+.toc-outline .toc-levels li.toc-up.has-kids > a::after {
+  content: '\203a'; display: inline-block; color: var(--faint); margin-left: .35em; transform: rotate(90deg);
+}
+.toc-outline .toc-levels li.toc-up.shut.has-kids > a::after { transform: none; }

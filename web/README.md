@@ -239,11 +239,10 @@ toolbar brings it back, and *Hide sidebar* hides it again. So are the
 statistics at the foot of the stage (how many nodes and links, what is
 hidden, what is expanded): *Show statistics*, beside it, shows them, and
 *Hide statistics* hides them again; while a layout runs the line shows
-anyway, to say how much is being laid out. *Replay intro*, when the project
-has an intro, is between them, and only on the graph, where the intro lands.
-The three choices are the reader's, kept in `localStorage`
-(`blueprint.graph.tools`, `blueprint.graph.side` and `blueprint.graph.stats`,
-`shown` or `hidden`; no choice is hidden).
+anyway, to say how much is being laid out. The three choices are the
+reader's, kept in `localStorage` (`blueprint.graph.tools`,
+`blueprint.graph.side` and `blueprint.graph.stats`, `shown` or `hidden`; no
+choice is hidden).
 
 The side panel of a selected node heads with its title, a link to the
 document's page with the node's level, scrolled to it, where every link to it
@@ -412,7 +411,7 @@ on screen is only scrolled to and opened, and the link updated, without
 rebuilding the page; the page's own entry scrolls to the top. A page reached
 otherwise — by a *Read* line, the breadcrumbs, a number — lists
 its own entries under its chain. Every style has this sidebar; the Outline
-style draws it as an outline (see below). Query parameters, which a link may
+style unfolds it and draws it as an outline (see below). Query parameters, which a link may
 carry (the page itself has no controls for them):
 
 * `collapse=<kind>`: the collapse order to read along (default: the
@@ -485,9 +484,13 @@ lists only the rules it changes; Article and Textbook `@import` Drafting,
 Outline imports PreTeXt, and the themes that use web fonts import them
 themselves, so the default fetches none. A theme may also ask for a sidebar:
 Outline sets `data-sidebar="outline"` on `<html>`, and the document marks its
-sidebar `toc-outline`, which `themes/outline.css` draws as an outline — the
-same contents one level at a time, each entry under a hairline, a blue bar
-beside the chain and the entry opened. Its page keeps the default's margins
+sidebar `toc-outline`, which `themes/outline.css` draws as an outline: the
+contents unfolded down to the level the page writes out, every level along
+the chain to it listed whole (on 2.1's page: 1, 2, 3, … with 2 unfolded on
+2.1, 2.2, …, and 2.1 on 2.1.1, 2.1.2, …), each entry under a hairline, a
+blue bar beside the chain and the entry opened. A click on the page's own
+entry there folds its entries away, and another unfolds them; it scrolls to
+the top as in every style. Its page keeps the default's margins
 (the sidebar at the left, the text across the rest), not PreTeXt's narrow
 column in the middle. `?theme=<id>` in the page's URL picks a
 style for a shared link; otherwise the reader's last pick is kept in
@@ -526,6 +529,10 @@ it is still followed. With `prefers-reduced-motion` it only fades.
   page, the bare graph (`/`, `#/graph`). A link to anything else, a graph
   with parameters included, opens straight on it, and `?intro=0` in the
   page's URL leaves it out anywhere.
+* The top bar's icon, the website's mark or the project's logo, plays it
+  again, on the landing page where it ends (`watchBrand` in `app.js`); the
+  title beside it is still the link to the graph, as the icon of a project
+  with no intro is.
 * A relative address in it (`![](assets/logo.png)`, a `<video src>`) is
   resolved against the directory holding `blueprint.json`, which is where
   `blueprint site` copies the project's `[site] assets` directory, as
