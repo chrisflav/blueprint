@@ -206,6 +206,268 @@ export function isSectionKind(kind) {
  */
 export const TEXT_KIND = 'hidden';
 
+/**
+ * The kind of a bibliography entry.  The document sets it as a paper sets its
+ * references: unnumbered, under its alphabetic label ("[Del74]"), sorted by
+ * that label; prose cites it as `[id]`, `[id, Exp. X, Cor. 4.3]` or `[a, b]`.
+ */
+export const REFERENCE_KIND = 'reference';
+
+export function isReference(o) {
+  return !!o && o.kind === REFERENCE_KIND;
+}
+
+// --------------------------------------------------------------- references
+
+function nameList(v) {
+  if (Array.isArray(v)) return v.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim());
+  if (typeof v === 'string' && v.trim()) return v.split(/\s+and\s+/).map((x) => x.trim()).filter(Boolean);
+  return [];
+}
+
+const NAME_SUFFIX = /^(?:jr|sr|ii|iii|iv)\.?$/i;
+
+// The words of a name, a `{…}` group one word ("{van Dam}").
+function nameWords(s) {
+  return (String(s).match(/\{[^}]*\}|[^\s{}]+/g) || []).filter(Boolean);
+}
+
+/**
+ * The parts of a name the label is made of, written "Given Family", "Given
+ * von Family" or "von Family, Given": `von`, the initials of the lower-case
+ * words before the family name ("van" gives "v", "de la" gives "dl"), and
+ * `last`, the words of the family name ("Vallée Poussin"), after a trailing
+ * "Jr." or "III".  A `{…}` group is one word and is never a "von".
+ */
+export function nameParts(name) {
+  const s = String(name).trim();
+  const comma = s.indexOf(',');
+  let words = nameWords(comma >= 0 ? s.slice(0, comma) : s);
+  if (comma < 0) {
+    while (words.length > 1 && NAME_SUFFIX.test(words[words.length - 1])) words.pop();
+    let first = words.length - 1;
+    while (first > 1 && /^\p{Ll}/u.test(words[first - 1])) first -= 1;
+    words = words.slice(first);
+  }
+  const isVon = (w) => !w.startsWith('{') && /^\p{Ll}/u.test(w);
+  let k = 0;
+  while (k < words.length - 1 && isVon(words[k])) k += 1;
+  const strip = (w) => w.replace(/[{}]/g, '');
+  return { von: words.slice(0, k).map((w) => [...w][0]).join(''), last: words.slice(k).map(strip).filter(Boolean) };
+}
+
+/** The family name of a name, its "von" part included: "van Dam" for "A. van Dam". */
+export function familyName(name) {
+  const p = nameParts(name);
+  return p.last.join(' ');
+}
+
+function attrString(o, key) {
+  const v = o && o.attrs ? o.attrs[key] : undefined;
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number') return String(v);
+  return '';
+}
+
+/**
+ * The alphabetic label of an entry before duplicates are told apart, as
+ * BibTeX's `alpha` style makes it: the first three letters of a single
+ * author's family name ("Del"), the initials of two to four ("BBD"), the
+ * initials of the first three and "+" for more, then the last two digits of
+ * the year.  Editors stand in for missing authors, and the title for both.
+ * `label` replaces all of it.
+ */
+function baseLabel(o) {
+  let names = nameList(o.attrs && o.attrs.author);
+  if (!names.length) names = nameList(o.attrs && o.attrs.editor);
+  const others = names.length > 0 && /^others$/i.test(names[names.length - 1]);
+  if (others) names = names.slice(0, -1);
+  const parts = names.map(nameParts).filter((p) => p.last.length);
+  // One author: the first three letters of the family name, or with a "von"
+  // part its initials and the family name's ("vB", "dlVP"); several: the
+  // "von" initials and the family name's initials of each ("vDC").
+  const initials = (p) => p.von + p.last.map((w) => [...w][0]).join('');
+  let head;
+  if (parts.length === 1 && !others) head = parts[0].von ? initials(parts[0]) : [...parts[0].last.join('')].slice(0, 3).join('');
+  else if (parts.length >= 1 && parts.length <= 4 && !others) head = parts.map(initials).join('');
+  else if (parts.length >= 1) head = parts.slice(0, 3).map(initials).join('') + '+';
+  else head = [...(attrString(o, 'title').replace(/[^\p{L}\p{N}]/gu, '') || o.id)].slice(0, 3).join('');
+  // The last two digits of the year, as alpha takes them: "1972–1973" is 73.
+  return head + attrString(o, 'year').replace(/[^0-9]/g, '').slice(-2);
+}
+
+/** a, b, …, z, aa, ab, …: the suffix of the i-th entry of a clash. */
+function clashSuffix(i) {
+  let s = '';
+  for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(97 + ((n - 1) % 26)) + s;
+  return s;
+}
+
+/**
+ * id -> alphabetic label of every reference of the model, duplicates told
+ * apart by a, b, c in the order of year and title, as `alpha` does.
+ */
+export function referenceLabels(model) {
+  if (model._referenceLabels) return model._referenceLabels;
+  const out = new Map();
+  // A `label` of its own is the entry's whatever else there is; the labels
+  // taken that way, compared as alpha compares them (case aside), are not
+  // given to any other entry.
+  const taken = new Set();
+  const groups = new Map();
+  for (const o of model.objects) {
+    if (!isReference(o)) continue;
+    const given = attrString(o, 'label');
+    if (given) {
+      out.set(o.id, given);
+      taken.add(given.toLowerCase());
+      continue;
+    }
+    const b = baseLabel(o);
+    const k = b.toLowerCase();
+    if (!groups.has(k)) groups.set(k, { base: b, os: [] });
+    groups.get(k).os.push(o);
+  }
+  // A clash is told apart by a, b, c in the order alpha sorts by: authors,
+  // then year, then title.
+  const sortKey = (o) => [nameList(o.attrs && o.attrs.author).map((n) => nameParts(n).last.join(' ')).join(' '),
+    attrString(o, 'year'), attrString(o, 'title'), o.id].join('\u0000').toLowerCase();
+  for (const [k, { base, os }] of groups) {
+    if (os.length === 1 && !taken.has(k)) {
+      out.set(os[0].id, base);
+      continue;
+    }
+    let i = 0;
+    for (const o of os.slice().sort((x, y) => (sortKey(x) < sortKey(y) ? -1 : sortKey(x) > sortKey(y) ? 1 : 0))) {
+      let label;
+      do label = base + clashSuffix(i++); while (taken.has(label.toLowerCase()));
+      taken.add(label.toLowerCase());
+      out.set(o.id, label);
+    }
+  }
+  model._referenceLabels = out;
+  return out;
+}
+
+export function referenceLabelOf(model, id) {
+  return referenceLabels(model).get(id) || null;
+}
+
+function joinNames(names) {
+  if (names.length <= 1) return names.join('');
+  if (names.length === 2) return names[0] + ' and ' + names[1];
+  return names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1];
+}
+
+/** The kind of publication: `type`, or read off the fields as BibTeX would. */
+export function referenceType(o) {
+  const t = attrString(o, 'type').toLowerCase();
+  if (t) return t;
+  if (attrString(o, 'journal')) return 'article';
+  if (attrString(o, 'booktitle')) return 'incollection';
+  if (attrString(o, 'school')) return 'phdthesis';
+  if (attrString(o, 'publisher')) return 'book';
+  return 'misc';
+}
+
+/**
+ * An entry as Markdown, in the order and punctuation of BibTeX's `alpha`:
+ * "P. Deligne. La conjecture de Weil. I. *Publ. Math. IHÉS*, 43:273–307,
+ * 1974."  The title links to `url`, and a DOI or an arXiv eprint follows.
+ * The object's prose, if any, comes after it (a note, a link to a copy); an
+ * entry with no title is its prose alone.  The fields are Markdown already:
+ * maths and emphasis in them stay what they are.
+ */
+export function referenceMarkdown(o) {
+  const f = (k) => attrString(o, k);
+  const title = f('title');
+  const body = o.body && o.body.trim() ? o.body.trim() : '';
+  if (!title) return body;
+  const end = (s) => (/[.!?]$/.test(s) ? s : s + '.');
+  const authors = nameList(o.attrs && o.attrs.author);
+  const editors = nameList(o.attrs && o.attrs.editor);
+  const type = referenceType(o);
+  const book = type === 'book' || type === 'phdthesis' || type === 'mastersthesis' || type === 'proceedings' || type === 'manual';
+  const linked = (t) => (f('url') ? `[${t.replace(/[[\]]/g, '\\$&')}](${f('url')})` : t);
+  // "May 1974", as alpha dates an entry.
+  const date = [f('month'), f('year')].filter(Boolean).join(' ');
+  const titleMd = book ? linked(`*${title}*`) : linked(title);
+  const pages = f('pages').replace(/-+/g, '–');
+  const parts = [];
+  if (authors.length) parts.push(end(joinNames(authors)));
+  else if (editors.length) parts.push(end(joinNames(editors) + (editors.length > 1 ? ', editors' : ', editor')));
+  let t = titleMd;
+  const vol = (v) => (/[,–-]|\band\b/.test(v) ? 'volumes ' : 'volume ') + v;
+  if (book && f('volume') && f('series')) t += `, ${vol(f('volume'))} of *${f('series')}*`;
+  else if (book && f('series')) t += `, *${f('series')}*`;
+  if (book && f('chapter')) t += `, chapter ${f('chapter')}`;
+  parts.push(end(t));
+  const tail = [];
+  if (type === 'article') {
+    let j = f('journal') ? `*${f('journal')}*` : '';
+    let v = f('volume');
+    if (v && f('number')) v += `(${f('number')})`;
+    if (v && pages) v += ':' + pages;
+    else if (pages) v = (v ? v + ', ' : '') + 'pages ' + pages;
+    tail.push([j, v, date].filter(Boolean).join(', '));
+  } else if (type === 'incollection' || type === 'inproceedings') {
+    const inner = [];
+    if (editors.length && authors.length) inner.push(joinNames(editors) + (editors.length > 1 ? ', editors' : ', editor'));
+    if (f('booktitle')) inner.push(`*${f('booktitle')}*`);
+    if (f('volume') && f('series')) inner.push(`${vol(f('volume'))} of *${f('series')}*`);
+    if (f('chapter')) inner.push('chapter ' + f('chapter'));
+    if (pages) inner.push('pages ' + pages);
+    if (inner.length) tail.push(end('In ' + inner.join(', ')));
+    tail.push([f('organization'), f('publisher'), f('address'), date].filter(Boolean).join(', '));
+  } else if (type === 'phdthesis' || type === 'mastersthesis') {
+    tail.push([type === 'phdthesis' ? 'PhD thesis' : "Master's thesis", f('school'), f('address'), date].filter(Boolean).join(', '));
+  } else if (type === 'techreport') {
+    tail.push(['Technical Report' + (f('number') ? ' ' + f('number') : ''), f('institution'), f('address'), date].filter(Boolean).join(', '));
+  } else if (book) {
+    tail.push([f('edition') ? f('edition') + ' edition' : '', f('organization'), f('publisher'), f('address'), date].filter(Boolean).join(', '));
+  } else {
+    tail.push([f('howpublished'), f('organization'), f('institution'), f('publisher'), date].filter(Boolean).join(', '));
+  }
+  for (const x of tail) if (x) parts.push(end(x));
+  if (f('note')) parts.push(end(f('note')));
+  if (f('doi')) parts.push(`doi:[${f('doi')}](https://doi.org/${f('doi')}).`);
+  if (f('eprint')) parts.push(`arXiv:[${f('eprint')}](https://arxiv.org/abs/${f('eprint')}).`);
+  return parts.join(' ') + (body ? ' ' + body : '');
+}
+
+/** What an object reads as: a reference its formatted entry, anything else its prose. */
+export function displayBody(o) {
+  return isReference(o) ? referenceMarkdown(o) : (o && o.body) || '';
+}
+
+/**
+ * A citation in prose, `[a]`, `[a, b]` or `[a, Exp. X, Cor. 4.3]`, read
+ * against the references of the model: the leading ids that name references
+ * are what is cited, whatever follows them the locator.  `inner` is the text
+ * between the brackets.  `null` when the first id names no reference, so that
+ * `[0, 1]` and `[x, y]` in prose stay what they were.
+ */
+export function parseCitation(model, inner) {
+  const parts = String(inner).split(',');
+  const items = [];
+  let i = 0;
+  for (; i < parts.length; i += 1) {
+    const id = parts[i].trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9._~/-]*$/.test(id) || !isReference(model.byId.get(id))) break;
+    items.push(id);
+  }
+  if (!items.length) return null;
+  const locator = parts.slice(i).join(',').trim();
+  return { items, locator };
+}
+
+/**
+ * A bracketed citation with more than one part, `[a, b]` or `[a, locator]`;
+ * group 1 is the text between the brackets.  A single `[id]` is
+ * `SLUG_PATTERN`'s, and only `parseCitation` says whether this one cites.
+ */
+export const CITE_PATTERN = '\\[([A-Za-z0-9][A-Za-z0-9._~/-]*\\s*,[^\\[\\]\\n]*)\\](?!\\()';
+
 /** The shape family of each statement word. */
 const TYPE_SHAPE = {
   definition: 'definition', theorem: 'statement', proposition: 'statement',
@@ -1299,18 +1561,22 @@ export function graphModel(model, { hideOptional = false } = {}) {
 // 5. Reading order (DESIGN 6: "a blueprint still reads as a paper")
 // ---------------------------------------------------------------------------
 
+// References with no `order` of their own come after their siblings, sorted by
+// their alphabetic label, as a paper's bibliography is.
 function orderKey(model, id) {
   const o = model.byId.get(id);
   const ord = o && o.attrs ? o.attrs.order : undefined;
   const n = typeof ord === 'number' ? ord : Number.POSITIVE_INFINITY;
-  return [n, id];
+  if (n === Number.POSITIVE_INFINITY && isReference(o)) return [n, 1, (referenceLabelOf(model, id) || '').toLowerCase() + '\u0000' + id];
+  return [n, 0, id];
 }
 
 function compareIds(model, a, b) {
   const ka = orderKey(model, a);
   const kb = orderKey(model, b);
   if (ka[0] !== kb[0]) return ka[0] - kb[0];
-  return ka[1] < kb[1] ? -1 : ka[1] > kb[1] ? 1 : 0;
+  if (ka[1] !== kb[1]) return ka[1] - kb[1];
+  return ka[2] < kb[2] ? -1 : ka[2] > kb[2] ? 1 : 0;
 }
 
 /**
@@ -1430,7 +1696,7 @@ export function documentOutline(model, kind) {
   const hasKids = (id) => childrenOf(order, id).length > 0;
   // An object earns a place in the flow if it says something or contains
   // something.
-  const inFlow = (o) => o.kind !== kind && (hasProse(o) || hasKids(o.id));
+  const inFlow = (o) => o.kind !== kind && (hasProse(o) || hasKids(o.id) || (isReference(o) && hasTitle(o)));
 
   // Steps: leaf binary edges with something to say, filed under their source.
   const steps = new Map();
@@ -1483,10 +1749,13 @@ export function documentOutline(model, kind) {
       number: null,
       // Text that belongs to no statement (`TEXT_KIND`, with nothing under
       // it): read in place, with no number and taking none from its siblings.
-      text: e.object.kind === TEXT_KIND && !hasKids(e.id),
+      // A reference is read in place as well, under its label.
+      text: (e.object.kind === TEXT_KIND || isReference(e.object)) && !hasKids(e.id),
+      reference: isReference(e.object) && !hasKids(e.id),
       parent,
       children: [],
     };
+    if (entry.reference) entry.label = referenceLabelOf(model, e.id);
     if (entry.text) {
       if (!first) byId.set(e.id, entry);
     } else if (first) {
@@ -1524,6 +1793,7 @@ export function kindWord(kind) {
  */
 export function referenceOf(outline, id) {
   const entry = outline.byId.get(id);
+  if (entry && entry.reference) return { word: '', number: entry.label, cite: true };
   if (!entry || entry.text) return null;
   return { word: kindWord(entry.object.kind), number: entry.number };
 }
@@ -1752,7 +2022,7 @@ function searchIndex(model) {
       id: o.id.toLowerCase(),
       title: titleOf(o).toLowerCase(),
       lean: leanNamesOf(o).map((n) => n.toLowerCase()),
-      body: (o.body || '').toLowerCase(),
+      body: displayBody(o).toLowerCase(),
     }));
   }
   return model._search;
@@ -1890,7 +2160,7 @@ export function isBareSugar(model, o) {
 function fullTextIndex(model) {
   if (!model._fullText) {
     model._fullText = model.objects.map((o) => {
-      const fields = [searchWords(o.id), searchWords(o.attrs.title), ...leanNamesOf(o).map(searchWords), searchWords(o.body)]
+      const fields = [searchWords(o.id), searchWords(o.attrs.title), ...leanNamesOf(o).map(searchWords), searchWords(displayBody(o))]
         .filter((f) => f.length);
       return { object: o, fields, words: new Set(fields.flat()) };
     });

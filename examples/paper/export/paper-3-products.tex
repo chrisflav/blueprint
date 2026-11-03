@@ -60,6 +60,9 @@
 \newcommand{\bpout}[1]{#1\textsuperscript{\hyperlink{bp-outside}{\ensuremath{\ast}}}}
 \newcommand{\bpbroken}[1]{\textcolor{red!70!black}{[#1?]}}
 \newcommand{\bpslug}[1]{\texttt{#1}}
+% A bibliography entry: label, anchor, entry; the label hangs in the margin.
+\newcommand{\bpbibitem}[3]{\par\setbox0\hbox{[#1]\enspace}\ifdim\wd0<5em\setbox0\hbox to 5em{[#1]\hfil}\fi
+  \hangindent=\wd0 \hangafter=1 \noindent\box0\phantomsection\label{#2}#3\par\smallskip}
 % A character the export knows no way to set.
 \newcommand{\bpglyph}[1]{\fbox{\scriptsize #1}}
 % Images, at their own size unless they are wider than the line.
@@ -109,7 +112,7 @@
 {\large Section 3: Products\par}
 \vspace{0.5em}
 {\small\color{bpmuted}All levels \textperiodcentered{} read along the \texttt{refines} order\par}
-{\small\color{bpmuted}Snapshot 4c63101a5eb6\par}
+{\small\color{bpmuted}Snapshot 1a3d5e6db3cc\par}
 \end{center}
 \bigskip
 

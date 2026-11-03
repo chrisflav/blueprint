@@ -55,7 +55,7 @@ export function render(root, app) {
   // ---------------------------------------------------------------- prose
   const prose = el('div.body-prose');
   page.appendChild(el('div.panel', prose));
-  app.renderBody(prose, o.body, app.knownIds());
+  app.renderBody(prose, M.displayBody(o), app.knownIds());
 
   // ---------------------------------------------------- its proofs, if any
   // A statement's proofs follow it, as in the document, each leading to its

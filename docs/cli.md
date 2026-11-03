@@ -704,6 +704,7 @@ reach the snapshot as `project.logo` and `project.logoInk`.
 | `corollary` | — | countable |
 | `concept` | — | |
 | `remark` | — | |
+| `reference` | — | a bibliography entry, cited as `[id]`: set as a paper sets its references, unnumbered, never drawn in the graph (`graph = "never"`); see *References* below |
 | `uses` | `src` 1, `tgt` 1 | sugar |
 | `refines` | `src` 1, `tgt` 1 | acyclic, collapse, sugar |
 | `instance_of` | `src` 1, `tgt` 1 | acyclic, collapse, sugar |
@@ -798,6 +799,62 @@ directory when there is one, so sections nest.
 reported as `bad-link` when it does not resolve.  It creates no edge.
 `[text](url)`, `![x]` and `\[` are left alone.
 
+**References.**  Each entry of the bibliography is an object of kind
+`reference`, with the fields BibTeX gives it: `author` and `editor` (a list
+of names, or one name; "A and B" is two, "and others" ends a list),
+`title`, `year`, `month`, `journal`, `booktitle`, `series`, `volume`,
+`number`, `pages`, `chapter`, `edition`, `publisher`, `organization`,
+`address`, `institution`, `school`, `howpublished`, `note`, `url`, `doi`,
+`eprint`, and, kept but not shown, `archivePrefix`, `primaryClass`, `isbn`,
+`issn`, `key`, `keywords`, `abstract`, `language`.  `type` is the kind of
+publication (`article`, `book`, `incollection`, `inproceedings`,
+`phdthesis`, `mastersthesis`, `techreport`, `manual`, `misc`, …), otherwise
+read off the fields: a `journal` is an article, a `booktitle` a chapter of a
+collection, a `publisher` a book.  The fields are Markdown, so a title may
+carry maths.
+
+```markdown
++++
+kind    = "reference"
+author  = ["P. Deligne"]
+title   = "La conjecture de Weil. I"
+journal = "Publ. Math. IHÉS"
+volume  = "43"
+pages   = "273-307"
+year    = "1974"
+url     = "https://www.numdam.org/item/PMIHES_1974__43__273_0/"
++++
+```
+
+The document and the PDF set it as BibTeX's `alpha` style does: under its
+label in the margin, "[Del74]", then the authors, the title, the journal,
+volume and pages, the year, in that style's order and punctuation, the title
+linked to `url`.  The label follows `alpha`'s rule: the first three
+letters of a single author's family name, the initials of two to four
+("BBD"), three initials and "+" for more or for "and others", then the last
+two digits of the year, with a, b, c telling clashes apart (compared without
+regard to case, in the order of authors, year and title).  A lower-case
+"von" part adds its initials, and then the family name gives its initials
+too: "L. van Beethoven" is "vB", "A. van Dam and B. Cee" "vDC".  A name is
+"Given von Family" (a trailing "Jr." or "III" left out) or "von Family,
+Given", and `{…}` keeps words together ("{van Dam}, A." is "van").
+`label = "SGA4"` gives one of your own, which no other entry is then given.
+The entries of a section come after its other contents, sorted by label,
+unless they carry an `order`; a directory `references/` with a `_section.md`
+titled *References* is the usual home.  The object's prose,
+if any, follows the entry (a note, a link to a copy); an entry with no
+`title` is its prose alone.
+
+Prose cites an entry as `[id]`, which reads "[Del74]", several at once as
+`[del74, del80]`, "[Del74, Del80]", and with a place in the work as `[sga4,
+Exp. X, Cor. 4.3]`, "[SGA4, Exp. X, Cor. 4.3]": the leading ids that name
+references are what is cited, the rest is the locator.  Each label links to
+its entry, and on the website shows it on hover.  The locator is Markdown
+like the rest of the prose (maths, emphasis), but may not contain brackets.
+Brackets whose first part names no reference, `[m, n]`, stay text; so does
+a citation whose ids are mistyped (`[del74, del8O]` cites `del74` with the
+locator "del8O"), which no check reports.
+
 ## The examples
 
 ```
@@ -882,7 +939,7 @@ merge.  `Topology.coverChoice` is a custom axiom (`proved_with_axioms`),
   that directly follows a theorem-like environment is part of that object
   rather than an object of its own, since `DESIGN.md` §2 has no separate
   proof sort; `\cite{k}` becomes `[k]`, which the `bad-link` lint then
-  reports unless a bibliography object of that name exists; `\_`, `\#` and
+  reports unless a `reference` object of that name exists; `\_`, `\#` and
   `\$` keep their backslash outside code spans, because a bare `_` or `#` is
   Markdown syntax; and blank lines inside display maths are removed, because
   the Markdown renderer runs before KaTeX and would otherwise cut the

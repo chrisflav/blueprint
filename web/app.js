@@ -162,10 +162,13 @@ function setKatexMacros(project) {
 }
 
 const SKIP_TAGS = new Set(['CODE', 'PRE', 'A', 'SCRIPT', 'STYLE', 'TEXTAREA']);
-const SLUG_RE = new RegExp(model.SLUG_PATTERN, 'g');
+// A `[slug]` reference, or a citation with more than one part (`[a, b]`,
+// `[a, locator]`): group 1 is the slug, group 2 what a citation brackets.
+const LINK_PATTERN = model.SLUG_PATTERN + '|' + model.CITE_PATTERN;
+const SLUG_RE = new RegExp(LINK_PATTERN, 'g');
 // A separate non-global copy: `test` on a /g/ regex advances lastIndex and
 // would then miss matches in the next string it is asked about.
-const SLUG_TEST = new RegExp(model.SLUG_PATTERN);
+const SLUG_TEST = new RegExp(LINK_PATTERN);
 
 /**
  * Render a markdown body into `target`:
@@ -188,7 +191,10 @@ export function renderBody(target, text, known, refs, { untrusted = false } = {}
   if (window.marked && typeof window.marked.parse === 'function') {
     try {
       const { text, restore } = shieldMath(src);
-      const html = restore(window.marked.parse(text, { gfm: true, breaks: false }));
+      // Citations become links before marked runs, so that a locator with
+      // maths or emphasis ("[del74, Thm. $x$]") is still one citation.
+      const cited = untrusted ? text : markCitations(text, refs === undefined ? pageReferences : refs);
+      const html = restore(window.marked.parse(cited, { gfm: true, breaks: false }));
       if (untrusted) setSanitizedHtml(target, html);
       else target.innerHTML = html;
     } catch (e) {
@@ -495,6 +501,69 @@ export function renderMath(root) {
  * `refs` every link text is the slug.  Explicit link text, `[text](…)`, is
  * markdown's and never reaches this pass.
  */
+/**
+ * The citations with more than one part in Markdown source (`[a, b]`, `[a,
+ * locator]`; maths already shielded), as HTML marked passes through: the
+ * labels linked as `citationNode` links them, the locator left as Markdown
+ * for marked to read.  Code spans are left alone, and so are brackets whose
+ * first part names no reference.
+ */
+const CITE_SOURCE_RE = new RegExp(model.CITE_PATTERN, 'g');
+// What is code in Markdown, never a citation: fenced blocks (``` or ~~~),
+// lines indented as code (four spaces or a tab; a list's continuation lines
+// too, where a plain citation is still linked in the text afterwards), and
+// code spans of any number of backticks.
+const CODE_SOURCE_RE = /((?:^|\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n\2[^\n]*|$)|(?:^|\n)(?: {4}|\t)[^\n]*|(`+)[\s\S]*?\3)/g;
+function markCitations(text, refs) {
+  const m0 = app.model;
+  if (!m0) return text;
+  const out = [];
+  let last = 0;
+  const cite = (chunk) => chunk.replace(CITE_SOURCE_RE, (whole, inner, at, all) => {
+    // Not in a link's text, `[see [a, x]](url)`, nor inside an HTML tag.
+    if (all.startsWith('](', at + whole.length)) return whole;
+    if (all.lastIndexOf('<', at) > all.lastIndexOf('>', at)) return whole;
+    const c = model.parseCitation(m0, inner);
+    if (!c) return whole;
+    const links = c.items.map((id) => {
+      const ref = refs ? refs(id) : null;
+      const href = (ref && ref.href) || objectHref(id);
+      return `<a class="objlink ref cite-label" href="${escapeHtml(href)}" title="${escapeHtml(id)}" data-ref="${escapeHtml(id)}">` +
+        escapeHtml(model.referenceLabelOf(m0, id) || id) + '</a>';
+    });
+    return '<span class="cite">&#91;' + links.join(', ') + (c.locator ? ', ' + c.locator : '') + '&#93;</span>';
+  });
+  for (const m of text.matchAll(CODE_SOURCE_RE)) {
+    out.push(cite(text.slice(last, m.index)), m[0]);
+    last = m.index + m[0].length;
+  }
+  out.push(cite(text.slice(last)));
+  return out.join('');
+}
+
+/**
+ * A citation as a paper sets it: "[Del74]", "[Del74, Del80]", "[SGA4, Exp. X,
+ * Cor. 4.3]", each label a link to its entry in the bibliography (or to its
+ * page, when the document does not show it), with a preview on hover.
+ */
+function citationNode(ids, locator, refs) {
+  const span = el('span.cite');
+  span.appendChild(document.createTextNode('['));
+  ids.forEach((id, i) => {
+    if (i) span.appendChild(document.createTextNode(', '));
+    const ref = refs ? refs(id) : null;
+    span.appendChild(el('a', {
+      class: 'objlink ref cite-label',
+      href: (ref && ref.href) || objectHref(id),
+      title: id,
+      'data-ref': id,
+    }, (app.model && model.referenceLabelOf(app.model, id)) || id));
+  });
+  if (locator) span.appendChild(document.createTextNode(', ' + locator));
+  span.appendChild(document.createTextNode(']'));
+  return span;
+}
+
 export function linkifySlugs(root, known, refs) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -519,8 +588,25 @@ export function linkifySlugs(root, known, refs) {
     SLUG_RE.lastIndex = 0;
     let m;
     while ((m = SLUG_RE.exec(text)) !== null) {
-      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      if (m[2] !== undefined) {
+        // `[a, b]` or `[a, locator]`: a citation when `a` names a reference,
+        // and otherwise prose, left as it is.
+        const cite = app.model ? model.parseCitation(app.model, m[2]) : null;
+        if (!cite) continue;
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        frag.appendChild(citationNode(cite.items, cite.locator, refs));
+        last = m.index + m[0].length;
+        continue;
+      }
       const slug = m[1];
+      const target = app.model && app.model.byId.get(slug);
+      if (model.isReference(target)) {
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        frag.appendChild(citationNode([slug], '', refs));
+        last = m.index + m[0].length;
+        continue;
+      }
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
       const ok = !known || known.has(slug);
       const ref = ok && refs ? refs(slug) : null;
       // "Lemma [x]" and "Thm [x]" already have their word.

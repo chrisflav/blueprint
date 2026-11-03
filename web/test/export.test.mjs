@@ -145,6 +145,38 @@ await check('a body is the Markdown and maths the website shows, set as LaTeX', 
   ok(tex.includes('\\DeclareUnicodeCharacter{03B1}{\\ensuremath{\\alpha}}'), 'α is declared');
 });
 
+await check('references are a bibliography, and citations link to its entries', () => {
+  const m = M.buildModel(snapshot([
+    node('sec', 'section', 'Opening.', { title: 'S', order: 1 }),
+    node('thm', 'theorem', 'Classical [del74]; also [del74, sga4] and [sga4, Exp. X, Cor. 4.3]; not [m, n].', { order: 1 }),
+    edge('refines', 'thm', 'sec'),
+    node('refs', 'section', '', { title: 'References', order: 2 }),
+    node('del74', 'reference', '', { author: ['P. Deligne'], title: 'La conjecture de Weil. I', journal: 'Publ. Math. IHÉS', volume: '43', year: '1974', pages: '273-307' }),
+    node('sga4', 'reference', '', { label: 'SGA4', title: 'Th\u00e9orie des topos et cohomologie $\\ell$-adique', year: '1972', publisher: 'Springer', type: 'book' }),
+    edge('refines', 'del74', 'refs'), edge('refines', 'sga4', 'refs'),
+  ], { reference: { boundary: {}, graph: 'never' } }));
+  const tex = exportLatex(m, {}).tex;
+  ok(/\\bpbibitem\{Del74\}\{bp\d+\}\{P\. Deligne\. La conjecture de Weil\. I\. \\emph\{Publ\. Math\. IHÉS\}, 43:273–307, 1974\.\}/.test(tex), 'an entry in the alpha style, under its label');
+  ok(/\\bpbibitem\{SGA4\}\{bp\d+\}\{\\emph\{Th.orie des topos et cohomologie \\\(\\ell\\\)-adique\}\. Springer, 1972\.\}/.test(tex), 'an explicit label; maths in the title');
+  ok(tex.indexOf('\\bpbibitem{Del74}') < tex.indexOf('\\bpbibitem{SGA4}'), 'sorted by label');
+  ok(/Classical \[\\hyperref\[bp\d+\]\{Del74\}\]/.test(tex), '[id] is "[Del74]", linked');
+  ok(/also \[\\hyperref\[bp\d+\]\{Del74\}, \\hyperref\[bp\d+\]\{SGA4\}\]/.test(tex), 'several at once');
+  ok(/and \[\\hyperref\[bp\d+\]\{SGA4\}, Exp\. X, Cor\. 4\.3\]/.test(tex), 'with a locator');
+  ok(tex.includes('not [m, n].'), 'brackets that cite nothing stay text');
+  ok(!/\\begin\{(theorem|definition)\}[^]*Deligne/.test(tex.split('\\bpbibitem')[0]), 'no entry is a numbered statement');
+});
+
+await check('brackets that cite nothing keep their maths, emphasis and code; a locator too', () => {
+  const m = M.buildModel(snapshot([
+    node('sec', 'section', 'On [0, $\\epsilon$] and [a, *b*] and [x, `c`]; see [del74, Thm. $x^2$ and *Cor.* 4].', { title: 'S', order: 1 }),
+    node('del74', 'reference', '', { author: ['P. Deligne'], title: 'T', year: '1974' }),
+    edge('refines', 'del74', 'sec'),
+  ], { reference: { boundary: {}, graph: 'never' } }));
+  const tex = exportLatex(m, {}).tex;
+  ok(tex.includes('On [0, \\(\\epsilon\\)] and [a, \\emph{b}] and [x, \\texttt{c}]'), 'as they were');
+  ok(/see \[\\hyperref\[bp\d+\]\{Del74\}, Thm\. \\\(x\^2\\\) and \\emph\{Cor\.\} 4\]/.test(tex), 'a locator is Markdown');
+});
+
 // ---------------------------------------------------------------------------
 // 2. a section, and a smaller part, with nothing else
 // ---------------------------------------------------------------------------

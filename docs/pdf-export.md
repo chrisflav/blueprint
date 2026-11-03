@@ -61,6 +61,12 @@ Within the chosen part:
   here, with a note saying where the full document has it.  A pointer never
   leads out of the PDF.
 
+Bibliography entries (kind `reference`, `docs/cli.md`) are set as
+`thebibliography` sets them, the label hanging in the margin (`\bpbibitem`),
+and a citation, `[id]`, `[a, b]` or `[a, Exp. X]`, reads as on the website,
+"[Del74, Exp. X]", each label a link to its entry when the entry is in the
+export.
+
 References (`[slug]`) read as on the website ("Lemma 2.3", or just "2.3"
 after "Lemma"; `referenceLabel` in `model.js`):
 

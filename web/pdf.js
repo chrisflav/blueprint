@@ -320,6 +320,7 @@ function drawDialog() {
 
 function referenceText(outline, id) {
   const ref = M.referenceOf(outline, id);
+  if (ref && ref.cite) return `[${ref.number}]`;
   return ref ? `${ref.word} ${ref.number}` : id;
 }
 

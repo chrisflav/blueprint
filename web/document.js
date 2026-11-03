@@ -199,6 +199,16 @@ export function render(root, app) {
     // prose and nothing else, no heading, no number, not in the contents.
     if (entry.text) {
       if (entry.duplicate) return; // said once, under its first parent
+      // A bibliography entry: its label in the margin, "[Del74]", and the
+      // entry in the order and punctuation of BibTeX's `alpha` beside it.
+      if (entry.reference) {
+        const item = el('section', { class: 'doc-entry is-text is-reference kind-' + o.kind, id: 'doc-' + cssId(o.id) });
+        item.appendChild(el('span.bib-label', '[' + (entry.label || o.id) + ']'));
+        const prose = item.appendChild(el('div.prose.body-prose.bib-text'));
+        defer(prose, () => app.renderBody(prose, M.referenceMarkdown(o), known, refs));
+        flow.appendChild(item);
+        return;
+      }
       const text = el('section', { class: 'doc-entry is-text kind-' + o.kind, id: 'doc-' + cssId(o.id) });
       const prose = text.appendChild(el('div.prose.body-prose'));
       defer(prose, () => app.renderBody(prose, o.body, known, refs));
