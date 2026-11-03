@@ -1787,6 +1787,8 @@ function drawNode(app, box, meta, st, view) {
  * One picture as an `<svg>` whose viewBox is the drawing, and that box as
  * `{x, y, w, h}`.  Layouts are remembered as the graph's are.
  */
+let sketchCount = 0; // the pictures drawn so far, for their markers' ids
+
 export async function sketch(app, layer) {
   const { svgEl } = app;
   const types = { _types: new Map() };
@@ -1817,10 +1819,14 @@ export async function sketch(app, layer) {
     viewBox: `${box.x - pad} ${box.y - pad} ${box.w + 2 * pad} ${box.h + 2 * pad}`,
     width: box.w + 2 * pad, height: box.h + 2 * pad,
   });
-  // Arrowheads of its own: an id shared with the graph's would resolve to
-  // the graph's, which the intro keeps hidden.
+  // Arrowheads of its own, the graph's "declared + derived" head: an id
+  // shared with the graph's, or with another picture's, would resolve to the
+  // first of them in the page, which the intro may keep hidden, and a marker
+  // is drawn as visible as the place it is defined in.
+  sketchCount += 1;
+  const headId = 'bp-sketch-arrow-' + sketchCount;
   const head = svgEl('marker', {
-    id: 'bp-sketch-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5,
+    id: headId, viewBox: '0 0 10 10', refX: 9, refY: 5,
     markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse',
   }, svgEl('path', { d: 'M 0 0.8 L 10 5 L 0 9.2 z', class: 'arrowhead' }));
   svg.appendChild(svgEl('defs', head));
@@ -1834,7 +1840,7 @@ export async function sketch(app, layer) {
     if (!a || !b) continue;
     const pts = pathPoints(e, a, b, { x: 0, y: 0 });
     gEdges.appendChild(svgEl('g', { class: 'gedge kind-uses' },
-      svgEl('path', { d: pathD(pts), 'marker-end': 'url(#bp-sketch-arrow)' })));
+      svgEl('path', { d: pathD(pts), 'marker-end': `url(#${headId})` })));
   }
   for (const n of nodes) {
     const b = abs.get(n.id);
