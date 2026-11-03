@@ -556,8 +556,12 @@ shapes and classes. The zoom starts only once the graph is drawn (the
 `intro.json`, which `index.html` asks for beside the snapshot, so the title
 is up at once and a large snapshot is waited for under it, with a bar under
 the title once the wait is long; without `intro.json` it starts once the
-snapshot is in. Until `intro.json` has answered, `index.html` keeps the page
-blank (`intro-pending`), and `showIntro` lifts that only once the zoom has
+snapshot is in. On the landing page `index.html` asks for the snapshot only
+once the intro has started, or is known to be none (`blueprintSnapshotGo`),
+so that on a narrow line its bytes do not come before the intro's few small
+files. Until `intro.json` has answered, `index.html` keeps the page
+blank (`intro-pending`), and with an intro it stays blank, rather than
+showing "Loading blueprint…", until the intro starts, and `showIntro` lifts that only once the zoom has
 hidden the top bar, which would otherwise be drawn for a frame. With `prefers-reduced-motion` the layers only fade.
 
 ### Cross references

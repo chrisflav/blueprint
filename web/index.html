@@ -8,12 +8,24 @@
 <!-- The snapshot is the slowest thing the page waits for, so it is asked for
      before anything else: app.js picks this request up instead of making its
      own (`dataUrlFromQuery` and `loadInto` there).  Without it the request
-     would wait for every script below to arrive and run. -->
+     would wait for every script below to arrive and run.  On the landing
+     page, where the intro may play, it is asked for only once the intro has
+     started, or is known to be none (`blueprintSnapshotGo`): a large snapshot
+     on a narrow line (a tunnel, a slow link) would otherwise come before the
+     few small files the intro needs, which then wait behind it for seconds. -->
 <script>
   try {
     (function () {
-      var url = new URLSearchParams(location.search).get('data') || './blueprint.json';
-      var response = fetch(url, { cache: 'no-cache' });
+      var q = new URLSearchParams(location.search);
+      var url = q.get('data') || './blueprint.json';
+      var h = location.hash;
+      var landing = q.get('intro') !== '0' && (h === '' || h === '#' || h === '#/' || h === '#/graph');
+      var go;
+      var asked = new Promise(function (resolve) { go = resolve; });
+      window.blueprintSnapshotGo = function () { go(); };
+      if (!landing) go();
+      setTimeout(go, 8000); // whatever happens to the intro
+      var response = asked.then(function () { return fetch(url, { cache: 'no-cache' }); });
       response.catch(function () { /* app.js reports it */ });
       window.blueprintSnapshot = { url: url, response: response };
     })();
@@ -62,8 +74,12 @@
         .then(function (r) { return r.ok ? r.json() : null; })
         .catch(function () { return null; });
       var shown = function () { root.classList.remove('intro-pending'); };
-      intro.then(function (j) { if (!j || !j.intro) shown(); });
-      setTimeout(shown, 4000); // whatever happens to the scripts below
+      var go = function () { if (window.blueprintSnapshotGo) window.blueprintSnapshotGo(); };
+      // No intro: the page at once.  An intro: nothing but the page's colour
+      // until it starts (showIntro), however long its files take to come,
+      // rather than "Loading blueprint…" for a moment before it.
+      intro.then(function (j) { if (!j || !j.intro) { shown(); go(); } });
+      setTimeout(shown, 20000); // whatever happens to the scripts below
       window.blueprintIntro = intro;
     })();
   } catch (e) { /* the intro plays once the snapshot is in */ }

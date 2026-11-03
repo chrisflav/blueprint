@@ -1344,11 +1344,15 @@ async function boot() {
   let intro = null;
   const early = earlyIntro().then(async (project) => {
     if (!project) return;
-    await proseReady();
+    // Markdown wants marked; a title in HTML, an animated SVG, plays without.
+    if (!/^\s*</.test(project.intro.body)) await proseReady();
     if (!app.model && wantsIntro(project, parseHash(), location.search)) {
       intro = showIntro(app, { project });
     }
   });
+  // The snapshot is asked for once the intro has started, or is known to be
+  // none (index.html, `blueprintSnapshotGo`).
+  early.finally(() => { if (window.blueprintSnapshotGo) window.blueprintSnapshotGo(); });
   // Reading the snapshot waits for a moving title to have played (`held` in
   // intro.js); downloading it does not.
   const titlePlayed = early.then(() => (intro && intro.held ? intro.held() : null)).catch(() => null);
