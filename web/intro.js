@@ -40,6 +40,12 @@
 // the top bar's logo, which is not there before it lands, while the top bar's
 // title fades in with the rest of the bar.
 //
+// A title that moves also holds the page's heavy work back until it has
+// played (`held`): reading a large snapshot and drawing the graph keep the
+// page busy for a second or more, and the title would stop in mid-stroke
+// meanwhile.  Only the download goes on beside it.  So the title plays
+// through, and then stays, at its end, until the graph is drawn.
+//
 // The title stays until the snapshot is in and the graph
 // is drawn, so a large snapshot is waited for here rather than on a blank
 // page: `blueprint site` writes the intro to intro.json as well, which
@@ -252,7 +258,7 @@ export function showIntro(app, { host = document.body, project = app.model && ap
 
   host.appendChild(layer);
   try { layer.focus({ preventScroll: true }); } catch (e) { /* an old browser */ }
-  return { layer, leave, loaded() {} };
+  return { layer, leave, loaded() {}, held: () => Promise.resolve() };
 }
 
 /**
@@ -419,6 +425,11 @@ function playZoom(app, intro, { host }) {
       for (const f of films) try { f.unpauseAnimations(); } catch (e) { /* as it is */ }
     }, titleIn);
   }
+  // What the page may do only once a moving title has played (`held`).
+  let heldDone;
+  const held = new Promise((resolve) => { heldDone = resolve; });
+  if (films.length && !reduced) later(heldDone, holdUntil - performance.now());
+  else heldDone();
 
   import('./graph.js')
     .then((g) => Promise.all(intro.zoom.map((l) => g.sketch(app, l))))
@@ -548,6 +559,7 @@ function playZoom(app, intro, { host }) {
   function end() {
     left = true;
     for (const t of timers) clearTimeout(t);
+    heldDone();
     clearTimeout(giveUp);
     document.removeEventListener('graphdrawn', onDrawn);
     window.removeEventListener('keydown', onKey, true);
@@ -579,5 +591,6 @@ function playZoom(app, intro, { host }) {
     loaded() {
       if (!left && !started && !giveUp) giveUp = setTimeout(leave, WAIT_MS);
     },
+    held: () => held,
   };
 }
