@@ -57,7 +57,10 @@ def defaultSchema : Schema where
   defaultCollapse := some "refines"
   kinds :=
     let ks : Array KindSpec := #[
+      -- the levels of headings: a chapter, a section, a subsection
+      mkNodeKind "chapter" false "#778899",
       mkNodeKind "section" false "#8899aa",
+      mkNodeKind "subsection" false "#99aabb",
       -- a section the graph can hide, contents and all
       mkNodeKind "appendix" false "#99a0aa" (graph := "optional"),
       -- read in the document, never drawn in the graph
@@ -69,6 +72,8 @@ def defaultSchema : Schema where
       mkNodeKind "corollary" true "#68b",
       mkNodeKind "concept" false "#aa7",
       mkNodeKind "remark" false "#999",
+      -- an open question, asked in passing as a remark is made
+      mkNodeKind "question" false "#a98",
       -- `src` uses `tgt`, drawn from the dependency to its user
       mkBinaryKind "uses" (color := some "#666") (arrow := "reverse"),
       mkBinaryKind "refines" (constraints := #["acyclic"]) (collapse := true)

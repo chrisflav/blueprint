@@ -184,15 +184,15 @@ export function progressOf(model, kind, id) {
 /** The statement words a node's type can be, with their short marks. */
 const TYPE_MARK = {
   definition: 'def', theorem: 'thm', proposition: 'prop', lemma: 'lem',
-  corollary: 'cor', remark: 'rem',
+  corollary: 'cor', remark: 'rem', question: 'q?', chapter: 'chap',
 };
 
 /**
  * Kinds the document sets as headings rather than as numbered statements, and
- * the graph draws as sections: a section, and an appendix (a section the graph
- * can hide).
+ * the graph draws as sections: a chapter, a section, a subsection, and an
+ * appendix (a section the graph can hide).
  */
-const SECTION_KINDS = new Set(['section', 'appendix']);
+const SECTION_KINDS = new Set(['chapter', 'section', 'subsection', 'appendix']);
 
 export function isSectionKind(kind) {
   return SECTION_KINDS.has(kind);
@@ -206,25 +206,18 @@ export function isSectionKind(kind) {
  */
 export const TEXT_KIND = 'hidden';
 
-/** The shape family of each statement word. */
-const TYPE_SHAPE = {
-  definition: 'definition', theorem: 'statement', proposition: 'statement',
-  lemma: 'statement', corollary: 'statement', remark: 'remark',
-};
-
 /**
- * What a node is, for drawing: {word, mark, shape}.  The word is its kind; a
+ * What a node is, for drawing: {word, mark}.  The word is its kind; a
  * sketch of a statement is an object of that statement's kind (`blueprint
- * migrate` turns the sections that used to stand for one into it).  `shape`
- * is `definition`, `statement`, `remark`, `section`, or `other`.  Memoised on
- * the model.
+ * migrate` turns the sections that used to stand for one into it).  The mark
+ * is the short word the graph sets in the corner of every node, which are all
+ * drawn alike.  Memoised on the model.
  */
 export function nodeType(model, o) {
   let t = model._types.get(o.id);
   if (t) return t;
   const word = o.kind;
-  const shape = TYPE_SHAPE[word] || (isSectionKind(word) ? 'section' : 'other');
-  t = { word, mark: TYPE_MARK[word] || word.slice(0, 3), shape };
+  t = { word, mark: TYPE_MARK[word] || word.slice(0, 3) };
   model._types.set(o.id, t);
   return t;
 }

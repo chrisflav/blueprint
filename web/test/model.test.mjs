@@ -1533,10 +1533,19 @@ check('hiding the appendix takes its contents and their relations along', () => 
     'only the main section\'s theorem is left');
   eq(M.quotient(M.makeView(gm, 'refines', [])).items.length, 0, 'nothing is drawn between what is left');
   // Shown, the appendix is a section like any other.
-  eq(M.nodeType(m, m.byId.get('app')).shape, 'section', 'shaped as a section');
+  ok(M.isSectionKind(m.byId.get('app').kind), 'a heading, as a section is');
   eq(M.referenceOf(M.documentOutline(m, 'refines'), 'app').word, 'Appendix', 'referred to as an appendix');
   // A snapshot with nothing to leave out is drawn from its own model.
   eq(M.graphModel(model, { hideOptional: true }), model, 'the sample has no appendix');
+});
+
+check('a chapter and a subsection are headings, as a section is; a question is not', () => {
+  const types = { _types: new Map() };
+  for (const kind of ['chapter', 'section', 'subsection']) ok(M.isSectionKind(kind), `${kind} is set as a heading`);
+  ok(!M.isSectionKind('question'), 'a question is not a heading');
+  eq(M.nodeType(types, { id: 'c', kind: 'chapter' }).mark, 'chap', 'a chapter\'s mark');
+  eq(M.nodeType(types, { id: 'q', kind: 'question' }).mark, 'q?', 'a question\'s mark');
+  eq(M.kindWord('question'), 'Question', 'referred to as a question');
 });
 
 // ---------------------------------------------------------------------------

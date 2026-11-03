@@ -20,6 +20,15 @@
     "collapse": false,
     "boundary": {},
     "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+   "subsection":
+   {"sugar": false,
+    "kinds": {},
+    "countable": false,
+    "constraints": [],
+    "color": "#99aabb",
+    "collapse": false,
+    "boundary": {},
+    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
    "section":
    {"sugar": false,
     "kinds": {},
@@ -47,6 +56,15 @@
     "collapse": true,
     "boundary": {"tgt": {"min": 1, "max": 1}, "src": {"min": 1, "max": 1}},
     "attrs": ["title", "review", "tags", "order", "aliases", "owner"]},
+   "question":
+   {"sugar": false,
+    "kinds": {},
+    "countable": false,
+    "constraints": [],
+    "color": "#a98",
+    "collapse": false,
+    "boundary": {},
+    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
    "proposition":
    {"sugar": false,
     "kinds": {},
@@ -165,6 +183,15 @@
     "collapse": false,
     "boundary": {"edges": {"min": 2, "max": null}},
     "attrs": ["title", "review", "tags", "order", "aliases", "owner"]},
+   "chapter":
+   {"sugar": false,
+    "kinds": {},
+    "countable": false,
+    "constraints": [],
+    "color": "#778899",
+    "collapse": false,
+    "boundary": {},
+    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
    "appendix":
    {"sugar": false,
     "kinds": {},

@@ -1058,7 +1058,7 @@ const sideSections = () => [...root.querySelectorAll('aside.side section')].map(
   return h ? h.textContent : s.textContent;
 });
 
-await check('the side panel reads prose first and folds the long listings', async () => {
+await check('the side panel reads prose first and folds it and the long listings', async () => {
   // sec-foundations, collapsed, has prose, incident objects and relations
   // hidden inside it.
   await go('#/graph?sel=sec-foundations');
@@ -1070,31 +1070,35 @@ await check('the side panel reads prose first and folds the long listings', asyn
   const folds = root.querySelectorAll('aside.side section.fold');
   eq(folds.map((f) => f.getAttribute('data-fold')).join(' '), 'prose incident hidden', 'the prose and the two listings are disclosures');
   const [prose, ...listings] = folds.map((f) => f.querySelector('details'));
-  ok(prose.hasAttribute('open'), 'the prose starts shut');
+  ok(!prose.hasAttribute('open'), 'the prose starts open');
   ok(prose.querySelector('.excerpt.body-prose'), 'the prose is inside its disclosure');
   for (const d of listings) ok(!d.hasAttribute('open'), `${d.querySelector('summary').textContent} starts open`);
   eq(listings[0].querySelectorAll('ul.objlist li').length, 6, 'the incident rows are there, only shut');
 });
 
-await check('the side panel heads with the title and the link into the document, and no id', async () => {
+await check('the side panel heads with the title, a link into the document, and the kind, and no id', async () => {
   await go('#/graph?sel=sec-foundations');
   const head = root.querySelector('aside.side .side-head');
   ok(head, 'no heading row');
   eq(head.getAttribute('data-id'), 'sec-foundations', 'the row names the object it is for');
-  eq(head.querySelector('h2').textContent, modelMod.titleOf(app.model.byId.get('sec-foundations')), 'the title');
-  const a = head.querySelector('a.side-open');
-  ok(a, 'no document link beside the title');
-  eq(a.textContent, 'Open in document \u2192', 'its words');
+  const o = app.model.byId.get('sec-foundations');
+  const a = head.querySelector('h2 a.side-title');
+  ok(a, 'the title is not a link');
+  eq(a.textContent, modelMod.titleOf(o), 'the title');
   eq(a.getAttribute('href'), '#/document?collapse=refines&focus=sec-foundations',
     'a chapter: the top level of the document, scrolled to it');
-  eq(root.querySelectorAll('aside.side a').filter((x) => /Open in document/.test(x.textContent)).length, 1,
-    'the link is there more than once');
+  eq(root.querySelectorAll('aside.side a').filter((x) => /Open in document/.test(x.textContent)).length, 0,
+    'the old "Open in document" link is still there');
+  const kind = head.querySelector('.badge.kind');
+  ok(kind, 'no kind beside the title');
+  eq(kind.textContent, app.kindBadge(o.kind).textContent, 'the kind');
+  eq(root.querySelectorAll('aside.side .meta .badge.kind').length, 0, 'the kind is written twice');
   await go('#/graph?sel=sec-main-induction&expand=sec-main');
-  eq(root.querySelector('aside.side .side-head a.side-open').getAttribute('href'),
+  eq(root.querySelector('aside.side .side-head a.side-title').getAttribute('href'),
     '#/document/sec-main?collapse=refines&focus=sec-main-induction', 'a section: its chapter\'s page, with its siblings');
   await go('#/graph?sel=sec-foundations');
   eq(root.querySelector('aside.side .obj-id'), null, 'the id is still shown under the title');
-  const top = [head, root.querySelector('aside.side .meta')].map((n) => n.textContent).join(' ');
+  const top = [head, root.querySelector('aside.side .meta')].filter(Boolean).map((n) => n.textContent).join(' ');
   ok(!top.includes('sec-foundations'), `the id is written at the top of the panel: ${JSON.stringify(top)}`);
 });
 
@@ -1110,14 +1114,15 @@ await check('an opened listing stays open while the panel is rebuilt', async () 
   fire(incident(), 'toggle', { target: { open: false } });
   await go('#/graph?sel=sec-foundations');
   ok(!incident().hasAttribute('open'), 'the incident listing stayed open after it was shut');
-  // The prose, which starts open, stays folded once the reader folds it.
+  // The prose, which starts folded, stays open once the reader opens it.
   const prose = () => root.querySelector('aside.side section.fold[data-fold="prose"] details');
-  fire(prose(), 'toggle', { target: { open: false } });
-  await go('#/graph?sel=sec-main');
-  ok(!prose().hasAttribute('open'), 'the folded prose opened again on the next selection');
+  ok(!prose().hasAttribute('open'), 'the prose starts open');
   fire(prose(), 'toggle', { target: { open: true } });
+  await go('#/graph?sel=sec-main');
+  ok(prose().hasAttribute('open'), 'the opened prose folded again on the next selection');
+  fire(prose(), 'toggle', { target: { open: false } });
   await go('#/graph?sel=sec-foundations');
-  ok(prose().hasAttribute('open'), 'the prose stayed folded after it was opened');
+  ok(!prose().hasAttribute('open'), 'the prose stayed open after it was folded');
 });
 
 // ---------------------------------------------------------------------------

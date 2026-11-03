@@ -234,14 +234,8 @@ function legend(app, progress) {
   });
   const swatch = (s, text) =>
     el('div.row', el('span', { class: 'sw status-' + s }), el('span', text));
-  const shape = (t, text) => el('div.row', el('span', { class: 'shp ' + t }), el('span', text));
   return el('div.legend',
-    el('b', 'shapes'),
-    shape('definition', 'definition'),
-    shape('statement', 'theorem, proposition, lemma'),
-    shape('remark', 'remark'),
-    shape('section', 'section'),
-    el('b', { style: { marginTop: '.3em' } }, 'lines'),
+    el('b', 'lines'),
     el('div.row', sample(line(), head(false)), 'declared + derived'),
     el('div.row', sample(line('hollow'), head(true)), 'declared, unwitnessed'),
     // Only arcs into the contents of collapsed objects are drawn so (`arcs of
@@ -747,6 +741,7 @@ function sizeLeaf(node, expandable, section) {
   node.width = Math.max(section ? 120 : 104, width + pad);
   node.height = (section || (prog && prog.total > 1) ? NODE_H2 : NODE_H) + height - LINE_H;
 }
+
 
 /**
  * Turn the quotient into an ELK graph.
@@ -1637,37 +1632,10 @@ function cssEscape(s) {
 
 // --- node shapes -----------------------------------------------------------
 
-// Colour says the status, so the type is told by shape: a definition is a
-// sharp box, a theorem, proposition, lemma or corollary a stadium, a remark a
-// note with a folded corner, and a section a double frame; see `M.nodeType`.
-const FOLD = 9;          // the folded corner of a remark
-const FRAME_GAP = 3;     // the gap between a section's two frames
-const STADIUM_R = 18;    // a statement's end radius: a full half-circle on a one-line
-                         // leaf, no deeper than LEAF_PAD into a taller one's title
-
-function nodeShape(svgEl, shape, w, h, compound) {
-  if (shape === 'remark') {
-    const f = Math.min(FOLD, w / 2, h / 2);
-    return [
-      svgEl('path', { class: 'shape', d: `M0,0 H${w - f} L${w},${f} V${h} H0 Z` }),
-      svgEl('path', { class: 'fold', d: `M${w - f},0 V${f} H${w}` }),
-    ];
-  }
-  if (shape === 'section') {
-    return [
-      svgEl('rect', { class: 'shape', x: 0, y: 0, width: w, height: h, rx: 5, ry: 5 }),
-      svgEl('rect', {
-        class: 'frame2', x: FRAME_GAP, y: FRAME_GAP,
-        width: Math.max(0, w - 2 * FRAME_GAP), height: Math.max(0, h - 2 * FRAME_GAP), rx: 3, ry: 3,
-      }),
-    ];
-  }
-  // A stadium's ends would swallow a container's title, so an open
-  // (compound) statement only rounds its corners well.
-  const rx = shape === 'definition' ? 1.5
-    : shape === 'statement' ? (compound ? 16 : Math.min(h / 2, STADIUM_R))
-      : 8;
-  return [svgEl('rect', { class: 'shape', x: 0, y: 0, width: w, height: h, rx, ry: rx })];
+// Every object is the same sharp box, whatever its kind: colour says the
+// status, and the mark in the top right corner the kind (`M.nodeType`).
+function nodeShape(svgEl, w, h) {
+  return [svgEl('rect', { class: 'shape', x: 0, y: 0, width: w, height: h, rx: 1.5, ry: 1.5 })];
 }
 
 function drawNode(app, box, meta, st, view) {
@@ -1678,13 +1646,13 @@ function drawNode(app, box, meta, st, view) {
   const type = M.nodeType(m, o);
   const g = svgEl('g', {
     class: 'gnode' + (meta.compound ? ' compound' : '') + ' kind-' + o.kind +
-      ' type-' + type.shape + ' status-' + (status || 'none'),
+      ' status-' + (status || 'none'),
     transform: `translate(${box.x},${box.y})`,
     'data-nid': box.node.id,
     'data-id': o.id,
     tabindex: 0,
   });
-  for (const s of nodeShape(svgEl, type.shape, box.w, box.h, meta.compound)) g.appendChild(s);
+  for (const s of nodeShape(svgEl, box.w, box.h)) g.appendChild(s);
 
   // The whole title, on the lines `buildElk` sized the node for: a section's
   // at the top left after the expander, a leaf's centred above its progress bar.
@@ -1716,11 +1684,7 @@ function drawNode(app, box, meta, st, view) {
     }, ...lines.map((line, i) => svgEl('tspan', { x: tx, y: ty + i * LINE_H }, line))));
   }
 
-  g.appendChild(svgEl('text', {
-    // Clear of a remark's folded corner and a statement's round end.
-    class: 'kindmark', y: 12, 'text-anchor': 'end',
-    x: box.w - (type.shape === 'remark' ? 6 + FOLD : type.shape === 'statement' && !meta.compound ? 11 : 6),
-  }, type.mark));
+  g.appendChild(svgEl('text', { class: 'kindmark', y: 12, 'text-anchor': 'end', x: box.w - 6 }, type.mark));
 
   const prog = meta.prog;
   if (prog && prog.total > 1 && !meta.compound) {
@@ -1776,7 +1740,7 @@ export async function sketch(app, layer) {
   const types = { _types: new Map() };
   const nodes = (layer.nodes || []).map((n) => {
     const type = M.nodeType(types, { id: n.id, kind: n.kind || 'section' });
-    const expandable = type.shape === 'section';
+    const expandable = M.isSectionKind(type.word);
     const node = { id: n.id, bp: { wrap: titleWrap(n.title, false), prog: null } };
     sizeLeaf(node, expandable, false);
     return { ...n, type, expandable, node };
@@ -1832,19 +1796,16 @@ function sketchNode(app, box, n) {
   const { svgEl } = app;
   const { type, expandable } = n;
   const g = svgEl('g', {
-    class: 'gnode kind-' + (n.kind || 'section') + ' type-' + type.shape + ' status-none',
+    class: 'gnode kind-' + (n.kind || 'section') + ' status-none',
     transform: `translate(${box.x},${box.y})`,
   });
-  for (const s of nodeShape(svgEl, type.shape, box.w, box.h, false)) g.appendChild(s);
+  for (const s of nodeShape(svgEl, box.w, box.h)) g.appendChild(s);
   const wrap = n.node.bp.wrap;
   const tx = box.w / 2 + (expandable ? 5 : 0);
   const ty = box.h / 2 - wrap.height / 2 + LINE_H / 2 + 4;
   g.appendChild(svgEl('text', { class: 'label', 'text-anchor': 'middle' },
     ...wrap.lines.map((line, i) => svgEl('tspan', { x: tx, y: ty + i * LINE_H }, line))));
-  g.appendChild(svgEl('text', {
-    class: 'kindmark', y: 12, 'text-anchor': 'end',
-    x: box.w - (type.shape === 'remark' ? 6 + FOLD : type.shape === 'statement' ? 11 : 6),
-  }, type.mark));
+  g.appendChild(svgEl('text', { class: 'kindmark', y: 12, 'text-anchor': 'end', x: box.w - 6 }, type.mark));
   if (expandable) g.appendChild(svgEl('text', { class: 'expander', x: 8, y: box.h / 2 + 4 }, '+'));
   return g;
 }
@@ -2489,18 +2450,18 @@ function renderSide(app, st, view, quot) {
       onclick: () => select(app, null),
     }, '\u2715')));
 
-  // The title, and beside it the way into the document: the page with the
-  // object's level, scrolled to it, as every link to it there leads.  What the
-  // document leaves out (a plain sugar edge, say) has its object page instead.
+  // The title is the way into the document: the page with the object's level,
+  // scrolled to it, as every link to it there leads.  What the document leaves
+  // out (a plain sugar edge, say) has its object page instead.  The kind sits
+  // beside it.
   const status = M.badgeStatusOf(m, id);
-  const heading = el('h2', M.titleOf(o));
   const inDoc = app.documentLevelHref(M.documentOutline(app.model, st.collapse), st.collapse, id);
-  side.appendChild(el('div.side-head', { 'data-id': id },
-    heading,
-    inDoc
-      ? el('a.side-open', { href: inDoc }, 'Open in document \u2192')
-      : el('a.side-open', { href: app.objectHref(id) }, 'Open object page \u2192')));
-  side.appendChild(el('div.meta', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status)));
+  const heading = el('h2', el('a.side-title', {
+    href: inDoc || app.objectHref(id),
+    title: inDoc ? 'open in the document' : 'open the object page',
+  }, M.titleOf(o)));
+  side.appendChild(el('div.side-head', { 'data-id': id }, heading, app.kindBadge(o.kind)));
+  if (status !== null) side.appendChild(el('div.meta', app.statusBadge(status)));
 
   const prog = st.progress ? M.progressMixOf(app.model, st.collapse, id) : null;
   if (prog) {
@@ -2514,9 +2475,9 @@ function renderSide(app, st, view, quot) {
         ' (', String(M.childrenOf(view.order, id).length), ' children)')));
   }
 
-  // What the object says comes first, open, though the reader may fold it
-  // away; only then its neighbourhood, which on a real project easily runs to
-  // dozens of rows.
+  // What the object says comes first, folded until the reader opens it; only
+  // then its neighbourhood, which on a real project easily runs to dozens of
+  // rows.
   if (o.body && o.body.trim()) {
     const box = el('div.excerpt.body-prose');
     side.appendChild(fold(el, 'prose', 'Prose', box));
@@ -2554,17 +2515,15 @@ function renderSide(app, st, view, quot) {
   for (const list of side.querySelectorAll('ul.objlist')) app.renderMath(list);
 }
 
-// A section behind a disclosure: the long listings shut until the reader opens
-// them, the count in the summary saying what is there, and the prose open until
-// the reader folds it (`FOLD_STARTS_OPEN`). The panel is rebuilt on every route
-// change (a checkbox, an expand, the next selection), so whether it is open is
-// kept in `ui.folded` under `key` rather than snapping back each time.
-const FOLD_STARTS_OPEN = new Set(['prose']);
-
+// A section behind a disclosure: the prose and the long listings shut until the
+// reader opens them, a listing's count in the summary saying what is there. The
+// panel is rebuilt on every route change (a checkbox, an expand, the next
+// selection), so whether it is open is kept in `ui.folded` under `key` rather
+// than snapping back each time.
 function fold(el, key, title, ...children) {
   return el('section.fold', { 'data-fold': key },
     el('details', {
-      open: ui.folded.has(key) ? ui.folded.get(key) : FOLD_STARTS_OPEN.has(key),
+      open: ui.folded.get(key) || false,
       ontoggle: (ev) => { ui.folded.set(key, ev.target.open); },
     }, el('summary', title), ...children));
 }
