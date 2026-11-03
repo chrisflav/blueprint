@@ -1072,7 +1072,7 @@ export function quotient(view, options = {}) {
         // `elaborable` is true when at least one end still has finer structure
         // under K.  A declared edge between two K-leaves cannot be witnessed by
         // anything finer, so "declared but not derived" is not interesting
-        // there; the `unwitnessed-edge` lint and the hollow arrow head are for
+        // there; the `unwitnessed-edge` lint and the short-dashed arc are for
         // the elaborable case.
         elaborable: view.order.expandable.has(s) || view.order.expandable.has(t),
       };

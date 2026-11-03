@@ -34,6 +34,9 @@
   --graph-edge: #7b848d;
   --graph-junction: #55606a;
   --graph-hl: #f0a202;
+  /* A highlighted arc: its own grey, darkened (toward the text colour, so
+     lighter on a dark background), at the same width. */
+  --graph-edge-strong: color-mix(in srgb, var(--graph-edge) 40%, var(--fg));
 
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
           "Liberation Mono", monospace;
@@ -828,13 +831,14 @@ table.grid tr:last-child td { border-bottom: 0; }
 .gedge path {
   fill: none;
   stroke: var(--graph-edge);
-  stroke-width: 1.6;
+  stroke-width: 1.3;
 }
 .gedge.state-derived-only path { stroke-dasharray: 5 4; }
+.gedge.unwitnessed path { stroke-dasharray: 3 2; }
 .gedge.kind-refines path { stroke-dasharray: 2 3; }
 .gedge.dim { opacity: .18; }
 .gedge .elabel { fill: var(--muted); font-size: 9.5px; pointer-events: none; }
-.gedge.hover path, .gedge.selected path { stroke: var(--accent); stroke-width: 2.6; }
+.gedge.hover path, .gedge.selected path { stroke: var(--graph-edge-strong); }
 
 .glayer { transition: transform .28s cubic-bezier(.3, .7, .3, 1); }
 .glayer.no-anim { transition: none; }
@@ -1582,14 +1586,13 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .gnode.junction .shape { fill: var(--graph-junction); stroke: var(--bg); stroke-width: 2; }
 .gnode.junction.selected .shape { fill: var(--accent); stroke: var(--accent); }
 
-.arrowhead { fill: var(--graph-edge); stroke: none; }
-.arrowhead.hollow { fill: var(--bg); stroke: var(--graph-edge); stroke-width: 1.4; }
+.arrowhead { fill: none; stroke: var(--graph-edge); stroke-linecap: round; stroke-linejoin: round; }
 
 .gedge .hit { stroke: transparent; stroke-width: 12; fill: none; cursor: pointer; }
 .gtitle .title-hit { fill: transparent; cursor: pointer; }
-.gedge.hovered path:not(.hit) { stroke: var(--accent); stroke-width: 2.4; }
+.gedge.hovered path:not(.hit) { stroke: var(--graph-edge-strong); }
 .gedge.synthetic path:not(.hit) { opacity: .8; }
-.gedge.spoke path:not(.hit) { stroke-width: 1.3; }
+.gedge.spoke path:not(.hit) { stroke-width: 1.1; }
 .edges.fade-in { opacity: 0; }
 .edges { transition: opacity .25s ease; }
 
@@ -1598,12 +1601,11 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .glayer.focusing .gnode:not(.focus) { opacity: .28; }
 .glayer.focusing .gnode.compound:not(.focus) { opacity: .45; }
 .glayer.focusing .gedge:not(.focus) { opacity: .12; }
-.glayer.focusing .gedge.focus path:not(.hit) { stroke: var(--accent); stroke-width: 2.4; }
-.glayer.focusing .gedge.focus .elabel { fill: var(--accent); font-weight: 600; }
+.glayer.focusing .gedge.focus path:not(.hit) { stroke: var(--graph-edge-strong); }
+.glayer.focusing .gedge.focus .elabel { fill: var(--graph-edge-strong); font-weight: 600; }
 .glayer.focusing .gnode.selected:not(.compound) .shape { stroke-width: 3.2; }
 .glayer.focusing .gnode.selected .label { font-weight: 700; }
-.arrowhead.focus { fill: var(--accent); }
-.arrowhead.hollow.focus { fill: var(--bg); stroke: var(--accent); }
+.arrowhead.focus { stroke: var(--graph-edge-strong); }
 
 .legend .sw.status-none { color: var(--border-strong); background: var(--graph-node); }
 .legend .sw.status-absent { color: var(--st-absent); background: color-mix(in srgb, var(--st-absent) 25%, transparent); }
