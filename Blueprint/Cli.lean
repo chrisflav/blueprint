@@ -643,24 +643,23 @@ def assembleSite (root : System.FilePath) (out : System.FilePath) (args : Args) 
     IO.FS.writeFile introFile (Lean.Json.mkObj [
       ("title", Lean.Json.str (if project.title.isEmpty then project.name else project.title)),
       ("intro", project.introJson)]).compress
-  -- Where the website keeps its comments: with `[site.comments]` and a bot
-  -- in the environment, on Zulip, as `comments-config.json` says; without
-  -- that file, with the comment server of `blueprint serve`.
+  -- Where the website's comments go, for `[site.comments]`: the Zulip and
+  -- channel the comment server posts them to, and the comment server a site
+  -- served elsewhere sends them to.  No credentials: the bot is the comment
+  -- server's, from its own environment.  Without that file the comments are
+  -- the comment server's files.
   let commentsFile := out / "comments-config.json"
   if ← commentsFile.pathExists then IO.FS.removeFile commentsFile
   unless project.commentsZulip.isEmpty do
-    let email := (← IO.getEnv "BLUEPRINT_ZULIP_EMAIL").getD ""
-    let key := (← IO.getEnv "BLUEPRINT_ZULIP_KEY").getD ""
-    if email.isEmpty || key.isEmpty then
-      IO.eprintln "blueprint: [site.comments] is set, but BLUEPRINT_ZULIP_EMAIL or \
-        BLUEPRINT_ZULIP_KEY is not: the site keeps no comments on Zulip"
-    else
-      IO.FS.writeFile commentsFile ((Lean.Json.mkObj [("zulip", Lean.Json.mkObj [
-        ("site", Lean.Json.str project.commentsZulip),
-        ("channel", Lean.Json.str project.commentsChannel),
-        ("email", Lean.Json.str email),
-        ("key", Lean.Json.str key)])]).compress ++ "\n")
-      IO.println s!"comments: on Zulip, {project.commentsZulip} #{project.commentsChannel}"
+    let server := if project.commentsServer.isEmpty then [] else
+      [("server", Lean.Json.str project.commentsServer)]
+    IO.FS.writeFile commentsFile ((Lean.Json.mkObj ([("zulip", Lean.Json.mkObj [
+      ("site", Lean.Json.str project.commentsZulip),
+      ("channel", Lean.Json.str project.commentsChannel)])] ++ server)).compress ++ "\n")
+    IO.println s!"comments: on Zulip, {project.commentsZulip} #{project.commentsChannel}, \
+      through the comment server \
+      {if project.commentsServer.isEmpty then "of `blueprint serve`" else "at " ++ project.commentsServer} \
+      (its bot: BLUEPRINT_ZULIP_EMAIL and BLUEPRINT_ZULIP_KEY where it runs)"
   -- The project's own files, such as the pictures of its intro, which
   -- refers to them as `assets/…`.
   let assets := l.blueprint.project.assets

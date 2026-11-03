@@ -356,7 +356,12 @@ character, so no object is expected to be named so). They are kept by `comments-
 `blueprint serve` runs instead of a plain static server when `python3` is at
 hand: it serves the site and answers `GET`/`POST api/comments/<id>`, keeping
 one JSON file per object under `--comments` (default `<root>/comments`), and
-`%3Adocument.json` for the top page of the document. Comment
+`%3Adocument.json` for the top page of the document. A comment is public or
+private, as the reader chooses: the server keeps both and answers with the
+public ones alone, numbered among themselves. With `[site.comments]` it keeps
+them on Zulip instead, posting as a bot of its own environment, so the page
+never sees the bot (`docs/cli.md`); a site served elsewhere finds its comment
+server in `comments-config.json` (`server`). Comment
 HTML is parsed in an inert document and cut down to the tags markdown produces
 before it is shown. Served without that server, the section says comments are
 unavailable. `blueprint site` leaves the script out of the published site. The same

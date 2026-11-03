@@ -389,9 +389,11 @@ Assembles the static website:
   `data/index.json` lists the snapshot that was just built — as
   `data/<sha>.json` when `history add` already filed it, and otherwise as an
   entry pointing at `blueprint.json` itself;
-* with `[site.comments]` in `blueprint.toml` and a Zulip bot in the
-  environment, writes `<dir>/comments-config.json`, which sends the website's
-  comments to Zulip (see `[site.comments]` below); otherwise removes it.
+* with `[site.comments]` in `blueprint.toml`, writes
+  `<dir>/comments-config.json`, which says where the website's comments go:
+  the Zulip and channel the comment server posts them to, and the comment
+  server of a site served elsewhere (see `[site.comments]` below), but nothing
+  of the bot; otherwise removes it.
 
 With `--pdf` it then prepares the PDFs the website's *Export PDF* button
 hands out (`docs/pdf-export.md`): every choice its dialog offers — each
@@ -428,7 +430,9 @@ serves `dir` (default `<root>/_site`) on `--port` (default 8000).  With
 comments of object pages and of the document's pages and makes, on demand, a PDF the site was not built
 with (`POST api/export`, `docs/pdf-export.md`), reading images from the
 project root (a site with `comments-config.json` keeps its comments on
-Zulip instead); otherwise it is the first of these that is installed:
+Zulip instead, the server posting them as the bot of `BLUEPRINT_ZULIP_EMAIL`
+and `BLUEPRINT_ZULIP_KEY` in its environment); otherwise it is the first of
+these that is installed:
 
 ```
 python3 -m http.server <port> --directory <dir>
@@ -571,9 +575,10 @@ duration = 4                        # seconds, default 3
 #   nodes  = [{ id = "a", title = "Part A" }, { id = "b", title = "Part B" }]
 #   arrows = [["a", "b"]]
 
-[site.comments]                     # comments on Zulip, not the comment server
+[site.comments]                     # comments on Zulip, through the comment server
 zulip   = "https://example.zulipchat.com"
 channel = "blueprint comments"      # one topic per object
+# server = "https://comments.example.org/"   # the comment server of a site served elsewhere
 
 [kinds.theorem]                     # extends the built-in `theorem`
 attrs = ["title", "lean", "review", "tags", "order", "aliases", "owner"]
@@ -705,29 +710,45 @@ shape counts: it is filled with the title's colour, so a one-colour logo
 follows the style and dark mode; otherwise it keeps its own colours.  They
 reach the snapshot as `project.logo` and `project.logoInk`.
 
-`[site.comments]` keeps the comments of the website on a Zulip server rather
-than with the comment server of `blueprint serve`, so that a site served as
-plain files has them too.  `zulip` is the address of the server and
-`channel` the channel the comments go to; both are needed.  Each comment is
-posted by a bot, in the topic of its object: the object's id, or for an id
-longer than Zulip's 60 characters its first 50 and a hash.  The top page of
-the document has the topic `document (top page)`.  The first line of the
-message names the author and the page; the reader chooses whether the comment
-is public, shown below the page and on Zulip, or private, on Zulip only.  The
-website lists the bot's public messages of the topic, so a message edited or
-deleted on Zulip is a comment edited or deleted on the website.
+A comment on the website is public, listed below its page, or private, kept
+for the blueprint's authors and never listed: the reader chooses.  The
+comment server (`web/comments-server.py`, which `blueprint serve` runs)
+keeps both, by default in its comment files (`--comments`, one JSON file per
+object), and answers the page with the public ones alone.
 
-The bot is not part of `blueprint.toml`, which refuses an `email` or a
-`key`: `blueprint site` reads it from `BLUEPRINT_ZULIP_EMAIL` and
-`BLUEPRINT_ZULIP_KEY` (a generic bot subscribed to the channel) and writes
-the four into `comments-config.json`, which the website reads; the snapshot
-does not carry them.  Without the two variables it says so and writes no
-such file, and the website falls back on the comment server.  The website
-calls the Zulip API from the reader's browser, which the Zulip server allows
-(it answers cross-origin requests that carry an `Authorization` header).
-Anyone who can open the site can read the bot's key and post as the bot:
-the comments are only as private as the site, so give the bot nothing else
-to do, and deactivate it on Zulip should the key get out.
+`[site.comments]` keeps them on a Zulip server instead.  `zulip` is the
+address of the server and `channel` the channel the comments go to; both are
+needed.  The page still posts to the comment server, and the comment server
+posts to Zulip as a bot, in the topic of the object: the object's id, or for
+an id longer than Zulip's 60 characters its first 50 and a hash.  The top
+page of the document has the topic `document (top page)`.  The first line of
+the message names the author, the page and whether the comment is public or
+private; the comment server lists the bot's public messages of the topic, so
+a message edited or deleted on Zulip is a comment edited or deleted on the
+website.
+
+The bot is the comment server's alone: it reads `BLUEPRINT_ZULIP_EMAIL` and
+`BLUEPRINT_ZULIP_KEY` (a generic bot subscribed to the channel) from its own
+environment, makes every call to Zulip itself, and never sends them to a
+browser, so a reader cannot see or use the bot.  `blueprint.toml` refuses an
+`email` or a `key`, and `blueprint site` writes no credentials: its
+`comments-config.json` holds the Zulip, the channel and `server`, where the
+comment server reads them.  Without the two variables the comment server says
+so and keeps the comments in its files.
+
+A site needs its comment server to have comments, on Zulip or not: a static
+host cannot keep the bot's key secret.  For a site served elsewhere (GitHub
+Pages, say), run the comment server where the key can be kept, on the built
+site and naming the site's origin,
+
+```
+BLUEPRINT_ZULIP_EMAIL=… BLUEPRINT_ZULIP_KEY=… python3 web/comments-server.py \
+  --directory _site --comments comments --port 8000 --bind 0.0.0.0 \
+  --allow-origin https://user.github.io
+```
+
+and set `server` to its address: the website sends its comments there, and
+the comment server answers no other site (`--allow-origin`, repeatable).
 
 ### The default schema
 

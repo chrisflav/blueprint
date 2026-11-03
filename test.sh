@@ -805,30 +805,35 @@ for bad_zoom in 'nodes = []|.nodes. is empty' \
     bad "a [[site.intro.zoom]] with $(printf "$conf" | tr '\n' ' ') is refused"; cat "$TMP/badzoom.out"
   fi
 done
-# `[site.comments]` sends the website's comments to Zulip: `site` writes
-# comments-config.json with the bot of the environment, never into the
-# snapshot; without the bot it writes none and says so, and a stale one goes.
+# `[site.comments]` sends the website's comments to Zulip through the comment
+# server: `site` writes comments-config.json with where they go and nothing
+# of the bot, even with the bot in its environment; `server` says where a
+# site served elsewhere finds the comment server; without `[site.comments]`
+# a stale file goes.
 cp -r examples/minimal "$TMP/zulip"
 printf '\n[site.comments]\nzulip = "https://zulip.example"\nchannel = "blueprint comment"\n' \
   >> "$TMP/zulip/blueprint.toml"
 if BLUEPRINT_ZULIP_EMAIL=bot@zulip.example BLUEPRINT_ZULIP_KEY=k3y \
      "$BP" site --root "$TMP/zulip" -o "$TMP/zulip.site" > "$TMP/zulip.out" 2>&1 \
-   && grep -qF '{"zulip":{"channel":"blueprint comment","email":"bot@zulip.example","key":"k3y","site":"https://zulip.example"}}' \
+   && grep -qxF '{"zulip":{"channel":"blueprint comment","site":"https://zulip.example"}}' \
         "$TMP/zulip.site/comments-config.json" \
-   && ! grep -q 'k3y' "$TMP/zulip.site/blueprint.json" \
-   && env -u BLUEPRINT_ZULIP_EMAIL -u BLUEPRINT_ZULIP_KEY \
-        "$BP" site --root "$TMP/zulip" -o "$TMP/zulip.site" > "$TMP/zulip2.out" 2>&1 \
-   && grep -q 'BLUEPRINT_ZULIP_KEY is not' "$TMP/zulip2.out" \
+   && ! grep -rqe 'k3y' -e 'bot@zulip.example' "$TMP/zulip.site" \
+   && printf 'server = "https://comments.example/"\n' >> "$TMP/zulip/blueprint.toml" \
+   && "$BP" site --root "$TMP/zulip" -o "$TMP/zulip.site" > "$TMP/zulip2.out" 2>&1 \
+   && grep -qxF '{"server":"https://comments.example/","zulip":{"channel":"blueprint comment","site":"https://zulip.example"}}' \
+        "$TMP/zulip.site/comments-config.json" \
+   && "$BP" site --root examples/minimal -o "$TMP/zulip.site" > "$TMP/zulip3.out" 2>&1 \
    && [ ! -e "$TMP/zulip.site/comments-config.json" ]; then
-  ok "[site.comments] writes comments-config.json with the bot of the environment, and only then"
+  ok "[site.comments] writes comments-config.json with where the comments go, never the bot"
 else
-  bad "[site.comments] writes comments-config.json with the bot of the environment, and only then"
-  cat "$TMP/zulip.out" "$TMP/zulip2.out"
+  bad "[site.comments] writes comments-config.json with where the comments go, never the bot"
+  cat "$TMP/zulip.out" "$TMP/zulip2.out" "$TMP/zulip.site/comments-config.json"
 fi
 for bad_comments in 'channel = "c"|needs a .zulip.' \
                     'zulip = "https://z"|needs a .channel.' \
                     'zulip = "z.example"\nchannel = "c"|must be an http(s) address' \
-                    'zulip = "https://z"\nchannel = "c"\nkey = "x"|takes no .key.'; do
+                    'zulip = "https://z"\nchannel = "c"\nkey = "x"|takes no .key.' \
+                    'zulip = "https://z"\nchannel = "c"\nserver = "c.example"|.server. must be an http(s) address'; do
   conf="${bad_comments%%|*}"; want="${bad_comments#*|}"
   rm -rf "$TMP/badcomments"; cp -r examples/minimal "$TMP/badcomments"
   printf "\n[site.comments]\n$conf\n" >> "$TMP/badcomments/blueprint.toml"
@@ -1284,14 +1289,38 @@ if command -v node > /dev/null 2>&1; then
       bad "the export API refuses a bad request before running anything"; cat "$TMP/api.out"; tail "$TMP/api.log"
     fi
     # Comments: an object's thread, the top page of the document's, nothing else.
+    one_comment='{"name":"Ada","body":"A comment."}'
     say () { curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
-      --data '{"name":"Ada","body":"A comment."}' "http://127.0.0.1:$port/api/comments/$1"; }
+      --data "${2:-$one_comment}" "http://127.0.0.1:$port/api/comments/$1"; }
     if [ "$(say products)" = 201 ] && [ "$(say %3Adocument)" = 201 ] && [ "$(say no-such)" = 404 ] \
        && curl -s "http://127.0.0.1:$port/api/comments/%3Adocument" | grep -q '"A comment."' \
        && [ -f "$TMP/comments.api/%3Adocument.json" ]; then
       ok "the comment API keeps an object's thread and the document's, and refuses an unknown id"
     else
       bad "the comment API keeps an object's thread and the document's, and refuses an unknown id"; tail "$TMP/api.log"
+    fi
+    # A private comment is kept, and never listed; the public ones are numbered
+    # among themselves, so nothing says one was left out.
+    if [ "$(say products '{"name":"Bob","body":"Only for the authors.","visibility":"private"}')" = 201 ] \
+       && [ "$(say products '{"name":"Cy","body":"Another.","visibility":"public"}')" = 201 ] \
+       && [ "$(say products '{"name":"Cy","body":"x","visibility":"secret"}')" = 400 ] \
+       && curl -s "http://127.0.0.1:$port/api/comments/products" > "$TMP/api.list" \
+       && ! grep -q 'Only for the authors' "$TMP/api.list" \
+       && grep -q '"n": 2, "name": "Cy"' "$TMP/api.list" \
+       && grep -q '"visibility": "private"' "$TMP/comments.api/products.json" \
+       && grep -q 'Only for the authors' "$TMP/comments.api/products.json"; then
+      ok "a private comment is kept with the comments and never listed"
+    else
+      bad "a private comment is kept with the comments and never listed"; cat "$TMP/api.list"
+    fi
+    # Only a site named by --allow-origin may use the comment API from another origin.
+    if [ "$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS -H 'Origin: https://elsewhere.example' \
+             "http://127.0.0.1:$port/api/comments/products")" = 403 ] \
+       && ! curl -s -D - -o /dev/null -H 'Origin: https://elsewhere.example' \
+             "http://127.0.0.1:$port/api/comments/products" | grep -qi 'access-control-allow-origin'; then
+      ok "the comment API refuses another site that was not named"
+    else
+      bad "the comment API refuses another site that was not named"
     fi
     if command -v pdflatex > /dev/null 2>&1; then
       code=$(post '{"snapshot":"blueprint.json","scope":"products","depth":"all","appendices":true}')
@@ -1313,6 +1342,43 @@ if command -v node > /dev/null 2>&1; then
     fi
     kill "$api" 2> /dev/null
     wait "$api" 2> /dev/null
+
+    # On Zulip, the comment server relays: the page posts to it, and it posts
+    # as the bot of its own environment, which no answer to the page carries.
+    zport=$((port + 1)); cport=$((port + 2))
+    cp -r examples/minimal "$TMP/relay"
+    printf '\n[site.comments]\nzulip = "http://127.0.0.1:%s"\nchannel = "blueprint comment"\n' "$zport" \
+      >> "$TMP/relay/blueprint.toml"
+    "$BP" site --root "$TMP/relay" -o "$TMP/relay.site" > /dev/null 2>&1
+    : > "$TMP/zulip.log"
+    python3 web/test/fake-zulip.py "$zport" bot@zulip.example k3y "blueprint comment" "$TMP/zulip.log" &
+    fake=$!
+    BLUEPRINT_ZULIP_EMAIL=bot@zulip.example BLUEPRINT_ZULIP_KEY=k3y \
+      python3 web/comments-server.py --port "$cport" --directory "$TMP/relay.site" \
+        --comments "$TMP/comments.relay" --allow-origin https://pages.example > "$TMP/relay.log" 2>&1 &
+    relay=$!
+    for _ in $(seq 1 50); do curl -s "http://127.0.0.1:$cport/api/comments/basics" > /dev/null 2>&1 && break; sleep 0.1; done
+    rsay () { curl -s -o "$TMP/relay.out" -w '%{http_code}' -H 'Content-Type: application/json' \
+      --data "$1" "http://127.0.0.1:$cport/api/comments/basics"; }
+    if [ "$(rsay '{"name":"Ada","body":"Public words.","page":"https://pages.example/#/object/basics"}')" = 201 ] \
+       && [ "$(rsay '{"name":"Bob","body":"Private words.","visibility":"private"}')" = 201 ] \
+       && curl -s "http://127.0.0.1:$cport/api/comments/basics" > "$TMP/relay.list" \
+       && grep -q 'Public words' "$TMP/relay.list" && ! grep -q 'Private words' "$TMP/relay.list" \
+       && grep -q '"channel": "blueprint comment", "topic": "basics", "streamId": 7' "$TMP/relay.list" \
+       && ! grep -qe 'k3y' -e 'bot@zulip.example' "$TMP/relay.list" "$TMP/relay.out" \
+       && [ "$(grep -c '"path": "/api/v1/messages", "auth": "Basic Ym90QHp1bGlwLmV4YW1wbGU6azN5"' "$TMP/zulip.log")" -ge 2 ] \
+       && grep -q 'Private\*\* comment by \*\*Bob\*\* on Basics' "$TMP/zulip.log" \
+       && grep -q 'comment by \*\*Ada\*\* on \[Basics\](https://pages.example/#/object/basics)' "$TMP/zulip.log" \
+       && [ ! -e "$TMP/comments.relay" ] \
+       && curl -s -D - -o /dev/null -H 'Origin: https://pages.example' "http://127.0.0.1:$cport/api/comments/basics" \
+            | grep -qi 'access-control-allow-origin: https://pages.example'; then
+      ok "on Zulip the comment server relays as its own bot, which the page never sees"
+    else
+      bad "on Zulip the comment server relays as its own bot, which the page never sees"
+      cat "$TMP/relay.list" "$TMP/relay.log"; head -c 600 "$TMP/zulip.log"
+    fi
+    kill "$relay" "$fake" 2> /dev/null
+    wait "$relay" "$fake" 2> /dev/null
   fi
 else
   echo "  skip blueprint export (no node on PATH)"

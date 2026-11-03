@@ -377,8 +377,8 @@ def decodeConfig (t : TValue) (defaultName : String) :
         | some v => throw s!"'[site.intro] zoom' must be an array of tables, got a {v.typeName}"
       pure (body, file, ms, background, hold, step, zoom)
     | some v => throw s!"'[site] intro' must be a table, got a {v.typeName}"
-  let (commentsZulip, commentsChannel) ← match site.bind (·.get? "comments") with
-    | none => pure ("", "")
+  let (commentsZulip, commentsChannel, commentsServer) ← match site.bind (·.get? "comments") with
+    | none => pure ("", "", "")
     | some ct@(.table _) => do
       let str (k : String) : Except String String :=
         match ct.get? k with
@@ -386,25 +386,29 @@ def decodeConfig (t : TValue) (defaultName : String) :
         | some v => match v.asString? with
           | some s => pure s
           | none => throw s!"'[site.comments] {k}' must be a string, got a {v.typeName}"
-      -- The bot's credentials end up in the site, but never in the repository.
+      -- The bot's credentials are the comment server's alone: never in the
+      -- repository, and never in the site.
       for k in ["email", "key"] do
         if (ct.get? k).isSome then
           throw s!"'[site.comments]' takes no '{k}': the bot is given by \
-            BLUEPRINT_ZULIP_EMAIL and BLUEPRINT_ZULIP_KEY when the site is built"
+            BLUEPRINT_ZULIP_EMAIL and BLUEPRINT_ZULIP_KEY where the comment server runs"
       let zulip ← str "zulip"
       let channel ← str "channel"
+      let server ← str "server"
       if zulip.isEmpty then
         throw "'[site.comments]' needs a 'zulip', the address of the Zulip server"
       unless zulip.startsWith "https://" || zulip.startsWith "http://" do
         throw s!"'[site.comments] zulip' must be an http(s) address, got {zulip}"
       if channel.isEmpty then
         throw "'[site.comments]' needs a 'channel', the Zulip channel of the comments"
-      pure (zulip, channel)
+      unless server.isEmpty || server.startsWith "https://" || server.startsWith "http://" do
+        throw s!"'[site.comments] server' must be an http(s) address, got {server}"
+      pure (zulip, channel, server)
     | some v => throw s!"'[site] comments' must be a table, got a {v.typeName}"
   let project : Project :=
     { name, title, dir, leanModules, leanDescend, katexMacros, theme, logo, logoInk,
       intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom,
-      assets, commentsZulip, commentsChannel }
+      assets, commentsZulip, commentsChannel, commentsServer }
   let mut schema := defaultSchema
   if let some v := lookup "defaultCollapse" then
     match v.asString? with

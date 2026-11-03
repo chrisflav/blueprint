@@ -5,15 +5,30 @@ make PDFs of it.
 `blueprint serve` runs this in place of a plain static file server.  It
 serves the assembled site exactly as `python3 -m http.server` would, plus
 
-    GET  /api/comments/<id>   -> {"comments": [{"n", "name", "body", "date"}, ...]}
-    POST /api/comments/<id>   <- {"name": "...", "body": "..."}   (JSON)
+    GET  /api/comments/<id>   -> {"comments": [{"n", "name", "body", "date"}, ...],
+                                  "maxBody": n, "zulip": {...} (on Zulip only)}
+    POST /api/comments/<id>   <- {"name": "...", "body": "...",
+                                  "visibility": "public" | "private", "page": "<url>"}
+                              -> {"comments": [...], "shown": true | false}
 
 for the comment section at the foot of every object page and of every page
-of the document.  The comments of one object are one file,
-`<comments dir>/<id, percent-encoded>.json`, written atomically, so the
-directory can be read, edited, backed up or put under version control by
-hand.  Only ids the site's `blueprint.json` knows are accepted, and
-`DOCUMENT_THREAD`, the thread of the top page of the document.
+of the document.  A comment is public, listed below the page, or private,
+kept but never listed: a GET answers with the public comments alone, numbered
+among themselves.  Only ids the site's `blueprint.json` knows are accepted,
+and `DOCUMENT_THREAD`, the thread of the top page of the document.
+
+The comments are kept in one of two places.  By default the comments of one
+object are one file, `<comments dir>/<id, percent-encoded>.json`, private ones
+included, written atomically, so the directory can be read, edited, backed up
+or put under version control by hand.  When the site's `comments-config.json`
+names a Zulip (`blueprint site` writes it for `[site.comments]`) and this
+process has a bot in its environment, `BLUEPRINT_ZULIP_EMAIL` and
+`BLUEPRINT_ZULIP_KEY`, every comment is a message of that bot in the
+channel, in the topic of its object, public and private alike, and a GET
+lists the public ones of the topic: the server relays between the page and
+Zulip, so the bot's key never leaves it.  `--allow-origin` lets a site
+served elsewhere (a static host that cannot keep a secret) use this server
+for its comments, `[site.comments] server` saying where it is.
 
     GET  /api/export          -> {"available": true|false, "reason": "..."}
     POST /api/export          <- {"snapshot": "blueprint.json" | "data/<sha>.json",
@@ -37,6 +52,7 @@ Standard library only.  It listens on 127.0.0.1 unless told otherwise.
 """
 
 import argparse
+import base64
 import datetime
 import json
 import os
@@ -46,7 +62,9 @@ import subprocess
 import sys
 import tempfile
 import threading
+import urllib.error
 import urllib.parse
+import urllib.request
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -59,6 +77,14 @@ MAX_ID = 200
 # no slug character (`isIdChar` in Blueprint/Attr.lean), so no blueprint is
 # expected to have an object so named.  The site's comments.js names it too.
 DOCUMENT_THREAD = ":document"
+VISIBILITIES = ("public", "private")
+MAX_PAGE = 2000  # the address of the page a comment was written on
+PAGE_RE = re.compile(r"^https?://[^\s()<>]+$")
+
+# Zulip: a message holds 10000 characters, its first line included.
+ZULIP_MAX_BODY = 9000
+ZULIP_TIMEOUT = 15  # seconds for one call to the Zulip server
+MAX_TOPIC = 60  # Zulip's default limit on the length of a topic
 
 EXPORT_PATH = "/api/export"
 EXPORT_JOBS = 2  # compilations at once
@@ -75,6 +101,7 @@ class KnownIds:
         self.path = path
         self.mtime = None
         self.ids = set()
+        self.titles = {}
         self.lock = threading.Lock()
 
     def get(self):
@@ -86,9 +113,19 @@ class KnownIds:
             if mtime != self.mtime:
                 with open(self.path, encoding="utf-8") as f:
                     snap = json.load(f)
-                self.ids = {o.get("id") for o in snap.get("objects", []) if isinstance(o, dict)}
+                objects = [o for o in snap.get("objects", []) if isinstance(o, dict)]
+                self.ids = {o.get("id") for o in objects}
+                self.titles = {o.get("id"): (o.get("attrs") or {}).get("title") for o in objects}
                 self.mtime = mtime
             return self.ids
+
+    def title(self, object_id):
+        """How a comment's first line names its object: its title, or its id."""
+        if object_id == DOCUMENT_THREAD:
+            return "the document"
+        self.get()
+        t = self.titles.get(object_id)
+        return t if isinstance(t, str) and t else object_id
 
 
 class Exporter:
@@ -213,6 +250,144 @@ def export_request(data):
             "depth": depth, "appendices": appendices}, None
 
 
+def public_list(comments):
+    """The public comments of a thread, numbered among themselves, as a GET lists them."""
+    out = []
+    for c in comments:
+        if c.get("visibility", "public") != "public":
+            continue
+        out.append({"n": len(out) + 1, "name": c.get("name", ""), "body": c.get("body", ""),
+                    "date": c.get("date")})
+    return out
+
+
+# ---------------------------------------------------------------- Zulip
+
+def hash8(s):
+    """FNV-1a of the UTF-8 bytes, as eight hex digits: tells apart ids cut to the same topic."""
+    h = 0x811C9DC5
+    for b in s.encode("utf-8"):
+        h ^= b
+        h = (h * 0x01000193) & 0xFFFFFFFF
+    return f"{h:08x}"
+
+
+def topic_of(object_id):
+    """The Zulip topic of an object's comments: its id, cut to fit with a hash."""
+    t = "document (top page)" if object_id == DOCUMENT_THREAD else object_id
+    if len(t) <= MAX_TOPIC:
+        return t
+    return t[:MAX_TOPIC - 10] + "\u2026 " + hash8(t)
+
+
+MARKS = {"public": "\U0001F310 **Public**", "private": "\U0001F512 **Private**"}
+HEAD_RE = re.compile("^(?:\U0001F310|\U0001F512) \\*\\*(Public|Private)\\*\\* comment by \\*\\*([^*\n]*)\\*\\* on [^\n]*\n*")
+
+
+def head_line(visibility, name, title, url):
+    """The first line of a comment's message, which `parse_message` reads back."""
+    label = re.sub(r"([\[\]\\])", r"\\\1", title)
+    where = f"[{label}]({url})" if url else label
+    return f"{MARKS[visibility]} comment by **{name}** on {where}"
+
+
+def parse_message(content):
+    """(visibility, name, body) of a message posted for a comment, or None."""
+    m = HEAD_RE.match(content)
+    if not m:
+        return None
+    return m.group(1).lower(), m.group(2), content[m.end():]
+
+
+class ZulipError(Exception):
+    pass
+
+
+class Zulip:
+    """The Zulip a site keeps its comments on, and the bot that posts them.
+
+    The bot's email and key are this process's alone: they are read from its
+    environment, used on the calls below, and never sent to a browser."""
+
+    def __init__(self, site, channel, email, key):
+        self.site = site.rstrip("/")
+        self.channel = channel
+        self.email = email
+        self.auth = "Basic " + base64.b64encode(f"{email}:{key}".encode("utf-8")).decode("ascii")
+        self.stream_id = None
+
+    def call(self, method, path, params):
+        query = urllib.parse.urlencode(params)
+        url = f"{self.site}/api/v1/{path}" + (f"?{query}" if method == "GET" else "")
+        req = urllib.request.Request(url, data=None if method == "GET" else query.encode("utf-8"),
+                                     method=method, headers={"Authorization": self.auth,
+                                                             "User-Agent": "blueprint-comments"})
+        if method != "GET":
+            req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        try:
+            with urllib.request.urlopen(req, timeout=ZULIP_TIMEOUT) as res:
+                payload = json.loads(res.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            try:
+                payload = json.loads(e.read().decode("utf-8"))
+            except (ValueError, OSError):
+                payload = {}
+            raise ZulipError(payload.get("msg") or f"HTTP {e.code}") from None
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            raise ZulipError(str(getattr(e, "reason", e))) from None
+        if not isinstance(payload, dict) or payload.get("result") != "success":
+            raise ZulipError((payload or {}).get("msg") or "the Zulip server refused the request")
+        return payload
+
+    def where(self, topic):
+        """What the page says of where its comments go: no credentials."""
+        if self.stream_id is None:
+            try:
+                self.stream_id = self.call("GET", "get_stream_id", {"stream": self.channel}).get("stream_id")
+            except ZulipError:
+                pass
+        return {"site": self.site, "channel": self.channel, "topic": topic, "streamId": self.stream_id}
+
+    def comments(self, topic):
+        """The bot's public comments of a topic, as the local store lists them."""
+        data = self.call("GET", "messages", {
+            "anchor": "newest", "num_before": "1000", "num_after": "0", "apply_markdown": "false",
+            "narrow": json.dumps([{"operator": "channel", "operand": self.channel},
+                                  {"operator": "topic", "operand": topic},
+                                  {"operator": "sender", "operand": self.email}]),
+        })
+        out = []
+        for m in data.get("messages") or []:
+            c = parse_message(str(m.get("content", "")))
+            if c and c[0] == "public":
+                date = datetime.datetime.fromtimestamp(m.get("timestamp", 0), datetime.timezone.utc)
+                out.append({"n": m.get("id"), "name": c[1], "body": c[2],
+                            "date": date.isoformat(timespec="seconds")})
+        return out
+
+    def post(self, topic, content):
+        self.call("POST", "messages", {"type": "stream", "to": self.channel, "topic": topic,
+                                       "content": content})
+
+
+def zulip_from(site):
+    """The Zulip of the site's comments-config.json with the bot of the environment, or None."""
+    try:
+        with open(os.path.join(site, "comments-config.json"), encoding="utf-8") as f:
+            z = (json.load(f) or {}).get("zulip") or {}
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not (isinstance(z, dict) and z.get("site") and z.get("channel")):
+        return None
+    email = os.environ.get("BLUEPRINT_ZULIP_EMAIL", "")
+    key = os.environ.get("BLUEPRINT_ZULIP_KEY", "")
+    if not email or not key:
+        print("comments-config.json names a Zulip, but BLUEPRINT_ZULIP_EMAIL or BLUEPRINT_ZULIP_KEY "
+              "is not set: the comments are kept here instead", file=sys.stderr, flush=True)
+        return None
+    return Zulip(str(z["site"]), str(z["channel"]), email, key)
+
+
 def comment_file(directory, object_id):
     return os.path.join(directory, urllib.parse.quote(object_id, safe="") + ".json")
 
@@ -245,11 +420,31 @@ class Handler(SimpleHTTPRequestHandler):
     comments_dir = None
     known = None
     exporter = None
+    zulip = None  # a Zulip, when the comments are kept there
+    allowed_origins = frozenset()  # sites served elsewhere that may use the comment API
 
     def end_headers(self):
         # The site is rebuilt in place; never let a browser keep a stale copy.
         self.send_header("Cache-Control", "no-cache")
+        # A site served elsewhere, named by --allow-origin, may read and post
+        # comments here; no other page may.
+        origin = self.headers.get("Origin")
+        if origin and origin in self.allowed_origins and self.is_api():
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         super().end_headers()
+
+    def do_OPTIONS(self):
+        """The preflight of a site named by --allow-origin posting JSON; nothing else."""
+        origin = self.headers.get("Origin")
+        if not (self.is_api() and origin and origin in self.allowed_origins):
+            return self.send_json(403, {"error": "this origin may not use the comment API"})
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def send_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -282,7 +477,7 @@ class Handler(SimpleHTTPRequestHandler):
         """The JSON body of a POST, or None after replying with the error."""
         # Only the site's own fetch, which sends JSON: a form on another page
         # cannot set this type without a CORS preflight, which this server
-        # never answers.
+        # answers for the sites of --allow-origin alone.
         ctype = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
         if ctype != "application/json":
             self.send_json(415, {"error": "send application/json"})
@@ -308,7 +503,21 @@ class Handler(SimpleHTTPRequestHandler):
             return super().do_GET()
         object_id = self.object_id()
         if object_id is not None:
-            self.send_json(200, {"comments": read_comments(self.comments_dir, object_id)})
+            self.send_comments(200, object_id)
+
+    def send_comments(self, status, object_id, extra=None):
+        """The public comments of a thread, and where they are kept."""
+        if self.zulip:
+            topic = topic_of(object_id)
+            try:
+                comments = self.zulip.comments(topic)
+            except ZulipError as e:
+                return self.send_json(502, {"error": f"Zulip: {e}"})
+            payload = {"comments": comments, "maxBody": ZULIP_MAX_BODY, "zulip": self.zulip.where(topic)}
+        else:
+            payload = {"comments": public_list(read_comments(self.comments_dir, object_id)), "maxBody": MAX_BODY}
+        payload.update(extra or {})
+        self.send_json(status, payload)
 
     def do_POST(self):
         if self.is_export():
@@ -327,26 +536,38 @@ class Handler(SimpleHTTPRequestHandler):
             return
         # Only the site's own fetch, which sends JSON: a form on another page
         # cannot set this type without a CORS preflight, which this server
-        # never answers, so it cannot post comments through a visitor's browser.
-        ctype = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
-        if ctype != "application/json":
-            return self.send_json(415, {"error": "comments are posted as application/json"})
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            length = -1
-        if length <= 0 or length > MAX_REQUEST:
-            return self.send_json(413 if length > MAX_REQUEST else 400, {"error": "bad request size"})
-        try:
-            data = json.loads(self.rfile.read(length).decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return self.send_json(400, {"error": "the request is not JSON"})
-        name = str(data.get("name", "")).strip() if isinstance(data, dict) else ""
-        body = str(data.get("body", "")).strip() if isinstance(data, dict) else ""
+        # answers for the sites of --allow-origin alone, so no other page can
+        # post comments through a visitor's browser.
+        data = self.read_json(MAX_REQUEST)
+        if data is None:
+            return
+        if not isinstance(data, dict):
+            return self.send_json(400, {"error": "the request is not a JSON object"})
+        name = str(data.get("name", "")).strip()
+        body = str(data.get("body", "")).strip()
+        visibility = data.get("visibility", "public")
+        page = data.get("page")
+        limit = ZULIP_MAX_BODY if self.zulip else MAX_BODY
         if not name or not body:
             return self.send_json(400, {"error": "a name and a comment are both needed"})
-        if len(name) > MAX_NAME or len(body) > MAX_BODY:
-            return self.send_json(400, {"error": f"at most {MAX_NAME} characters of name and {MAX_BODY} of comment"})
+        if len(name) > MAX_NAME or len(body) > limit:
+            return self.send_json(400, {"error": f"at most {MAX_NAME} characters of name and {limit} of comment"})
+        if visibility not in VISIBILITIES:
+            return self.send_json(400, {"error": "visibility must be public or private"})
+        # The page it was written on, linked from the message on Zulip: a plain
+        # web address, or nothing.
+        if not (isinstance(page, str) and len(page) <= MAX_PAGE and PAGE_RE.match(page)):
+            page = None
+        shown = {"shown": visibility == "public"}
+        if self.zulip:
+            # The name is set in bold on the first line, which `parse_message` reads back.
+            who = re.sub(r"[*\r\n]+", " ", name).strip()
+            content = head_line(visibility, who, self.known.title(object_id), page) + "\n\n" + body
+            try:
+                self.zulip.post(topic_of(object_id), content)
+            except ZulipError as e:
+                return self.send_json(502, {"error": f"Zulip: {e}"})
+            return self.send_comments(201, object_id, shown)
         with write_lock:
             comments = read_comments(self.comments_dir, object_id)
             n = max((c.get("n", 0) for c in comments if isinstance(c.get("n"), int)), default=0) + 1
@@ -354,10 +575,11 @@ class Handler(SimpleHTTPRequestHandler):
                 "n": n,
                 "name": name,
                 "body": body,
+                "visibility": visibility,
                 "date": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
             })
             write_comments(self.comments_dir, object_id, comments)
-        self.send_json(201, {"comments": comments})
+        self.send_json(201, {"comments": public_list(comments), "maxBody": MAX_BODY, **shown})
 
 
 def main(argv=None):
@@ -368,15 +590,22 @@ def main(argv=None):
     p.add_argument("--comments", required=True, help="where the comment files are kept")
     p.add_argument("--assets-root", default=None,
                    help="the project root, where the images of the current snapshot are read from")
+    p.add_argument("--allow-origin", action="append", default=[], metavar="ORIGIN",
+                   help="a site served elsewhere, such as https://user.github.io, that may use "
+                        "the comment API (repeatable)")
     args = p.parse_args(argv)
 
     site = os.path.abspath(args.directory)
     Handler.comments_dir = os.path.abspath(args.comments)
     Handler.known = KnownIds(os.path.join(site, "blueprint.json"))
     Handler.exporter = Exporter(site, os.path.abspath(args.assets_root) if args.assets_root else None)
+    Handler.zulip = zulip_from(site)
+    Handler.allowed_origins = frozenset(o.rstrip("/") for o in args.allow_origin)
     server = ThreadingHTTPServer((args.bind, args.port), partial(Handler, directory=site))
+    where = (f"on Zulip, {Handler.zulip.site} #{Handler.zulip.channel}" if Handler.zulip
+             else f"in {Handler.comments_dir}")
     print(f"serving {site} at http://{args.bind}:{args.port}/ "
-          f"with comments in {Handler.comments_dir} (Ctrl-C to stop)", flush=True)
+          f"with comments {where} (Ctrl-C to stop)", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
