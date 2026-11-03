@@ -230,7 +230,7 @@ function treeItem(app, n) {
     }));
   }
   const title = el('span.preview-title', ...lineOf(app, n));
-  if (n.match && o && o.body.trim() && !M.isSectionKind(o.kind)) {
+  if (n.match && o && M.displayBody(o).trim() && !M.isSectionKind(o.kind)) {
     // The magnifier: the statement itself in place of its line, rendered the
     // first time it is asked for.
     const preview = el('div.search-preview');
@@ -271,6 +271,7 @@ function lineOf(app, n) {
   if (!o) return ['Not in the document'];
   const link = (text) => el('a', { href: app.objectHref(o.id), title: o.id }, text);
   const e = n.entry;
+  if (e && e.reference) return [link('[' + (e.label || o.id) + ']'), ownTitle(o) ? [' ', ownTitle(o)] : null];
   if (e && e.text) return [link('Text')];
   if (e) {
     const t = ownTitle(o);
@@ -290,7 +291,7 @@ function fillPreview(app, n, target) {
   const word = e ? [M.kindWord(o.kind), ' ', e.number] : o.kind === 'proof' ? 'Proof' : M.kindWord(o.kind);
   const lead = e && e.text ? null : el('strong', link(word), t ? [' (', t, ')'] : null, '. ');
   const body = target.appendChild(el('div.prose.body-prose'));
-  app.renderBody(body, o.body, app.knownIds());
+  app.renderBody(body, M.displayBody(o), app.knownIds());
   if (!lead) return;
   // Run in, as a paper sets it, when the prose opens with a paragraph.
   const first = body.firstChild;

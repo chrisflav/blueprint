@@ -5,8 +5,9 @@
 //
 // Size.  The default view is the fully collapsed one — a handful of chapters —
 // and the reader expands into it, so the page normally lays out tens of nodes.
-// A reader who asks for "Expand all" on a few-thousand-object blueprint gets
-// what they asked for, and that costs seconds of ELK time, so:
+// A link that opens every section (`expand=` naming them all) of a
+// few-thousand-object blueprint still gets what it asks for, and that costs
+// seconds of ELK time, so:
 //
 //   * the graph handed to ELK carries no back-references into the model (see
 //     `plainGraph`); the metadata is looked up again by id after layout;
@@ -23,8 +24,7 @@
 //     back to the main thread, which fetches the whole of elkjs,
 //     elk.bundled.js, only then, and yields to the event loop between phases
 //     so the status line is painted before the browser freezes;
-//   * the status line says how many nodes are being laid out, and the
-//     "Expand all" button says so up front.
+//   * the status line says how many nodes are being laid out.
 
 import * as M from './model.js';
 import { prefetchFile } from './prefetch.js';
@@ -189,30 +189,34 @@ function mount(root, app) {
   stage.appendChild(back);
 
   // `folded`: the side panel's listings the reader has opened (see `fold`).
-  // `toolbarOpen`, `sideShown`: the reader's choices (`shownPref`).
+  // `toolbarOpen`, `sideShown`, `statsShown`: the reader's choices (`shownPref`).
   ui = { page, toolbar, stage, svg, layer, side, back, transform: { x: 40, y: 40, k: 1 }, fitted: false,
     folded: new Map(), entered: null, legend: key, legendProgress: app.showProgress,
-    toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY) };
+    toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY), statsShown: shownPref(STATS_KEY) };
   page.classList.toggle('side-hidden', !ui.sideShown);
+  stage.classList.toggle('stats-hidden', !ui.statsShown);
   installPanZoom(app);
   prevPos = new Map();
   lastSignature = null;
 }
 
+// An arc's head is two strokes meeting at its end, "—>", one head for every
+// arc whether solid or dashed.  A marker is scaled by the stroke width of its
+// line, so a stroke of 10 / HEAD units draws the head as thick as the line.
+const HEAD = 7;
+function arrowMarker(svgEl, id, cls) {
+  return svgEl('marker', {
+    id, viewBox: '0 0 10 10', refX: 9, refY: 5,
+    markerWidth: HEAD, markerHeight: HEAD, orient: 'auto-start-reverse',
+  }, svgEl('path', { d: 'M 1 1.2 L 9 5 L 1 8.8', class: cls, 'stroke-width': round(10 / HEAD) }));
+}
+
 function defs(app) {
   const { svgEl } = app;
-  const marker = (id, hollow) =>
-    svgEl('marker', {
-      id, viewBox: '0 0 10 10', refX: 9, refY: 5,
-      markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse',
-    }, svgEl('path', {
-      d: 'M 0 0.8 L 10 5 L 0 9.2 z',
-      class: (hollow ? 'arrowhead hollow' : 'arrowhead') + (id.endsWith('-focus') ? ' focus' : ''),
-    }));
-  // The `-focus` pair is the accent-coloured head an edge of the selected node
-  // switches to, so the arrow matches its highlighted stroke.
-  return svgEl('defs', marker('bp-arrow', false), marker('bp-arrow-hollow', true),
-    marker('bp-arrow-focus', false), marker('bp-arrow-hollow-focus', true));
+  // `bp-arrow-focus` is the darker head a highlighted edge switches to, so the
+  // arrow matches its darkened stroke.
+  return svgEl('defs', arrowMarker(svgEl, 'bp-arrow', 'arrowhead'),
+    arrowMarker(svgEl, 'bp-arrow-focus', 'arrowhead focus'));
 }
 
 /** The key to the drawing; the fills say the statuses, so without the progress there are none. */
@@ -223,24 +227,26 @@ function legend(app, progress) {
     for (const c of children) s.appendChild(c);
     return s;
   };
+  // The dashes as style.css draws them on the arcs (`.gedge`).
   const line = (dash) => svgEl('line', {
-    x1: 1, y1: 5, x2: dash === 'hollow' ? 17 : 23, y2: 5,
-    stroke: 'currentColor', 'stroke-width': 1.6,
-    'stroke-dasharray': dash === 'dashed' ? '4 3' : null,
+    x1: 1, y1: 5, x2: 23, y2: 5,
+    stroke: 'currentColor', 'stroke-width': 1.3,
+    'stroke-dasharray': dash === 'short' ? '3 2' : dash === 'long' ? '5 4' : null,
   });
-  const head = (hollow) => svgEl('path', {
-    d: 'M 17 2 L 23 5 L 17 8 z',
-    fill: hollow ? 'none' : 'currentColor', stroke: 'currentColor', 'stroke-width': 1,
+  const head = () => svgEl('path', {
+    d: 'M 18 1.8 L 23 5 L 18 8.2',
+    fill: 'none', stroke: 'currentColor', 'stroke-width': 1.3,
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
   });
   const swatch = (s, text) =>
     el('div.row', el('span', { class: 'sw status-' + s }), el('span', text));
   return el('div.legend',
     el('b', 'lines'),
-    el('div.row', sample(line(), head(false)), 'declared + derived'),
-    el('div.row', sample(line('hollow'), head(true)), 'declared, unwitnessed'),
+    el('div.row', sample(line(), head()), 'declared + derived'),
+    el('div.row', sample(line('short'), head()), 'declared, unwitnessed'),
     // Only arcs into the contents of collapsed objects are drawn so (`arcs of
     // contents`, or out of an expanded section into a collapsed one).
-    el('div.row.lg-derived', sample(line('dashed'), head(false)), 'derived, undeclared'),
+    el('div.row.lg-derived', sample(line('long'), head()), 'derived, undeclared'),
     // Only while the graph is searched (`applyHighlight`).
     el('b.lg-search', { style: { marginTop: '.3em' } }, 'search'),
     el('div.row.lg-search', el('span.shp.hit'), el('span', 'matches')),
@@ -261,11 +267,13 @@ function legend(app, progress) {
 // ---------------------------------------------------------------------------
 
 // The graph opens on the graph alone: of the toolbar only Collapse all, the
-// search and the zoom, the rest folded behind the Filters button, and no side
-// panel beside it.  Whether the reader has unfolded either is theirs to keep,
-// in localStorage, as the top bar keeps the progress (app.js).
+// search and the zoom, the rest folded behind the Filters button, no side
+// panel beside it and no statistics under it.  Whether the reader has shown
+// any of them is theirs to keep, in localStorage, as the top bar keeps the
+// progress (app.js).
 const TOOLS_KEY = 'blueprint.graph.tools';
 const SIDE_KEY = 'blueprint.graph.side';
+const STATS_KEY = 'blueprint.graph.stats';
 
 /** Whether the reader asked for this to be shown: no, unless they did. */
 function shownPref(key) {
@@ -311,20 +319,9 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => writeState(app, { expand: [] }) }, 'Collapse all')));
   const filters = bar.appendChild(el('div.tb-filters'));
 
-  // The collapse order has no control: the snapshot's default, or the one
+  // There is no Expand all: the reader opens the sections one at a time.  The
+  // collapse order has no control either: the snapshot's default, or the one
   // the link says (`collapse=`).
-  const order = M.collapseOrder(m, st.collapse);
-  // Expanding everything is the one action that can put thousands of nodes on
-  // screen, so the button says so rather than springing it on the reader.
-  const whenExpanded = drawnNodeCount(m);
-  const big = whenExpanded >= BIG_GRAPH;
-  filters.appendChild(el('div.group',
-    el('button', {
-      onclick: () => writeState(app, { expand: [...order.expandable] }),
-      title: `lay out all ${whenExpanded.toLocaleString()} objects at once`,
-    }, big ? `Expand all (${whenExpanded.toLocaleString()})` : 'Expand all')));
-
-  filters.appendChild(el('div.sep'));
 
   // edge kind filter
   const eks = M.edgeKinds(m).filter((k) => k !== st.collapse);
@@ -397,10 +394,34 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => fitToView(app) , title: 'fit the graph into the viewport' }, 'Fit'),
     el('button', { onclick: () => zoomBy(app, 1.25) }, '+'),
     el('button', { onclick: () => zoomBy(app, 1 / 1.25) }, '\u2212')));
+  bar.appendChild(statsToggle(app));
   // Replay intro is the graph's alone, where the intro lands (app.js).
   const intro = app.introButton ? app.introButton() : null;
   if (intro) bar.appendChild(intro);
   bar.appendChild(sideToggle(app));
+}
+
+/**
+ * Show or hide the statistics at the foot of the stage (nodes, links, what is
+ * hidden, what is expanded).  While a layout runs the line shows whatever
+ * was chosen, since it is then the only sign of how much is being laid out.
+ */
+function statsToggle(app) {
+  const { el } = app;
+  const label = () => (ui.statsShown ? 'Hide statistics' : 'Show statistics');
+  const button = el('button.tb-stats', {
+    type: 'button',
+    'aria-pressed': ui.statsShown ? 'true' : 'false',
+    title: 'the counts of what is drawn, at the foot of the graph',
+    onclick: () => {
+      ui.statsShown = !ui.statsShown;
+      savePref(STATS_KEY, ui.statsShown);
+      ui.stage.classList.toggle('stats-hidden', !ui.statsShown);
+      button.setAttribute('aria-pressed', ui.statsShown ? 'true' : 'false');
+      button.textContent = label();
+    },
+  }, label());
+  return button;
 }
 
 /** Show or hide the side panel; on a phone it is a sheet of its own and this is not offered. */
@@ -432,14 +453,6 @@ function sideToggle(app) {
 /** Is there anything the "hide appendix" checkbox would hide? */
 function hasAppendix(m) {
   return m.objects.some((o) => M.graphHint(m, o.kind) === 'optional');
-}
-
-/** How many nodes the fully expanded view would draw: every object that is
- *  drawn as a box rather than as an arc. */
-function drawnNodeCount(m) {
-  let n = 0;
-  for (const kind of M.nodeKinds(m)) n += M.objectsOfKind(m, kind).length;
-  return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -1609,7 +1622,15 @@ function draw(app, st, view, quot, laid, nodes, edgeMeta, animate) {
   ui.chain = chain;
 
   ui.bbox = bboxOf(abs);
-  if (!ui.fitted) { fitToView(app); ui.fitted = true; } else applyTransform();
+  // The first drawing is fitted into the stage, and so is every drawing after
+  // something was unfolded or folded (a node's + or −, a double click, the
+  // side panel, Collapse all, a link that opens a section): Fit, done for the
+  // reader.  Anything else (a filter, the search, a selection) keeps the view
+  // where the reader left it.
+  const expandKey = view.kind + ' ' + [...view.expanded].sort().join(',');
+  const toggled = ui.drawnExpand !== undefined && ui.drawnExpand !== expandKey;
+  ui.drawnExpand = expandKey;
+  if (!ui.fitted || toggled) { fitToView(app); ui.fitted = true; } else applyTransform();
   // The view this drawing is of: `render` moves `ui.view` on as soon as the
   // state changes, before the new layout is drawn.
   ui.drawnView = view;
@@ -1735,6 +1756,8 @@ function drawNode(app, box, meta, st, view) {
  * One picture as an `<svg>` whose viewBox is the drawing, and that box as
  * `{x, y, w, h}`.  Layouts are remembered as the graph's are.
  */
+let sketchCount = 0; // the pictures drawn so far, for their markers' ids
+
 export async function sketch(app, layer) {
   const { svgEl } = app;
   const types = { _types: new Map() };
@@ -1765,13 +1788,13 @@ export async function sketch(app, layer) {
     viewBox: `${box.x - pad} ${box.y - pad} ${box.w + 2 * pad} ${box.h + 2 * pad}`,
     width: box.w + 2 * pad, height: box.h + 2 * pad,
   });
-  // Arrowheads of its own: an id shared with the graph's would resolve to
-  // the graph's, which the intro keeps hidden.
-  const head = svgEl('marker', {
-    id: 'bp-sketch-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5,
-    markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse',
-  }, svgEl('path', { d: 'M 0 0.8 L 10 5 L 0 9.2 z', class: 'arrowhead' }));
-  svg.appendChild(svgEl('defs', head));
+  // Arrowheads of its own, the graph's "declared + derived" head: an id
+  // shared with the graph's, or with another picture's, would resolve to the
+  // first of them in the page, which the intro may keep hidden, and a marker
+  // is drawn as visible as the place it is defined in.
+  sketchCount += 1;
+  const headId = 'bp-sketch-arrow-' + sketchCount;
+  svg.appendChild(svgEl('defs', arrowMarker(svgEl, headId, 'arrowhead')));
   const gEdges = svgEl('g', { class: 'edges' });
   const gNodes = svgEl('g', { class: 'nodes' });
   svg.appendChild(gEdges);
@@ -1782,7 +1805,7 @@ export async function sketch(app, layer) {
     if (!a || !b) continue;
     const pts = pathPoints(e, a, b, { x: 0, y: 0 });
     gEdges.appendChild(svgEl('g', { class: 'gedge kind-uses' },
-      svgEl('path', { d: pathD(pts), 'marker-end': 'url(#bp-sketch-arrow)' })));
+      svgEl('path', { d: pathD(pts), 'marker-end': `url(#${headId})` })));
   }
   for (const n of nodes) {
     const b = abs.get(n.id);
@@ -1954,18 +1977,16 @@ function drawEdge(app, meta, pts, a, b) {
   if (state) classes.push('state-' + state);
   if (entity && entity.synthetic) classes.push('synthetic');
   if (isSpoke) classes.push('spoke');
+  // Declared, but nothing inside witnesses it: drawn in short dashes.
+  if (state === 'declared-only' && elaborable) classes.push('unwitnessed');
 
   const g = svgEl('g', {
     class: classes.join(' '),
     'data-id': isSpoke ? meta.item.id : (entity.members[0] ? entity.members[0].id : entity.id),
   });
 
-  const hollow = state === 'declared-only' && elaborable;
   const directed = isSpoke ? meta.directed : (entity.directed !== false);
-  const path = svgEl('path', {
-    d: pathD(pts),
-    'marker-end': directed ? (hollow ? 'url(#bp-arrow-hollow)' : 'url(#bp-arrow)') : null,
-  });
+  const path = svgEl('path', { d: pathD(pts), 'marker-end': directed ? 'url(#bp-arrow)' : null });
   g.appendChild(path);
 
   // a wide invisible path makes the edge easy to hit with the mouse
@@ -1994,8 +2015,14 @@ function drawEdge(app, meta, pts, a, b) {
       ].filter(Boolean).join('\n');
   g.appendChild(svgEl('title', names));
 
-  g.addEventListener('mouseenter', () => g.classList.add('hovered'));
-  g.addEventListener('mouseleave', () => g.classList.remove('hovered'));
+  g.addEventListener('mouseenter', () => {
+    g.classList.add('hovered');
+    focusArrowhead(g, true);
+  });
+  g.addEventListener('mouseleave', () => {
+    g.classList.remove('hovered');
+    focusArrowhead(g, ui.layer.classList.contains('focusing') && g.classList.contains('focus'));
+  });
   g.addEventListener('click', (ev) => {
     ev.stopPropagation();
     if (panSuppressClick) return;
@@ -2042,7 +2069,7 @@ function keepClearOfSheet(id) {
  * The section the reader is in: the innermost open section, when the open
  * sections nest one inside the next, as they do when each was opened from
  * inside the last.  Null with nothing open, or with sections open side by
- * side (Expand all): then there is no one level to be in.
+ * side: then there is no one level to be in.
  */
 export function enteredSection(view) {
   const open = [...view.expanded];
@@ -2161,7 +2188,7 @@ function applyFocus(own) {
   ui.layer.classList.add('focusing');
 }
 
-/** Give a highlighted edge the accent-coloured head of `defs`, or take it back. */
+/** Give a highlighted edge the darker head of `defs`, or take it back. */
 function focusArrowhead(g, on) {
   const p = g.querySelector('path'); // the drawn path; the wide hit path comes after it
   const mk = p && p.getAttribute('marker-end');

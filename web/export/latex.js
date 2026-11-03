@@ -436,6 +436,9 @@ const PREAMBLE = String.raw`\usepackage[T1]{fontenc}
 \newcommand{\bpout}[1]{#1\textsuperscript{\hyperlink{bp-outside}{\ensuremath{\ast}}}}
 \newcommand{\bpbroken}[1]{\textcolor{red!70!black}{[#1?]}}
 \newcommand{\bpslug}[1]{\texttt{#1}}
+% A bibliography entry: label, anchor, entry; the label hangs in the margin.
+\newcommand{\bpbibitem}[3]{\par\setbox0\hbox{[#1]\enspace}\ifdim\wd0<5em\setbox0\hbox to 5em{[#1]\hfil}\fi
+  \hangindent=\wd0 \hangafter=1 \noindent\box0\phantomsection\label{#2}#3\par\smallskip}
 % A character the export knows no way to set.
 \newcommand{\bpglyph}[1]{\fbox{\scriptsize #1}}
 % Images, at their own size unless they are wider than the line.
@@ -503,9 +506,22 @@ export function exportLatex(model, request, options = {}) {
 
   const outside = new Map(); // id -> {ref, entry}
 
+  /** One cited label, linked to its entry when the entry is written out here. */
+  const citeLabel = (id) => {
+    const text = escapeText(M.referenceLabelOf(model, id) || id);
+    return writtenHere(id) || plan.written.has(id) ? `\\hyperref[${labelOf(id)}]{${text}}` : text;
+  };
+  /** A citation: the labels, linked, and the locator's Markdown; `null` when `inner` does not cite. */
+  const cite = (inner) => {
+    const c = M.parseCitation(model, inner);
+    if (!c) return null;
+    return { labels: c.items.map(citeLabel).join(', '), locator: c.locator };
+  };
+
   /** How a reference to `id` reads here, linked when it is written out here. */
   const reference = (slug, before) => {
     const o = model.byId.get(slug);
+    if (M.isReference(o)) return '[' + citeLabel(slug) + ']';
     if (!o) {
       warn('unresolved-reference', `[${slug}] resolves to no object of this blueprint`);
       return `\\bpbroken{${escapeText(slug)}}`;
@@ -557,10 +573,11 @@ export function exportLatex(model, request, options = {}) {
     return `\\begin{center}\n${inner}` + (alt ? `\\par\\smallskip{\\small ${escapeText(alt)}}` : '') + '\n\\end{center}';
   };
   const assets = [];
-  const ctx = { ref: reference, math, image, warn };
+  const ctx = { ref: reference, cite, math, image, warn };
   const body = (o) => {
     current = o.id;
-    const out = o.body && o.body.trim() ? markdownToLatex(o.body, ctx) : '';
+    const src = M.displayBody(o);
+    const out = src && src.trim() ? markdownToLatex(src, ctx) : '';
     return out;
   };
   // Titles go into headings, the contents and the bookmarks: `$…$` there.
@@ -621,6 +638,14 @@ export function exportLatex(model, request, options = {}) {
   const writeNode = (node) => {
     const e = node.entry;
     const o = e.object;
+    if (node.type === 'text' && e.reference) {
+      // A bibliography entry, as `thebibliography` sets one: the label
+      // hanging in the margin, the entry beside it.
+      comment(`reference: ${o.id}`);
+      out.push(`\\bpbibitem{${escapeText(e.label || o.id)}}{${labelOf(o.id)}}{${body(o)}}`);
+      out.push('');
+      return;
+    }
     if (node.type === 'text') {
       comment(`text: ${o.id}`);
       out.push(`\\phantomsection\\label{${labelOf(o.id)}}%`);

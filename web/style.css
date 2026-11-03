@@ -34,6 +34,9 @@
   --graph-edge: #7b848d;
   --graph-junction: #55606a;
   --graph-hl: #f0a202;
+  /* A highlighted arc: its own grey, darkened (toward the text colour, so
+     lighter on a dark background), at the same width. */
+  --graph-edge-strong: color-mix(in srgb, var(--graph-edge) 40%, var(--fg));
 
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
           "Liberation Mono", monospace;
@@ -155,13 +158,13 @@ label.chk input { margin: 0; }
 /* ----------------------------------------------------------------- topbar */
 
 /* Two rows: the title, the tabs and, at the right, the style menu and Show
-   progress; then the search and Export PDF (index.html).  On the graph the
-   second row is the graph's own toolbar instead, set as this one is (below,
-   `html[data-view="graph"]`).  Every row wraps rather than overlaps, so a
-   long title, a narrow window or text made larger (Ctrl +) moves things down
-   instead of covering the title: the style menu and Show progress go under
-   the tabs as a whole, the tabs under the title, the title itself onto a
-   second line.
+   progress; then the search and Export PDF, at the right too (index.html).
+   On the graph the second row is the graph's own toolbar instead, set as this
+   one is (below, `html[data-view="graph"]`).  Every row wraps rather than
+   overlaps, so a long title, a narrow window or text made larger (Ctrl +)
+   moves things down instead of covering the title: the style menu and Show
+   progress go under the tabs as a whole, the tabs under the title, the title
+   itself onto a second line.
    Fixed to the top of the window, however far the page is scrolled; the
    body makes room for it (`padding-top`, below).  Sticky would not do: it
    sticks only within the body, which is one window tall (the graph fills
@@ -189,9 +192,14 @@ label.chk input { margin: 0; }
   padding: .35rem 0;
 }
 
+/* The search box and Export PDF, at the right, under the style menu and Show
+   progress, one height and one size of text (a style may set the text). */
 .topbar-tools {
+  --tools-h: 2rem;
+  --tools-font: .88rem;
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: .4rem .6rem;
   min-width: 0;
@@ -280,8 +288,9 @@ html[data-view="graph"] .topbar { border-bottom: 0; }
   align-items: center;
   gap: .4em;
   flex: none;
-  padding: .38em .8em;
-  font-size: .86rem;
+  height: var(--tools-h);
+  padding: 0 .8em;
+  font-size: var(--tools-font);
   font-weight: 600;
   white-space: nowrap;
   color: var(--accent-fg);
@@ -297,7 +306,7 @@ html[data-view="graph"] .topbar { border-bottom: 0; }
 .export-pdf:disabled { opacity: .55; }
 .export-icon { flex: none; }
 
-/* The search box opens the second row: the Stacks project's quick search, a
+/* The search box, before Export PDF: the Stacks project's quick search, a
    magnifier inside the box and no list under it; Enter opens the search page
    (search.js). */
 .gsearch {
@@ -306,7 +315,13 @@ html[data-view="graph"] .topbar { border-bottom: 0; }
   min-width: 9rem;
   margin: 0;
 }
-.gsearch input[type="search"] { width: 100%; padding-left: 1.9em; padding-right: 1.8em; font-size: .88rem; }
+.gsearch input[type="search"] {
+  width: 100%;
+  height: var(--tools-h);
+  padding-left: 1.9em;
+  padding-right: 1.8em;
+  font-size: var(--tools-font);
+}
 .gsearch-icon {
   position: absolute;
   left: .6em;
@@ -659,10 +674,11 @@ table.grid tr:last-child td { border-bottom: 0; }
     var(--panel);
   border-bottom: 1px solid var(--border);
 }
-/* The padding of Export PDF, so the row is as tall as the top bar's own. */
-.toolbar button { color: var(--muted); padding: .38em .8em; }
+/* The height of the top bar's search box and Export PDF, so the row is as
+   tall as the top bar's own. */
+.toolbar button { color: var(--muted); height: 2rem; padding: 0 .8em; }
 .toolbar button:hover { color: var(--fg); }
-.toolbar input[type="search"] { font-size: .88rem; }
+.toolbar input[type="search"] { font-size: .88rem; height: 2rem; }
 .toolbar .group { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
 .toolbar .group > .lbl { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 .toolbar .sep { width: 1px; align-self: stretch; background: var(--border); }
@@ -725,6 +741,10 @@ table.grid tr:last-child td { border-bottom: 0; }
   border-radius: 4px;
   pointer-events: none;
 }
+
+/* Hidden unless the reader shows the statistics (graph.js, `statsToggle`),
+   but never while a layout runs: then it says how much is being laid out. */
+.graph-stage.stats-hidden:not(.laying-out) .graph-status { display: none; }
 
 /* Layout gave up: said in the pane itself, not only in the status line. */
 .graph-error {
@@ -811,13 +831,14 @@ table.grid tr:last-child td { border-bottom: 0; }
 .gedge path {
   fill: none;
   stroke: var(--graph-edge);
-  stroke-width: 1.6;
+  stroke-width: 1.3;
 }
 .gedge.state-derived-only path { stroke-dasharray: 5 4; }
+.gedge.unwitnessed path { stroke-dasharray: 3 2; }
 .gedge.kind-refines path { stroke-dasharray: 2 3; }
 .gedge.dim { opacity: .18; }
 .gedge .elabel { fill: var(--muted); font-size: 9.5px; pointer-events: none; }
-.gedge.hover path, .gedge.selected path { stroke: var(--accent); stroke-width: 2.6; }
+.gedge.hover path, .gedge.selected path { stroke: var(--graph-edge-strong); }
 
 .glayer { transition: transform .28s cubic-bezier(.3, .7, .3, 1); }
 .glayer.no-anim { transition: none; }
@@ -1547,14 +1568,13 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .gnode.junction .shape { fill: var(--graph-junction); stroke: var(--bg); stroke-width: 2; }
 .gnode.junction.selected .shape { fill: var(--accent); stroke: var(--accent); }
 
-.arrowhead { fill: var(--graph-edge); stroke: none; }
-.arrowhead.hollow { fill: var(--bg); stroke: var(--graph-edge); stroke-width: 1.4; }
+.arrowhead { fill: none; stroke: var(--graph-edge); stroke-linecap: round; stroke-linejoin: round; }
 
 .gedge .hit { stroke: transparent; stroke-width: 12; fill: none; cursor: pointer; }
 .gtitle .title-hit { fill: transparent; cursor: pointer; }
-.gedge.hovered path:not(.hit) { stroke: var(--accent); stroke-width: 2.4; }
+.gedge.hovered path:not(.hit) { stroke: var(--graph-edge-strong); }
 .gedge.synthetic path:not(.hit) { opacity: .8; }
-.gedge.spoke path:not(.hit) { stroke-width: 1.3; }
+.gedge.spoke path:not(.hit) { stroke-width: 1.1; }
 .edges.fade-in { opacity: 0; }
 .edges { transition: opacity .25s ease; }
 
@@ -1563,12 +1583,11 @@ a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .glayer.focusing .gnode:not(.focus) { opacity: .28; }
 .glayer.focusing .gnode.compound:not(.focus) { opacity: .45; }
 .glayer.focusing .gedge:not(.focus) { opacity: .12; }
-.glayer.focusing .gedge.focus path:not(.hit) { stroke: var(--accent); stroke-width: 2.4; }
-.glayer.focusing .gedge.focus .elabel { fill: var(--accent); font-weight: 600; }
+.glayer.focusing .gedge.focus path:not(.hit) { stroke: var(--graph-edge-strong); }
+.glayer.focusing .gedge.focus .elabel { fill: var(--graph-edge-strong); font-weight: 600; }
 .glayer.focusing .gnode.selected:not(.compound) .shape { stroke-width: 3.2; }
 .glayer.focusing .gnode.selected .label { font-weight: 700; }
-.arrowhead.focus { fill: var(--accent); }
-.arrowhead.hollow.focus { fill: var(--bg); stroke: var(--accent); }
+.arrowhead.focus { stroke: var(--graph-edge-strong); }
 
 .legend .sw.status-none { color: var(--border-strong); background: var(--graph-node); }
 .legend .sw.status-absent { color: var(--st-absent); background: color-mix(in srgb, var(--st-absent) 25%, transparent); }
@@ -1640,6 +1659,14 @@ label.chk.st-chip.status-proved_with_axioms { border-color: var(--st-proved_with
 .doc-entry.is-section .prose { margin-top: .6rem; }
 .doc-entry.is-text { margin: 1.1rem 0; }
 .doc-entry.is-text > .prose { margin-top: 0; }
+/* A bibliography entry, as a paper sets one: the label in a column of its
+   own, the entry beside it, consecutive entries close together. */
+.doc-entry.is-reference { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: .8em; margin: .35rem 0; }
+.doc-entry.is-reference > .bib-label { min-width: 4.5em; font-variant-numeric: tabular-nums; }
+.doc-entry.is-reference > .bib-text > p { margin: 0; }
+.doc-entry.is-reference > .bib-text > p + p { margin-top: .35em; }
+.cite > a.cite-label { white-space: nowrap; text-decoration: none; }
+.cite > a.cite-label:hover { text-decoration: underline; }
 /* A grid track sized 1fr still has min-width:auto, so one wide formula or an
    unbreakable token pushes the prose column past the viewport. */
 .doc-layout > * { min-width: 0; }

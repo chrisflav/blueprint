@@ -170,13 +170,13 @@ else
   bad "an unknown arrow is rejected"; cat "$TMP/arrow.check"
 fi
 
-head_ "kinds: the graph display hint, appendix and hidden"
-if [ "$(grep -c '"graph"' "$TMP/induction.json")" = 2 ] \
-   && grep -q '"graph": "optional"' "$TMP/induction.json" \
-   && grep -q '"graph": "never"' "$TMP/induction.json"; then
-  ok "only appendix and hidden carry a graph hint, optional and never"
+head_ "kinds: the graph display hint, appendix, hidden and reference"
+if [ "$(grep -c '"graph"' "$TMP/induction.json")" = 3 ] \
+   && [ "$(grep -c '"graph": "optional"' "$TMP/induction.json")" = 1 ] \
+   && [ "$(grep -c '"graph": "never"' "$TMP/induction.json")" = 2 ]; then
+  ok "only appendix, hidden and reference carry a graph hint, optional and never"
 else
-  bad "only appendix and hidden carry a graph hint, optional and never"
+  bad "only appendix, hidden and reference carry a graph hint, optional and never"
 fi
 cp -r examples/minimal "$TMP/graph"
 mkdir -p "$TMP/graph/blueprint/appendix"
@@ -194,7 +194,7 @@ fi
 wants "$TMP/graph.json" '"id": "refines/detail/appendix"' '"kind": "hidden"'
 printf '\n[kinds.remark]\ngraph = "never"\n' >> "$TMP/graph/blueprint.toml"
 if "$BP" build --root "$TMP/graph" -o "$TMP/graph.json" > /dev/null 2>&1 \
-   && [ "$(grep -c '"graph"' "$TMP/graph.json")" = 3 ]; then
+   && [ "$(grep -c '"graph"' "$TMP/graph.json")" = 4 ]; then
   ok "blueprint.toml can keep another kind out of the graph"
 else
   bad "blueprint.toml can keep another kind out of the graph"

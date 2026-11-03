@@ -25,6 +25,17 @@ how the website shows an object, not about what the object is.
 of the document (and out of the PDF); `true`, `false`, `"yes"` or `"no"`. -/
 def universalAttrs : Array String := #["hide_content"]
 
+/-- The fields of a bibliography entry, as BibTeX names them, beside the
+attributes every node permits.  `author` and `editor` are a list of names
+(or one name); `label` overrides the alphabetic label (`[SGA4]`), and `type`
+the kind of publication, which is otherwise read off the fields. -/
+def referenceAttrs : Array String :=
+  defaultNodeAttrs ++ #["author", "editor", "year", "journal", "booktitle", "series",
+    "volume", "number", "pages", "chapter", "edition", "publisher", "address",
+    "institution", "school", "organization", "howpublished", "note", "month", "url", "doi",
+    "eprint", "archivePrefix", "primaryClass", "isbn", "issn", "key", "keywords", "abstract",
+    "language", "label", "type"]
+
 /-- Cardinality "exactly one". -/
 def cardOne : Cardinality := { min := 1, max := some 1 }
 
@@ -74,6 +85,9 @@ def defaultSchema : Schema where
       mkNodeKind "remark" false "#999",
       -- an open question, asked in passing as a remark is made
       mkNodeKind "question" false "#a98",
+      -- a bibliography entry: cited as `[id]`, set as a paper sets its
+      -- references, never drawn in the graph
+      { mkNodeKind "reference" false "#b98" (graph := "never") with attrs := referenceAttrs },
       -- `src` uses `tgt`, drawn from the dependency to its user
       mkBinaryKind "uses" (color := some "#666") (arrow := "reverse"),
       mkBinaryKind "refines" (constraints := #["acyclic"]) (collapse := true)

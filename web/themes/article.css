@@ -220,7 +220,7 @@ details.panel > summary > h3 { font-size: 1.1rem; }
 .gnode.status-none .shape { stroke: var(--fg); }
 .gnode.compound > .shape { fill: var(--graph-compound); stroke: var(--border-strong); stroke-dasharray: 3 3; }
 .gnode.selected .shape { stroke: var(--accent); stroke-width: 2; }
-.gedge path { stroke-width: 1.1; }
+.gedge path { stroke-width: .9; }
 
 /* -------------------------------------------------------------- progress */
 

@@ -162,10 +162,13 @@ function setKatexMacros(project) {
 }
 
 const SKIP_TAGS = new Set(['CODE', 'PRE', 'A', 'SCRIPT', 'STYLE', 'TEXTAREA']);
-const SLUG_RE = new RegExp(model.SLUG_PATTERN, 'g');
+// A `[slug]` reference, or a citation with more than one part (`[a, b]`,
+// `[a, locator]`): group 1 is the slug, group 2 what a citation brackets.
+const LINK_PATTERN = model.SLUG_PATTERN + '|' + model.CITE_PATTERN;
+const SLUG_RE = new RegExp(LINK_PATTERN, 'g');
 // A separate non-global copy: `test` on a /g/ regex advances lastIndex and
 // would then miss matches in the next string it is asked about.
-const SLUG_TEST = new RegExp(model.SLUG_PATTERN);
+const SLUG_TEST = new RegExp(LINK_PATTERN);
 
 /**
  * Render a markdown body into `target`:
@@ -188,7 +191,10 @@ export function renderBody(target, text, known, refs, { untrusted = false } = {}
   if (window.marked && typeof window.marked.parse === 'function') {
     try {
       const { text, restore } = shieldMath(src);
-      const html = restore(window.marked.parse(text, { gfm: true, breaks: false }));
+      // Citations become links before marked runs, so that a locator with
+      // maths or emphasis ("[del74, Thm. $x$]") is still one citation.
+      const cited = untrusted ? text : markCitations(text, refs === undefined ? pageReferences : refs);
+      const html = restore(window.marked.parse(cited, { gfm: true, breaks: false }));
       if (untrusted) setSanitizedHtml(target, html);
       else target.innerHTML = html;
     } catch (e) {
@@ -256,17 +262,17 @@ function setSanitizedHtml(target, html) {
 
 // A body's `## Proof` heading and everything after it, up to the next heading
 // of the same level or above, becomes a disclosure: the heading is its
-// summary, so a click on "Proof." folds or unfolds that one proof.  Whether
-// proofs start folded is the reader's choice, kept in localStorage and offered
-// by `proofToggle` on the pages that show proofs.
+// summary, so a click on "Proof." folds or unfolds that one proof.  Proofs
+// start folded unless the reader has chosen otherwise, a choice kept in
+// localStorage and offered by `proofToggle` on the pages that show proofs.
 const PROOFS_KEY = 'blueprint.proofs';
 let proofsFolded = readProofsFolded();
 
 function readProofsFolded() {
   try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(PROOFS_KEY) === 'folded';
+    return typeof localStorage === 'undefined' || localStorage.getItem(PROOFS_KEY) !== 'shown';
   } catch (e) {
-    return false;
+    return true;
   }
 }
 
@@ -277,7 +283,7 @@ function isProofHeading(node) {
 
 /**
  * A proof as a disclosure: `head` is its summary, `body` what folds away, an
- * end mark closes it.  Open or folded as the reader last chose.  The one shape
+ * end mark closes it.  Folded, unless the reader has chosen to show proofs.  The one shape
  * for a proof object (`DESIGN.md` §2.5) and for a `## Proof` section still in
  * a body.
  */
@@ -383,6 +389,20 @@ function documentLevelHref(outline, kind, id) {
 }
 
 /**
+ * The document's page where `id` is the head (`documentPageOf`), which the
+ * contents lead to: chapter 2 to the page of 2 with 2.1, 2.2, …, at its top.
+ * Something with nothing under it heads no page and is read among its
+ * siblings, scrolled to.  null when the document leaves it out.
+ */
+function documentPageHref(outline, kind, id) {
+  const page = model.documentPageOf(outline, id);
+  if (page === undefined) return null;
+  const q = new URLSearchParams({ collapse: kind });
+  if (page !== id) q.set('focus', id);
+  return buildHash('document', page, q);
+}
+
+/**
  * Markdown and TeX disagree about `_`, `*`, `\` and blank lines: marked turns
  * `\varpi_E^n` into emphasis and a display formula into two paragraphs
  * before KaTeX ever sees them.  So every maths span is lifted out first and
@@ -481,6 +501,69 @@ export function renderMath(root) {
  * `refs` every link text is the slug.  Explicit link text, `[text](…)`, is
  * markdown's and never reaches this pass.
  */
+/**
+ * The citations with more than one part in Markdown source (`[a, b]`, `[a,
+ * locator]`; maths already shielded), as HTML marked passes through: the
+ * labels linked as `citationNode` links them, the locator left as Markdown
+ * for marked to read.  Code spans are left alone, and so are brackets whose
+ * first part names no reference.
+ */
+const CITE_SOURCE_RE = new RegExp(model.CITE_PATTERN, 'g');
+// What is code in Markdown, never a citation: fenced blocks (``` or ~~~),
+// lines indented as code (four spaces or a tab; a list's continuation lines
+// too, where a plain citation is still linked in the text afterwards), and
+// code spans of any number of backticks.
+const CODE_SOURCE_RE = /((?:^|\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n\2[^\n]*|$)|(?:^|\n)(?: {4}|\t)[^\n]*|(`+)[\s\S]*?\3)/g;
+function markCitations(text, refs) {
+  const m0 = app.model;
+  if (!m0) return text;
+  const out = [];
+  let last = 0;
+  const cite = (chunk) => chunk.replace(CITE_SOURCE_RE, (whole, inner, at, all) => {
+    // Not in a link's text, `[see [a, x]](url)`, nor inside an HTML tag.
+    if (all.startsWith('](', at + whole.length)) return whole;
+    if (all.lastIndexOf('<', at) > all.lastIndexOf('>', at)) return whole;
+    const c = model.parseCitation(m0, inner);
+    if (!c) return whole;
+    const links = c.items.map((id) => {
+      const ref = refs ? refs(id) : null;
+      const href = (ref && ref.href) || objectHref(id);
+      return `<a class="objlink ref cite-label" href="${escapeHtml(href)}" title="${escapeHtml(id)}" data-ref="${escapeHtml(id)}">` +
+        escapeHtml(model.referenceLabelOf(m0, id) || id) + '</a>';
+    });
+    return '<span class="cite">&#91;' + links.join(', ') + (c.locator ? ', ' + c.locator : '') + '&#93;</span>';
+  });
+  for (const m of text.matchAll(CODE_SOURCE_RE)) {
+    out.push(cite(text.slice(last, m.index)), m[0]);
+    last = m.index + m[0].length;
+  }
+  out.push(cite(text.slice(last)));
+  return out.join('');
+}
+
+/**
+ * A citation as a paper sets it: "[Del74]", "[Del74, Del80]", "[SGA4, Exp. X,
+ * Cor. 4.3]", each label a link to its entry in the bibliography (or to its
+ * page, when the document does not show it), with a preview on hover.
+ */
+function citationNode(ids, locator, refs) {
+  const span = el('span.cite');
+  span.appendChild(document.createTextNode('['));
+  ids.forEach((id, i) => {
+    if (i) span.appendChild(document.createTextNode(', '));
+    const ref = refs ? refs(id) : null;
+    span.appendChild(el('a', {
+      class: 'objlink ref cite-label',
+      href: (ref && ref.href) || objectHref(id),
+      title: id,
+      'data-ref': id,
+    }, (app.model && model.referenceLabelOf(app.model, id)) || id));
+  });
+  if (locator) span.appendChild(document.createTextNode(', ' + locator));
+  span.appendChild(document.createTextNode(']'));
+  return span;
+}
+
 export function linkifySlugs(root, known, refs) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -505,8 +588,25 @@ export function linkifySlugs(root, known, refs) {
     SLUG_RE.lastIndex = 0;
     let m;
     while ((m = SLUG_RE.exec(text)) !== null) {
-      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      if (m[2] !== undefined) {
+        // `[a, b]` or `[a, locator]`: a citation when `a` names a reference,
+        // and otherwise prose, left as it is.
+        const cite = app.model ? model.parseCitation(app.model, m[2]) : null;
+        if (!cite) continue;
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        frag.appendChild(citationNode(cite.items, cite.locator, refs));
+        last = m.index + m[0].length;
+        continue;
+      }
       const slug = m[1];
+      const target = app.model && app.model.byId.get(slug);
+      if (model.isReference(target)) {
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        frag.appendChild(citationNode([slug], '', refs));
+        last = m.index + m[0].length;
+        continue;
+      }
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
       const ok = !known || known.has(slug);
       const ref = ok && refs ? refs(slug) : null;
       // "Lemma [x]" and "Thm [x]" already have their word.
@@ -653,6 +753,7 @@ const app = {
   /** How a reference to `id` reads here: {word, number, href}, or null. */
   referenceFor: pageReferences,
   documentLevelHref,
+  documentPageHref,
   introButton,
   /**
    * SHA-256 of the bytes of the snapshot on screen (a Promise), which its
@@ -756,12 +857,16 @@ function fetchSnapshot(url) {
   return fetch(url, { cache: 'no-cache' });
 }
 
-async function loadInto(url, { sha = null, keepBase = false, entry = null } = {}) {
+async function loadInto(url, { sha = null, keepBase = false, entry = null, before = null } = {}) {
   // The bytes, not just the JSON: the PDF export finds what was prepared for
   // this snapshot by their hash.
   const res = await fetchSnapshot(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
+  const buffer = await res.arrayBuffer();
+  // What follows keeps the page busy, for a second or more with a large
+  // snapshot: not while the intro's title is still playing (`before`).
+  if (before) await before;
+  const bytes = new Uint8Array(buffer);
   const snapshot = JSON.parse(new TextDecoder('utf-8').decode(bytes));
   if (!snapshot || !Array.isArray(snapshot.objects)) {
     throw new Error(`${url} is not a blueprint snapshot (no "objects" array)`);
@@ -1239,13 +1344,20 @@ async function boot() {
   let intro = null;
   const early = earlyIntro().then(async (project) => {
     if (!project) return;
-    await proseReady();
+    // Markdown wants marked; a title in HTML, an animated SVG, plays without.
+    if (!/^\s*</.test(project.intro.body)) await proseReady();
     if (!app.model && wantsIntro(project, parseHash(), location.search)) {
       intro = showIntro(app, { project });
     }
   });
+  // The snapshot is asked for once the intro has started, or is known to be
+  // none (index.html, `blueprintSnapshotGo`).
+  early.finally(() => { if (window.blueprintSnapshotGo) window.blueprintSnapshotGo(); });
+  // Reading the snapshot waits for a moving title to have played (`held` in
+  // intro.js); downloading it does not.
+  const titlePlayed = early.then(() => (intro && intro.held ? intro.held() : null)).catch(() => null);
   try {
-    await loadInto(url);
+    await loadInto(url, { before: titlePlayed });
   } catch (err) {
     await early;
     if (intro) intro.leave();

@@ -197,6 +197,7 @@ await check('a proof is set after its statement, with no number of its own', asy
   eq(proofs[0].getAttribute('id'), 'doc-proof_thm-heine-borel', 'its anchor');
   eq(proofs[0].querySelector('.proof-word').textContent, 'Proof.', 'the lead word');
   eq(proofs[0].querySelector('.proof-end').textContent, '\u220e', 'the end mark');
+  ok(!proofs[0].hasAttribute('open'), 'folded by default');
   await go('#/object/' + encodeURIComponent('proof/thm-heine-borel'));
   eq(root.querySelectorAll('.error-box').length, 0, 'the proof has an object page');
 });
@@ -670,12 +671,14 @@ await check('the contents page: the top level, a triangle unfolding each entry, 
   // A row's own parts, not those of the rows below it.
   const own = (li, sel) => li.children[0].querySelector(sel);
   const subOf = (li) => li.children.find((c) => c.tagName === 'OL') || null;
-  const focusOf = (href) => new URLSearchParams(href.slice(href.indexOf('?') + 1)).get('focus');
-  const row = (id) => rows().find((li) => focusOf(own(li, 'a.contents-link').getAttribute('href')) === id);
+  // What a row leads to: the entry scrolled to, or the page it heads.
+  const targetOf = (href) => new URLSearchParams(href.slice(href.indexOf('?') + 1)).get('focus') ||
+    decodeURIComponent((/^#\/document\/([^?]+)/.exec(href) || [])[1] || '');
+  const row = (id) => rows().find((li) => targetOf(own(li, 'a.contents-link').getAttribute('href')) === id);
   const listed = out.roots.filter((e) => !e.text);
   eq(tree.children.length, listed.length, 'a row per top-level entry, folded');
-  // Every row leads to its place in the document: its level, scrolled to it.
-  ok(hrefs('.contents-tree a').includes('#/document?collapse=refines&focus=sec-main'), 'a chapter leads to the top level');
+  // Every row leads to the page it heads: a chapter to its own page.
+  ok(hrefs('.contents-tree a').includes('#/document/sec-main?collapse=refines'), 'a chapter leads to its own page');
   const main = row('sec-main');
   const toggle = () => own(row('sec-main'), 'button.contents-toggle');
   ok(toggle(), 'a triangle beside an entry with entries below it');
@@ -689,10 +692,11 @@ await check('the contents page: the top level, a triangle unfolding each entry, 
   const sub = subOf(row('sec-main'));
   const kids = out.byId.get('sec-main').children.filter((c) => !c.text);
   eq(sub.children.length, kids.length, 'a row per entry below it');
-  // A statement below it leads to the page of its level, scrolled to it.
+  // A section below it leads to its own page; a statement, which heads no
+  // page, to the page it is read on, scrolled to it.
   const section = kids.find((c) => c.children.length);
-  ok(hrefs('.contents-tree a').includes('#/document/sec-main?collapse=refines&focus=' + encodeURIComponent(section.id)),
-    'a section below it leads to the chapter page');
+  ok(hrefs('.contents-tree a').includes('#/document/' + encodeURIComponent(section.id) + '?collapse=refines'),
+    'a section below it leads to its own page');
   const deeper = own(row(section.id), 'button.contents-toggle');
   fire(deeper, 'click');
   const stmt = section.children.find((c) => !c.text);
@@ -716,7 +720,7 @@ await check('depth=1 on the top page writes out the top level, one level deep', 
   eq(root.querySelectorAll('.doc-entry').length, out.roots.length, 'one entry per top-level object');
   ok(entryIds().includes('doc-sec-main'), 'a chapter is on it');
   ok(!entryIds().includes('doc-thm-tychonoff'), 'its contents are not');
-  // Each chapter leads on to its own page by a "Read" link in its head.
+  // Each chapter leads on to its own page by a "Show details" link in its head.
   ok(hrefs('.doc-entry .head a.doc-open').includes('#/document/sec-main?collapse=refines'), 'a link to the chapter page');
   // Its heading is one link, to its level: the top level, this page.
   const head = root.querySelector('#doc-sec-main .head');
@@ -774,7 +778,7 @@ await check('hide_content takes an entry off its parent\'s page, and leads every
     ok(!entryIds().includes('doc-sec-main'), 'chapter 2 is still on the top page');
     ok(entryIds().includes('doc-sec-foundations') && entryIds().includes('doc-sec-applications'), 'the other chapters are');
     ok(root.querySelector('nav.toc a[data-id="sec-main"]'), 'the sidebar no longer lists it');
-    eq(root.querySelector('nav.toc a[data-id="sec-main"]').getAttribute('href'), '#/document/sec-main?collapse=refines&focus=sec-main',
+    eq(root.querySelector('nav.toc a[data-id="sec-main"]').getAttribute('href'), '#/document/sec-main?collapse=refines',
       'the sidebar leads to its own page');
     await go('#/document?depth=2');
     ok(!entryIds().includes('doc-sec-main') && entryIds().includes('doc-sec-main-induction'), 'two levels: its children stay');
@@ -785,9 +789,8 @@ await check('hide_content takes an entry off its parent\'s page, and leads every
     await go('#/document?focus=sec-main');
     eq(location.hash, '#/document/sec-main?collapse=refines&focus=sec-main', 'a focus on it goes to its own page');
     await go('#/contents?collapse=refines');
-    const link = root.querySelectorAll('a.contents-link').find((a) => /focus=sec-main$/.test(a.getAttribute('href')));
-    ok(link, 'it left the contents');
-    eq(link.getAttribute('href'), '#/document/sec-main?collapse=refines&focus=sec-main', 'its row leads to its own page');
+    const link = root.querySelectorAll('a.contents-link').find((a) => a.getAttribute('href') === '#/document/sec-main?collapse=refines');
+    ok(link, 'it left the contents, or its row does not lead to its own page');
     ok(/^2(?![.\d])/.test(link.textContent.trim()), `with its number: ${JSON.stringify(link.textContent)}`);
   } finally {
     o.attrs = before;
@@ -808,19 +811,19 @@ await check('a chapter page: breadcrumbs, its entries, its siblings', async () =
   eq(app.route.id, 'sec-main', 'routed');
   eq(entryIds().join(' '), 'doc-sec-main doc-sec-main-induction doc-thm-tychonoff', 'the page and one level below');
   eq(root.querySelectorAll('.doc-entry.page-head .head h1').length, 1, 'the page entry is the title');
-  // Every heading leads to its level, whatever page it is on: the chapter's
-  // own title to the top level, a section to this page.
+  // Every heading stays on the page it is on, scrolled to itself: the
+  // chapter's own title too.
   const level = (id) => root.querySelector('#doc-' + id + ' .head a.doc-title').getAttribute('href');
-  eq(level('sec-main'), '#/document?collapse=refines&focus=sec-main', 'the page title leads up to the chapters');
-  eq(level('sec-main-induction'), '#/document/sec-main?collapse=refines&focus=sec-main-induction', 'a section to the sections');
+  eq(level('sec-main'), '#/document/sec-main?collapse=refines&focus=sec-main', 'the page title stays on its page');
+  eq(level('sec-main-induction'), '#/document/sec-main?collapse=refines&focus=sec-main-induction', 'a section too');
   await go('#/document/sec-main-induction');
   eq(level('lem-finite-subcover'), '#/document/sec-main-induction?collapse=refines&focus=lem-finite-subcover',
-    'a lemma to the statements of its section');
-  eq(level('sec-main-induction'), '#/document/sec-main?collapse=refines&focus=sec-main-induction',
-    'and the section, on its own page, to the sections');
+    'a lemma on its section\'s page');
+  eq(level('sec-main-induction'), '#/document/sec-main-induction?collapse=refines&focus=sec-main-induction',
+    'and the section, on its own page');
   await go('#/document/sec-main?depth=2');
-  eq(level('lem-finite-subcover'), '#/document/sec-main-induction?collapse=refines&depth=2&focus=lem-finite-subcover',
-    'a lemma written out deeper still leads to its own level');
+  eq(level('lem-finite-subcover'), '#/document/sec-main?collapse=refines&depth=2&focus=lem-finite-subcover',
+    'a lemma written out deeper stays on this page');
   await go('#/document/sec-main');
   ok(hrefs('.doc-crumbs a').includes('#/document?collapse=refines'), 'breadcrumbs lead to the top');
   eq(root.querySelectorAll('.doc-pager').length, 2, 'neighbours above and below');
@@ -828,6 +831,29 @@ await check('a chapter page: breadcrumbs, its entries, its siblings', async () =
   eq(pager.querySelectorAll('a.prev')[0].getAttribute('href'), '#/document/sec-foundations?collapse=refines', 'previous chapter');
   eq(pager.querySelectorAll('a.next')[0].getAttribute('href'), '#/document/sec-applications?collapse=refines', 'next chapter');
   eq(pager.querySelectorAll('a.up')[0].getAttribute('href'), '#/document?collapse=refines', 'up to the top');
+});
+
+await check('a click on any title stays on the page, scrolled to it', async () => {
+  const click = (a) => fire(root.querySelector('.doc-flow'), 'click', { target: a, button: 0 });
+  const title = (sel) => root.querySelector(sel + ' .head a.doc-title');
+  await go('#/document/sec-main');
+  for (const id of ['sec-main-induction', 'thm-tychonoff', 'sec-main']) {
+    const ev = click(title('#doc-' + id));
+    ok(ev.defaultPrevented, `${id}: the click left the page`);
+    eq(app.route.id, 'sec-main', `${id}: still the chapter's page`);
+    eq(hashParams().get('focus'), id, `${id}: the link says where`);
+  }
+  // A repeated entry's title stays too, on its repeat.
+  await go('#/document/sec-applications');
+  const dup = root.querySelector('section.doc-entry.dup');
+  ok(dup, 'no repeated entry on the page');
+  const ev = click(dup.querySelector('.head a.doc-title'));
+  ok(ev.defaultPrevented, 'the repeated entry\'s title left the page');
+  eq(app.route.id, 'sec-applications', 'still its page');
+  // A ctrl-click opens this page at it in a new tab.
+  await go('#/document/sec-main');
+  ok(!fire(root.querySelector('.doc-flow'), 'click', { target: title('#doc-thm-tychonoff'), button: 0, ctrlKey: true }).defaultPrevented,
+    'a ctrl-click is the browser\'s');
 });
 
 await check('the sidebar lists the level the page writes out, the entry gone to opened', async () => {
@@ -840,44 +866,41 @@ await check('the sidebar lists the level the page writes out, the entry gone to 
   const opened = () => entries().filter((li) => li.classList.contains('open')).map(id);
   const out = modelMod.documentOutline(app.model, 'refines');
   const chapters = out.roots.filter((e) => !e.text && !e.duplicate).map((e) => e.id).join(' ');
-  // A chapter from the contents: the page is the chapters, the sidebar the
+  // A chapter from a reference: the page is the chapters, the sidebar the
   // chapters with this one opened on its sections.
   await go('#/document?collapse=refines&focus=sec-main');
   eq(ups().length, 0, 'no chain at the top level');
   eq(entries().filter((li) => !li.parentNode.parentNode.classList.contains('open')).map(id).join(' '), chapters, 'the chapters');
   eq(opened().join(' '), 'sec-main', 'the chapter gone to opened');
   ok(link('sec-main-induction') && link('thm-tychonoff'), 'on its entries');
-  // Another chapter, on this page: scrolled to and opened, the link saying so.
+  // Every entry leads to the page it heads, as the contents do: another
+  // chapter to its own page, even from the page that writes it out.
+  eq(link('sec-foundations').getAttribute('href'), '#/document/sec-foundations?collapse=refines', 'a chapter leads to its page');
   let ev = fire(link('sec-foundations'), 'click');
-  ok(ev.defaultPrevented, 'an entry of this level is scrolled to, not routed to');
-  eq(opened().join(' '), 'sec-foundations', 'and opened instead');
-  ok(/focus=sec-foundations/.test(global.location.hash), 'the link says so');
-  // Clicked again, it folds, and the page stays.
-  const unfolded = entries().length;
-  ev = fire(link('sec-foundations'), 'click');
-  ok(ev.defaultPrevented, 'folding does not route');
-  eq(opened().length, 0, 'nothing opened');
-  ok(entries().length < unfolded, 'its entries folded away');
-  ok(!/focus=/.test(global.location.hash), 'nor in the link');
-  fire(link('sec-foundations'), 'click');
-  eq(opened().join(' '), 'sec-foundations', 'and a third click opens it again');
-  eq(entries().length, unfolded, 'with its entries back');
-  // A section leads to its level: its chapter's page.
-  fire(link('sec-foundations'), 'click');
-  eq(link('sec-main').getAttribute('href'), '#/document?collapse=refines&focus=sec-main', 'a chapter leads to the top level');
-  fire(link('sec-main'), 'click');
-  eq(link('sec-main-induction').getAttribute('href'), '#/document/sec-main?collapse=refines&focus=sec-main-induction',
-    'a section leads to its chapter\'s page');
+  ok(!ev.defaultPrevented, 'and is followed, not scrolled to');
+  eq(link('sec-main-induction').getAttribute('href'), '#/document/sec-main-induction?collapse=refines',
+    'a section leads to its own page');
   ev = fire(link('sec-main-induction'), 'click');
   ok(!ev.defaultPrevented, 'which is another page: followed');
+  // On the chapter's page: a statement, which heads no page, is scrolled to
+  // and opened; the page's own entry scrolls to the top.
+  await go('#/document/sec-main');
+  eq(link('thm-tychonoff').getAttribute('href'), '#/document/sec-main?collapse=refines&focus=thm-tychonoff',
+    'a statement leads to the page it is read on');
+  ev = fire(link('thm-tychonoff'), 'click');
+  ok(ev.defaultPrevented, 'a statement on this page is scrolled to, not routed to');
+  eq(opened().join(' '), 'thm-tychonoff', 'and opened');
+  ok(/focus=thm-tychonoff/.test(global.location.hash), 'the link says so');
+  ev = fire(link('sec-main'), 'click');
+  ok(ev.defaultPrevented, 'the page\'s own entry scrolls, it does not route');
   await go('#/document/sec-main?collapse=refines&focus=sec-main-induction');
   eq(entryIds().join(' '), 'doc-sec-main doc-sec-main-induction doc-thm-tychonoff', 'the page writes out the sections');
   eq(ups().join(' '), 'sec-main', 'the sidebar: the chapter as a heading');
   eq(opened().join(' '), 'sec-main-induction', 'over the section gone to, opened');
   ok(link('lem-finite-subcover') && link('thm-tychonoff'), 'on its entries, among its siblings');
   eq(link('sec-foundations'), undefined, 'the other chapters gone');
-  // The chain leads back up: the chapter's level is the top level.
-  eq(link('sec-main').getAttribute('href'), '#/document?collapse=refines&focus=sec-main', 'the heading leads up a level');
+  // The chain leads to the pages its entries head.
+  eq(link('sec-main').getAttribute('href'), '#/document/sec-main?collapse=refines', 'the heading leads to its page');
   // A page reached otherwise lists its own entries under its chain.
   await go('#/document/sec-main-induction');
   eq(ups().join(' '), 'sec-main sec-main-induction', 'a section page: its chain');
@@ -944,6 +967,53 @@ const refLinks = () => [...root.querySelectorAll('.body-prose a.objlink')].map((
   broken: a.classList.contains('broken'),
 }));
 const refTo = (slug) => refLinks().find((r) => r.title === slug);
+
+await check('a citation reads as a paper sets it, "[Del74, Exp. X]", each label a link to its entry', async () => {
+  const saved = { model: app.model, snapshot: app.snapshot };
+  const snap = JSON.parse(JSON.stringify(app.snapshot));
+  const add = (o) => snap.objects.push({ boundary: [], attrs: {}, body: '', depth: 0, ...o });
+  add({ id: 'sec-refs', kind: 'section', attrs: { title: 'References', order: 99 } });
+  for (const [id, attrs] of [
+    ['del74', { author: ['P. Deligne'], title: 'La conjecture de Weil. I', journal: 'Publ. Math. IHÉS', volume: '43', year: '1974' }],
+    ['del80', { author: ['P. Deligne'], title: 'La conjecture de Weil. II', journal: 'Publ. Math. IHÉS', volume: '52', year: '1980' }],
+    ['sga4', { label: 'SGA4', title: 'Théorie des topos', year: '1972' }],
+  ]) {
+    add({ id, kind: 'reference', attrs });
+    add({ id: `refines/${id}/sec-refs`, kind: 'refines', depth: 1, boundary: [{ role: 'src', id }, { role: 'tgt', id: 'sec-refs' }] });
+  }
+  app.snapshot = snap;
+  app.model = modelMod1.buildModel(snap);
+  try {
+    const div = dom.document.createElement('div');
+    app.renderBody(div, 'As [del74] and [del74, del80] show, see [sga4, Thm. $x$, *Cor.* 4.3]; but [m, n] and [def-compact, 2] stay.', app.knownIds());
+    // `[id]` is linked in the text, after marked and KaTeX.
+    const single = div.querySelectorAll('.cite');
+    eq(single.map((c) => c.textContent).join(' | '), '[Del74]', 'a single citation');
+    eq(single[0].querySelector('a.cite-label').getAttribute('href'), '#/document/sec-refs?collapse=refines&focus=del74', 'to the entry, on its page');
+    eq(single[0].querySelector('a.cite-label').getAttribute('data-ref'), 'del74', 'with a preview on hover');
+    // `[a, b]` and `[a, locator]` become HTML before marked runs, so that a
+    // locator with maths or emphasis is still one citation; the shim keeps
+    // the markup marked was given as the element's HTML.
+    const html = div.innerHTML;
+    ok(html.includes('<span class="cite">&#91;<a class="objlink ref cite-label" href="#/document/sec-refs?collapse=refines&amp;focus=del74" title="del74" data-ref="del74">Del74</a>, ' +
+      '<a class="objlink ref cite-label" href="#/document/sec-refs?collapse=refines&amp;focus=del80" title="del80" data-ref="del80">Del80</a>&#93;</span>'), `several at once: ${html}`);
+    ok(html.includes('data-ref="sga4">SGA4</a>, Thm. $x$, *Cor.* 4.3&#93;</span>'), 'a locator, its Markdown left to marked');
+    ok(html.includes('but [m, n] and [def-compact, 2] stay'), 'brackets that cite nothing stay text');
+    const code = dom.document.createElement('div');
+    app.renderBody(code, 'Code: `` a ` [del74, x] ``, and\n\n~~~\n[del74, y]\n~~~\n\n    [del74, z]\n\nand a link [see [del74, w]](https://e.org).', app.knownIds());
+    ok(!code.innerHTML.includes('cite-label'), `no citation is made in code or in a link's text: ${code.innerHTML}`);
+    eq(div.querySelectorAll('a.objlink.broken').length, 0, 'and are not broken links');
+    await go('#/document/sec-refs');
+    await app.rendered;
+    const items = root.querySelectorAll('.doc-entry.is-reference');
+    eq(items.map((i) => i.querySelector('.bib-label').textContent).join(' '), '[Del74] [Del80] [SGA4]', 'the bibliography, by label');
+    eq(items[0].getAttribute('id'), 'doc-del74', 'each entry an anchor');
+  } finally {
+    app.model = saved.model;
+    app.snapshot = saved.snapshot;
+  }
+  await go('#/object/def-compact');
+});
 
 await check('on an object page a reference reads "Definition 1.2" and leads to its level in the document', async () => {
   await go('#/object/def-compact');
@@ -1608,34 +1678,48 @@ await check('`/` focuses the top bar\'s search, and on the graph the graph\'s ow
   eq(focused.join(', '), 'top bar, graph', 'what took the focus');
 });
 
-await check('the graph opens with its toolbar folded and no sidebar, until the reader asks', async () => {
+await check('the graph opens with its toolbar folded, no sidebar and no statistics, until the reader asks', async () => {
   const store = new Map();
   global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => { store.set(k, String(v)); } };
   const bar = () => root.querySelector('.toolbar');
   const page = () => root.querySelector('.graph-page');
+  const stage = () => root.querySelector('.graph-stage');
   const button = (sel) => bar().querySelector(sel);
   const mountGraph = async () => { await go('#/progress'); await go('#/graph?collapse=refines'); };
   try {
     await mountGraph();
     // What stays: Collapse all, the search and the zoom, outside the fold.
     const kept = [...bar().childNodes].map((n) => n.className);
-    for (const c of ['tb-toggle', 'group tb-collapse', 'group tb-search', 'group tb-zoom', 'tb-side']) {
+    for (const c of ['tb-toggle', 'group tb-collapse', 'group tb-search', 'group tb-zoom', 'tb-stats', 'tb-side']) {
       ok(kept.includes(c), `${c} is not one of the toolbar's own items: ${JSON.stringify(kept)}`);
     }
     eq(button('.tb-collapse button').textContent, 'Collapse all', 'Collapse all is kept');
     eq(button('.tb-zoom').textContent, 'Fit+\u2212', 'the zoom is kept');
     const folded = button('.tb-filters');
     eq(bar().querySelectorAll('select').length, 0, 'no choice of collapse order');
-    ok(folded.querySelectorAll('button').some((b) => /^Expand all/.test(b.textContent)), 'Expand all is behind Filters');
+    ok(!bar().querySelectorAll('button').some((b) => /Expand all/.test(b.textContent)), 'there is still an Expand all');
     ok(!folded.querySelectorAll('button').some((b) => b.textContent === 'Collapse all'), 'Collapse all is folded away');
     ok(folded.querySelectorAll('label.chk').length > 0, 'the filters are behind Filters');
     ok(!bar().classList.contains('open'), 'the filters start unfolded');
     eq(button('.tb-toggle').getAttribute('aria-expanded'), 'false', 'Filters says it is shut');
     ok(page().classList.contains('side-hidden'), 'the sidebar starts shown');
     eq(button('.tb-side').textContent, 'Show sidebar', 'the toolbar offers the sidebar');
+    ok(stage().classList.contains('stats-hidden'), 'the statistics start shown');
+    ok(root.querySelector('#graph-status').textContent.length > 0, 'and are not kept up to date meanwhile');
+    eq(button('.tb-stats').textContent, 'Show statistics', 'the toolbar offers the statistics');
+    const order = [...bar().childNodes].map((n) => n.className);
+    eq(order.indexOf('tb-side') - order.indexOf('tb-stats'), 1, `not beside Show sidebar: ${JSON.stringify(order)}`);
+    const css = fs.readFileSync(path.join(webDir, 'style.css'), 'utf8');
+    ok(/\.graph-stage\.stats-hidden:not\(\.laying-out\) \.graph-status \{ display: none; \}/.test(css),
+      'the statistics are not hidden, or hidden while a layout runs too');
 
     fire(button('.tb-toggle'), 'click');
     fire(button('.tb-side'), 'click');
+    fire(button('.tb-stats'), 'click');
+    ok(!stage().classList.contains('stats-hidden'), 'Show statistics did not show them');
+    eq(button('.tb-stats').textContent, 'Hide statistics', 'the button offers to hide them again');
+    eq(button('.tb-stats').getAttribute('aria-pressed'), 'true', 'and says they are shown');
+    eq(store.get('blueprint.graph.stats'), 'shown', 'the shown statistics are not remembered');
     ok(bar().classList.contains('open'), 'Filters did not unfold');
     ok(!page().classList.contains('side-hidden'), 'Show sidebar did not show it');
     eq(button('.tb-side').textContent, 'Hide sidebar', 'the button offers to hide it again');
@@ -1645,11 +1729,16 @@ await check('the graph opens with its toolbar folded and no sidebar, until the r
     // A redraw and a fresh graph page keep the reader's choice.
     await go('#/graph?collapse=refines&reduce=0');
     ok(bar().classList.contains('open') && !page().classList.contains('side-hidden'), 'lost on a redraw');
+    ok(!stage().classList.contains('stats-hidden'), 'the statistics lost on a redraw');
     await mountGraph();
     ok(bar().classList.contains('open') && !page().classList.contains('side-hidden'), 'lost on a fresh page');
+    ok(!stage().classList.contains('stats-hidden'), 'the statistics lost on a fresh page');
 
     fire(button('.tb-toggle'), 'click');
     fire(button('.tb-side'), 'click');
+    fire(button('.tb-stats'), 'click');
+    eq(store.get('blueprint.graph.stats'), 'hidden', 'hiding the statistics is not remembered');
+    ok(stage().classList.contains('stats-hidden'), 'the statistics did not hide again');
     eq(store.get('blueprint.graph.tools'), 'hidden', 'folding the filters is not remembered');
     eq(store.get('blueprint.graph.side'), 'hidden', 'hiding the sidebar is not remembered');
     ok(!bar().classList.contains('open') && page().classList.contains('side-hidden'), 'did not hide again');
@@ -1947,6 +2036,40 @@ await check('every option that changes the arcs starts off, the Filters dot show
     'no arc stands for several relations here');
   const counts = root.querySelectorAll('.gedge .elabel').filter((t) => /^×/.test(t.textContent));
   eq(counts.length, 0, 'an arc carries a count');
+  await layout('#/graph?collapse=refines');
+});
+
+await check('unfolding or folding a node fits the graph into the stage; a filter keeps the view', async () => {
+  const w = dom.workers.created[dom.workers.created.length - 1];
+  const layout = async (hash) => {
+    await go(hash);
+    const req = lastLayoutMessage(w);
+    w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await tick(5);
+  };
+  const transform = () => root.querySelector('g.glayer').getAttribute('transform');
+  const button = (text) => root.querySelectorAll('.toolbar button').find((b) => b.textContent === text);
+  const fit = () => { fire(button('Fit'), 'click'); return transform(); };
+  await layout('#/graph?collapse=refines');
+  const zoomed = () => { fire(button('+'), 'click'); return transform(); };
+  // Zoomed in by hand, a filter keeps the view.
+  const z = zoomed();
+  ok(z !== fit(), 'the zoom did not move the view');
+  zoomed();
+  const before = transform();
+  await layout('#/graph?collapse=refines&reduce=1');
+  eq(transform(), before, 'a filter moved the view');
+  // Unfolding a section fits the new graph, as Fit would.
+  zoomed();
+  await layout('#/graph?collapse=refines&reduce=1&expand=sec-main');
+  const opened = transform();
+  eq(fit(), opened, 'unfolding did not fit the graph');
+  // So does folding it again.
+  zoomed();
+  await layout('#/graph?collapse=refines&reduce=1');
+  const shut = transform();
+  eq(fit(), shut, 'folding did not fit the graph');
+  ok(opened !== shut, 'the two graphs fit the same way: nothing was checked');
   await layout('#/graph?collapse=refines');
 });
 
@@ -2781,23 +2904,24 @@ await check('a zooming intro: its pictures, hold and step', () => {
   eq(JSON.stringify(z.zoom[1].arrows), '[["a","B"]]', 'only arrows between two of its nodes');
 });
 
-await check('the zoom keeps one speed, from rest to rest', () => {
+await check('each step of the zoom is quick at first and settles slowly', () => {
   const steps = 3;
   eq(intro.zoomProgress(0, steps), 0, 'starts at 0');
+  eq(intro.zoomProgress(1, steps), 1, 'a step ends where the next begins');
   eq(intro.zoomProgress(steps, steps), steps, 'ends at the last step');
   eq(intro.zoomProgress(-1, steps), 0, 'clamped below');
   eq(intro.zoomProgress(9, steps), steps, 'clamped above');
-  eq(intro.zoomProgress(1.5, steps), 1.5, 'steady in the middle');
   const h = 1e-4;
   const speed = (t) => (intro.zoomProgress(t + h, steps) - intro.zoomProgress(t - h, steps)) / (2 * h);
-  ok(speed(h) < 0.01, 'from rest');
-  ok(Math.abs(speed(1) - 1) < 0.01, 'into the steady speed without a jolt');
-  ok(Math.abs(speed(2) - 1) < 0.01, 'out of it without a jolt');
-  ok(speed(steps - h) < 0.01, 'to rest');
+  ok(speed(1.05) > 2 * speed(1.5) && speed(1.5) > 2 * speed(1.95), 'quick, then slower and slower');
+  ok(speed(steps - h) < 0.01, 'to rest at the end');
   for (let t = 0; t < steps; t += 0.05) {
     ok(intro.zoomProgress(t + 0.05, steps) >= intro.zoomProgress(t, steps), 'never backwards at ' + t);
   }
-  eq(intro.zoomProgress(0.5, 1), 0.5, 'one step: symmetric');
+  // What comes in, ten times smaller at the start of its step: about 60% of
+  // its size 40% into the step.
+  const size = intro.zoomLayers(intro.zoomProgress(1.4, steps), 4, 10)[2].scale;
+  ok(size > 0.55 && size < 0.65, 'about 60% of its size 40% into the step, ' + size);
 });
 
 await check('each layer of the zoom grows by the same factor per step', () => {
@@ -2830,20 +2954,20 @@ await check('a zoom whose steps have lengths of their own keeps one speed', () =
   const lengths = [1000, 1500, 1500];
   eq(intro.zoomProgress(0, lengths), 0, 'starts at 0');
   eq(intro.zoomProgress(4000, lengths), 3, 'ends at the last step');
-  eq(intro.zoomProgress(1750, lengths), 1.5, 'half way through the second step');
+  eq(intro.zoomProgress(1000, lengths), 1, 'the first step takes its length');
+  eq(intro.zoomProgress(2500, lengths), 2, 'and so does the second');
   const r = (x) => Math.round(x * 1000) / 1000;
   const f = intro.zoomFactors(lengths, 10);
   eq(r(f[1]), 10, 'the longest grow ten times');
   eq(r(f[0]), r(Math.pow(10, 2 / 3)), 'a shorter one grows less');
-  // One speed: the growth per millisecond, in the steady part of each step.
+  // One pace: the growth per millisecond at the same point of each step.
   const h = 1;
   const rate = (t, layer) => {
     const a = intro.zoomLayers(intro.zoomProgress(t - h, lengths), 4, f)[layer].scale;
     const b = intro.zoomLayers(intro.zoomProgress(t + h, lengths), 4, f)[layer].scale;
     return Math.log(b / a) / (2 * h);
   };
-  ok(Math.abs(rate(1000, 1) - rate(1750, 1)) < 1e-4, 'into the second step and in it: one speed');
-  ok(Math.abs(rate(1750, 2) - Math.log(10) / 1500) < 1e-4, 'the steady speed');
+  ok(Math.abs(rate(400, 1) - rate(1000 + 600, 2)) < 1e-4, 'the first and second steps alike, 40% in');
   const at1 = intro.zoomLayers(1, 4, f);
   eq(r(at1[0].scale), r(f[0]), 'the background went out by the first factor');
   eq(r(at1[2].scale), 0.1, 'the next comes in by the second');

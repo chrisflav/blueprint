@@ -21,7 +21,7 @@
 //   * A `## Proof` heading opens a proof, up to the next heading of the same
 //     or a higher level, as `foldProofs` reads it on the website.
 
-import { mathRegExp, SLUG_PATTERN } from '../model.js';
+import { mathRegExp, SLUG_PATTERN, CITE_PATTERN } from '../model.js';
 
 const TOKEN_OPEN = '\uE000';
 const TOKEN_CLOSE = '\uE001';
@@ -319,11 +319,12 @@ function parseList(lines, start) {
 const PUNCT_RE = /[!-/:-@[-`{-~\p{P}\p{S}]/u;
 const SPACE_RE = /\s/u;
 const SLUG_AT = new RegExp('^' + SLUG_PATTERN);
+const CITE_AT = new RegExp('^' + CITE_PATTERN);
 const URL_RE = /^(?:https?:\/\/|www\.)[^\s<]*[^\s<?!.,:*_~'")\]]/i;
 
 /**
  * Parse inline Markdown into nodes: {t:'text', v}, {t:'code', v}, {t:'math', i},
- * {t:'ref', slug, before}, {t:'link', href, kids}, {t:'image', src, alt},
+ * {t:'ref', slug, before}, {t:'cite', inner, raw}, {t:'link', href, kids}, {t:'image', src, alt},
  * {t:'em'|'strong'|'del', kids}, {t:'br'}, {t:'url', href}.
  */
 export function parseInline(src, { inLink = false } = {}) {
@@ -398,6 +399,15 @@ export function parseInline(src, { inLink = false } = {}) {
         push({ t: 'ref', slug: m[1], before: run });
         run = '';
         i += m[0].length;
+        continue;
+      }
+      // `[a, b]`, `[a, locator]`: a citation if `a` names a reference, which
+      // only the caller knows; otherwise the brackets are text.
+      const c = CITE_AT.exec(s.slice(i));
+      if (c) {
+        push({ t: 'cite', inner: c[1], raw: c[0] });
+        run = '';
+        i += c[0].length;
         continue;
       }
     }
@@ -532,6 +542,7 @@ export function plainOf(nodes) {
     else if (n.kids) out += plainOf(n.kids);
     else if (n.t === 'url') out += n.text || n.href;
     else if (n.t === 'ref') out += n.slug;
+    else if (n.t === 'cite') out += n.raw;
   }
   return out;
 }
@@ -678,6 +689,15 @@ export function inlineToLatex(nodes, ctx) {
       case 'code': out += `\\texttt{${escapeCode(n.v)}}`; break;
       case 'math': out += ctx.math(ctx.spans[n.i]); break;
       case 'ref': out += ctx.ref(n.slug, n.before); break;
+      case 'cite': {
+        // `ctx.cite` says what is cited ({labels, locator}) or `null`; the
+        // locator, and the brackets when nothing is cited, are Markdown with
+        // its maths, emphasis and code, like any other text.
+        const c = ctx.cite ? ctx.cite(n.inner) : null;
+        if (c) out += '[' + c.labels + (c.locator ? ', ' + inlineToLatex(parseInline(c.locator), ctx) : '') + ']';
+        else out += '[' + inlineToLatex(parseInline(n.inner), ctx) + ']';
+        break;
+      }
       case 'em': out += `\\emph{${inlineToLatex(n.kids, ctx)}}`; break;
       case 'strong': out += `\\textbf{${inlineToLatex(n.kids, ctx)}}`; break;
       case 'del': out += `\\sout{${inlineToLatex(n.kids, ctx)}}`; break;

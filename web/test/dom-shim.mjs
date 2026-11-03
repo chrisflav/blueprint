@@ -148,38 +148,20 @@ class Element2 extends Node2 {
     if (text) this.appendChild(new Text2(text));
   }
   get innerHTML() { return this._html || this.textContent; }
+  /** The nearest of this element and its ancestors matching one of a comma
+   *  separated list of simple selectors (no combinators). */
+  closest(sel) {
+    const alts = String(sel).split(',').map((x) => x.trim());
+    for (let n = this; n && n.nodeType === ELEMENT_NODE; n = n.parentNode) {
+      if (alts.some((p) => matchSimple(n, p))) return n;
+    }
+    return null;
+  }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
   querySelectorAll(sel) {
     const out = [];
     const parts = String(sel).trim().split(/\s+/);
-    const match = (node, part) => {
-      const m = part.match(/^([a-zA-Z0-9-]*)((?:[.#][^.#\[]+)*)((?:\[[^\]]*\])*)$/);
-      if (!m) return false;
-      if (m[1] && node.localName !== m[1]) return false;
-      for (const c of m[2].match(/[.#][^.#\[]+/g) || []) {
-        if (c[0] === '.' && !node.classList.contains(c.slice(1))) return false;
-        if (c[0] === '#' && node.id !== c.slice(1)) return false;
-      }
-      for (const a of m[3].match(/\[[^\]]*\]/g) || []) {
-        const inner = a.slice(1, -1);
-        const eq = inner.indexOf('=');
-        if (eq < 0) { if (!node.hasAttribute(inner)) return false; continue; }
-        // Support the substring operators too: the tests find the ELK
-        // scripts graph.js adds with `script[src*="elkjs"]`.
-        let k = inner.slice(0, eq);
-        let op = '=';
-        if (/[*^$~|]$/.test(k)) { op = k.slice(-1) + '='; k = k.slice(0, -1); }
-        let v = inner.slice(eq + 1);
-        if (/^["']/.test(v)) v = v.slice(1, -1).replace(/\\(.)/g, '$1');
-        const actual = node.getAttribute(k);
-        if (actual === null) return false;
-        if (op === '=' && actual !== v) return false;
-        if (op === '*=' && !actual.includes(v)) return false;
-        if (op === '^=' && !actual.startsWith(v)) return false;
-        if (op === '$=' && !actual.endsWith(v)) return false;
-      }
-      return true;
-    };
+    const match = matchSimple;
     const walk = (node, depth) => {
       for (const c of node.children) {
         if (match(c, parts[depth])) {
@@ -192,6 +174,36 @@ class Element2 extends Node2 {
     walk(this, 0);
     return [...new Set(out)];
   }
+}
+
+/** Does `node` match one simple selector: `tag.class#id[attr=v]`, no combinators. */
+function matchSimple(node, part) {
+  const m = part.match(/^([a-zA-Z0-9-]*)((?:[.#][^.#\[]+)*)((?:\[[^\]]*\])*)$/);
+  if (!m) return false;
+  if (m[1] && node.localName !== m[1]) return false;
+  for (const c of m[2].match(/[.#][^.#\[]+/g) || []) {
+    if (c[0] === '.' && !node.classList.contains(c.slice(1))) return false;
+    if (c[0] === '#' && node.id !== c.slice(1)) return false;
+  }
+  for (const a of m[3].match(/\[[^\]]*\]/g) || []) {
+    const inner = a.slice(1, -1);
+    const eq = inner.indexOf('=');
+    if (eq < 0) { if (!node.hasAttribute(inner)) return false; continue; }
+    // Support the substring operators too: the tests find the ELK
+    // scripts graph.js adds with `script[src*="elkjs"]`.
+    let k = inner.slice(0, eq);
+    let op = '=';
+    if (/[*^$~|]$/.test(k)) { op = k.slice(-1) + '='; k = k.slice(0, -1); }
+    let v = inner.slice(eq + 1);
+    if (/^["']/.test(v)) v = v.slice(1, -1).replace(/\\(.)/g, '$1');
+    const actual = node.getAttribute(k);
+    if (actual === null) return false;
+    if (op === '=' && actual !== v) return false;
+    if (op === '*=' && !actual.includes(v)) return false;
+    if (op === '^=' && !actual.startsWith(v)) return false;
+    if (op === '$=' && !actual.endsWith(v)) return false;
+  }
+  return true;
 }
 
 const NodeFilter = {

@@ -652,13 +652,14 @@ its title, the top bar and the graph's tools fade in, and the view zooms
 into the middle of the screen: the background grows and fades while the
 first picture grows out of a point, then that picture grows on and fades
 while the next grows out of its middle, and so on, the last being the graph
-itself.  The fading is quick, in the first third of a step or so, so that a
-picture is gone well before it fills the screen; a picture at rest takes at
-most about half of the screen.  Each step takes `step` seconds (default 1) and makes everything ten
-times bigger, so the zoom keeps one speed throughout.  `step` may instead be
-a list, one length per step (`step = [1, 1.5, 1.5]`, the last standing for
-any steps after it); the zoom still keeps one speed, at which the longest
-steps grow ten times, so a shorter step grows less.  A picture is a few
+itself.  The fading is quick, within the first third of a step's growth, so
+that a picture is gone well before it fills the screen; a picture at rest
+takes at most about half of the screen.  Each step takes `step` seconds
+(default 1) and makes everything ten times bigger, quickly at first and then
+settling slowly: what comes in reaches about 60% of its size in the first 40%
+of the step.  `step` may instead be a list, one length per step (`step = [1,
+1.5, 1.5]`, the last standing for any steps after it); every step then grows
+at the same pace, the longest ten times, so a shorter step grows less.  A picture is a few
 boxes and arrows, laid out and drawn as the graph lays out and draws its
 nodes and arcs: `nodes` lists them, each a title or a table with a `title`,
 an `id` for `arrows` to name (default: the title) and the `kind` it is drawn
@@ -667,7 +668,13 @@ ids, each drawn from the first to the second.  `duration` is unused then.
 The title may move: an `<svg>` in it with SMIL animations (`<animate>`,
 `<set>`) starts from its time 0 as the intro opens, without the title
 growing in (it shows itself, writing itself say), so `hold` is best the
-length of its animation; with reduced motion it is shown as it
+length of its animation.  While it plays the website only downloads the
+snapshot; reading it and drawing the graph wait until the title has played,
+so that the title never stops halfway, and it then stays at its end until
+the graph is drawn.  The title runs on a clock of its own, which goes on
+frame by frame: a moment in which the browser is busy, or the tab is out of
+sight, holds it where it is rather than letting it skip ahead, so it is
+always seen whole; with reduced motion it is shown as it
 ends.  And it may land on the top bar's logo (`[site] logo`) rather than on
 its title: an element of the title marked `data-intro-logo`, framing a
 drawing of the logo as the logo's picture is framed, flies onto the logo,
@@ -707,6 +714,7 @@ reach the snapshot as `project.logo` and `project.logoInk`.
 | `concept` | — | |
 | `remark` | — | |
 | `question` | — | an open question, set as a remark is |
+| `reference` | — | a bibliography entry, cited as `[id]`: set as a paper sets its references, unnumbered, never drawn in the graph (`graph = "never"`); see *References* below |
 | `uses` | `src` 1, `tgt` 1 | sugar |
 | `refines` | `src` 1, `tgt` 1 | acyclic, collapse, sugar |
 | `instance_of` | `src` 1, `tgt` 1 | acyclic, collapse, sugar |
@@ -801,6 +809,62 @@ directory when there is one, so sections nest.
 reported as `bad-link` when it does not resolve.  It creates no edge.
 `[text](url)`, `![x]` and `\[` are left alone.
 
+**References.**  Each entry of the bibliography is an object of kind
+`reference`, with the fields BibTeX gives it: `author` and `editor` (a list
+of names, or one name; "A and B" is two, "and others" ends a list),
+`title`, `year`, `month`, `journal`, `booktitle`, `series`, `volume`,
+`number`, `pages`, `chapter`, `edition`, `publisher`, `organization`,
+`address`, `institution`, `school`, `howpublished`, `note`, `url`, `doi`,
+`eprint`, and, kept but not shown, `archivePrefix`, `primaryClass`, `isbn`,
+`issn`, `key`, `keywords`, `abstract`, `language`.  `type` is the kind of
+publication (`article`, `book`, `incollection`, `inproceedings`,
+`phdthesis`, `mastersthesis`, `techreport`, `manual`, `misc`, …), otherwise
+read off the fields: a `journal` is an article, a `booktitle` a chapter of a
+collection, a `publisher` a book.  The fields are Markdown, so a title may
+carry maths.
+
+```markdown
++++
+kind    = "reference"
+author  = ["P. Deligne"]
+title   = "La conjecture de Weil. I"
+journal = "Publ. Math. IHÉS"
+volume  = "43"
+pages   = "273-307"
+year    = "1974"
+url     = "https://www.numdam.org/item/PMIHES_1974__43__273_0/"
++++
+```
+
+The document and the PDF set it as BibTeX's `alpha` style does: under its
+label in the margin, "[Del74]", then the authors, the title, the journal,
+volume and pages, the year, in that style's order and punctuation, the title
+linked to `url`.  The label follows `alpha`'s rule: the first three
+letters of a single author's family name, the initials of two to four
+("BBD"), three initials and "+" for more or for "and others", then the last
+two digits of the year, with a, b, c telling clashes apart (compared without
+regard to case, in the order of authors, year and title).  A lower-case
+"von" part adds its initials, and then the family name gives its initials
+too: "L. van Beethoven" is "vB", "A. van Dam and B. Cee" "vDC".  A name is
+"Given von Family" (a trailing "Jr." or "III" left out) or "von Family,
+Given", and `{…}` keeps words together ("{van Dam}, A." is "van").
+`label = "SGA4"` gives one of your own, which no other entry is then given.
+The entries of a section come after its other contents, sorted by label,
+unless they carry an `order`; a directory `references/` with a `_section.md`
+titled *References* is the usual home.  The object's prose,
+if any, follows the entry (a note, a link to a copy); an entry with no
+`title` is its prose alone.
+
+Prose cites an entry as `[id]`, which reads "[Del74]", several at once as
+`[del74, del80]`, "[Del74, Del80]", and with a place in the work as `[sga4,
+Exp. X, Cor. 4.3]`, "[SGA4, Exp. X, Cor. 4.3]": the leading ids that name
+references are what is cited, the rest is the locator.  Each label links to
+its entry, and on the website shows it on hover.  The locator is Markdown
+like the rest of the prose (maths, emphasis), but may not contain brackets.
+Brackets whose first part names no reference, `[m, n]`, stay text; so does
+a citation whose ids are mistyped (`[del74, del8O]` cites `del74` with the
+locator "del8O"), which no check reports.
+
 ## The examples
 
 ```
@@ -885,7 +949,7 @@ merge.  `Topology.coverChoice` is a custom axiom (`proved_with_axioms`),
   that directly follows a theorem-like environment is part of that object
   rather than an object of its own, since `DESIGN.md` §2 has no separate
   proof sort; `\cite{k}` becomes `[k]`, which the `bad-link` lint then
-  reports unless a bibliography object of that name exists; `\_`, `\#` and
+  reports unless a `reference` object of that name exists; `\_`, `\#` and
   `\$` keep their backslash outside code spans, because a bare `_` or `#` is
   Markdown syntax; and blank lines inside display maths are removed, because
   the Markdown renderer runs before KaTeX and would otherwise cut the
