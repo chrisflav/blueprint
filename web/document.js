@@ -192,7 +192,10 @@ export function render(root, app) {
   //
   // The numbers come with the outline; building the sections is chunked and
   // the prose inside them is deferred until it is scrolled to.
+  let previous = null; // the entry built last, for a proof right after its statement
   const build = (entry) => {
+    const before = previous;
+    previous = entry;
     const o = entry.object;
     // A piece of text belonging to no statement (the lines that open a
     // section, a paragraph between two lemmas) is read where it stands: its
@@ -214,6 +217,17 @@ export function render(root, app) {
       defer(prose, () => app.renderBody(prose, o.body, known, refs));
       for (const step of outline.steps.get(o.id) || []) text.appendChild(stepBlock(app, step, outline, known, refs));
       flow.appendChild(text);
+      return;
+    }
+    // A proof read in its section (`M.proofPlacement`) is set as any proof is:
+    // "Proof." right after its statement, and where it is read away from it,
+    // "Proof of Theorem 2.1.".  No heading, no number, not in the contents.
+    if (entry.proof) {
+      if (entry.duplicate) return; // read once, where it is placed
+      const of = M.attachedTo(o);
+      const right = before && before.object.id === of;
+      flow.appendChild(proofBlock(app, o, outline, known, refs,
+        right ? M.proofLeadRest(o) : M.proofLeadAway(m, outline, o)));
       return;
     }
     const num = entry.number;
@@ -406,7 +420,7 @@ function pager(app, outline, pageEntry, href) {
   const { el } = app;
   if (!pageEntry) return null;
   const siblings = (pageEntry.parent ? pageEntry.parent.children : outline.roots)
-    .filter((e) => !e.duplicate && !e.text);
+    .filter((e) => !e.duplicate && !e.text && !e.proof);
   const i = siblings.indexOf(pageEntry);
   const prev = i > 0 ? siblings[i - 1] : null;
   const next = i >= 0 && i + 1 < siblings.length ? siblings[i + 1] : null;
@@ -517,9 +531,8 @@ function stepBlock(app, o, outline, known, refs, seen = new Set()) {
 /** A proof, set after its statement as a paper sets it: "Proof." run in,
  *  the prose, the steps filed under it, and an end mark; it folds away with
  *  the reader's "Fold proofs". */
-function proofBlock(app, o, outline, known, refs) {
+function proofBlock(app, o, outline, known, refs, rest = M.proofLeadRest(o)) {
   const { el } = app;
-  const rest = M.proofLeadRest(o);
   // The lead words are the disclosure's summary: a click on them folds or
   // unfolds the proof, rather than leaving the page.
   const head = el('span.proof-word-wrap', el('span.proof-word', 'Proof' + rest));

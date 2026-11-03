@@ -136,9 +136,9 @@ export function resolveRequest(model, raw = {}) {
     if (!entry) {
       throw new ExportError('invalid', `'${scope}' is not in the document along '${collapse}': it carries no prose and contains nothing`);
     }
-    if (entry.text) {
+    if (entry.text || entry.proof) {
       const where = entry.parent ? entry.parent.id : null;
-      throw new ExportError('invalid', `'${scope}' is text read in place` + (where ? ` inside '${where}'; export '${where}' instead` : '; export the whole blueprint instead'));
+      throw new ExportError('invalid', `'${scope}' is ${entry.proof ? 'a proof' : 'text'} read in place` + (where ? ` inside '${where}'; export '${where}' instead` : '; export the whole blueprint instead'));
     }
   }
   const wanted = parseDepth(raw.depth);
@@ -180,9 +180,11 @@ function planTree(model, outline, scopeEntry, depth, appendices) {
   let height = 1;
   let sawAppendix = false;
   const visit = (e, rel, parent) => {
-    if (e.text) {
+    // Text, and a proof read in its section (`M.proofPlacement`), are written
+    // where they are read, once.
+    if (e.text || e.proof) {
       if (e.duplicate || written.has(e.id)) return null; // said once, under its first parent
-      const node = { type: 'text', entry: e, rel, parent };
+      const node = { type: e.proof ? 'proof' : 'text', entry: e, rel, parent };
       written.set(e.id, node);
       return node;
     }
@@ -226,11 +228,11 @@ function planTree(model, outline, scopeEntry, depth, appendices) {
   return { nodes, written, height, appendices: sawAppendix };
 }
 
-/** How many entries, other than text, are below an entry. */
+/** How many entries, other than text and proofs, are below an entry. */
 function countBelow(entry, seen) {
   let n = 0;
   for (const c of entry.children) {
-    if (c.text || seen.has(c.id)) continue;
+    if (c.text || c.proof || seen.has(c.id)) continue;
     seen.add(c.id);
     n += 1;
     if (!c.duplicate) n += countBelow(c, seen);
@@ -252,6 +254,7 @@ export function planExport(model, request) {
   let proofs = 0;
   const walk = (nodes) => {
     for (const n of nodes) {
+      if (n.type === 'proof') proofs += 1;
       if (n.type !== 'entry') continue;
       if (!n.hidden) {
         entries += 1;
@@ -617,10 +620,10 @@ export function exportLatex(model, request, options = {}) {
     }
   };
 
-  const writeProof = (p) => {
+  const writeProof = (p, lead = M.proofLeadRest(p)) => {
     comment(`proof: ${p.id}`);
     current = p.id;
-    const rest = M.proofLeadRest(p).replace(/\.$/, '');
+    const rest = lead.replace(/\.$/, '');
     out.push(`\\begin{proof}[{Proof${titleTex(rest)}}]\\phantomsection\\label{${labelOf(p.id)}}%`);
     const b = body(p);
     if (b) out.push(b);
@@ -635,9 +638,20 @@ export function exportLatex(model, request, options = {}) {
     return `under \\hyperref[${labelOf(e.id)}]{${escapeText(e.number)} ${titleTex(M.titleOf(e.object))}}`;
   };
 
+  let lastWritten = null; // the entry written last, for a proof right after its statement
   const writeNode = (node) => {
     const e = node.entry;
     const o = e.object;
+    const before = lastWritten;
+    lastWritten = e.id;
+    if (node.type === 'proof') {
+      // A proof read in its section: "Proof." right after its statement,
+      // "Proof of Theorem 2.1." anywhere else, as on the website.
+      const right = before === M.attachedTo(o);
+      writeProof(o, right ? M.proofLeadRest(o) : M.proofLeadAway(model, outline, o));
+      out.push('');
+      return;
+    }
     if (node.type === 'text' && e.reference) {
       // A bibliography entry, as `thebibliography` sets one: the label
       // hanging in the margin, the entry beside it.

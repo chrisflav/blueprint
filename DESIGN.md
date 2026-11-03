@@ -147,9 +147,17 @@ By [lem-y] and [lem-z] ...
 ```
 
 Its id is derived as for any object with a boundary, `proof/lem-x`; a second,
-alternative proof of the same statement needs an `id` of its own. A proof
-does not refine the section of its directory: it sits wherever its statement
-does.
+alternative proof of the same statement needs an `id` of its own.
+
+In the document a proof is read where its file puts it, as any node is: in
+the section of its directory, where its `order` puts it among that section's
+entries, so text, remarks or a whole subsection may come between a statement
+and its proof. Unmoved, next to its statement with no `order` of its own, it
+is read right after the statement, as it always was. It takes no number: it
+is set as "Proof." right after its statement and as "Proof of Theorem 2.1."
+anywhere else. This is a matter of reading only. A proof does not refine the
+section of its directory: it is below nothing in any collapse order, so the
+graph never draws it and its edges are its statement's (§3).
 
 The split carries meaning. A statement's `uses` are what is needed to *state*
 it, its proof's `uses` what is needed to *prove* it, and the extractor

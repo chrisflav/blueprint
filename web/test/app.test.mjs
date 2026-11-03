@@ -207,6 +207,31 @@ await check('a proof is set after its statement, with no number of its own', asy
   eq(root.querySelectorAll('.error-box').length, 0, 'the proof has an object page');
 });
 
+await check('a proof moved to another section is read there, named by what it proves', async () => {
+  const MM = await import(path.join(webDir, 'model.js'));
+  const m = app.model;
+  const p = m.byId.get('proof/thm-heine-borel');
+  const file = p.source.file;
+  const reset = () => { m._outlines.clear(); m._positions.clear(); m._proofPlacement.clear(); };
+  p.source = { ...p.source, file: 'blueprint/main/thm-heine-borel.proof.md' };
+  reset();
+  try {
+    await go('#/document/sec-applications');
+    eq(root.querySelectorAll('.proof').length, 0, 'no longer with its statement');
+    ok(root.querySelector('#doc-thm-heine-borel'), 'which is still there');
+    await go('#/document/sec-main');
+    const proof = root.querySelector('#doc-proof_thm-heine-borel');
+    ok(proof && proof.classList.contains('proof'), 'read in the section of its file');
+    const num = MM.documentOutline(m, 'refines').byId.get('thm-heine-borel').number;
+    eq(proof.querySelector('.proof-word').textContent, `Proof of Theorem ${num}.`, 'named by what it proves');
+    ok(!proof.hasAttribute('open'), 'folded, as every proof');
+    eq(root.querySelectorAll('nav.toc a[data-id="proof/thm-heine-borel"]').length, 0, 'not in the sidebar');
+  } finally {
+    p.source = { ...p.source, file };
+    reset();
+  }
+});
+
 await check('every theme has its stylesheet, and picking one loads it', async () => {
   for (const t of THEMES) {
     if (t.id) ok(fs.existsSync(path.join(webDir, 'themes', t.id + '.css')), `themes/${t.id}.css is missing`);

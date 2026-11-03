@@ -246,8 +246,10 @@ function resultNodes(outline, hits) {
   };
   for (const o of hits) {
     const entry = outline && outline.byId.get(o.id);
-    if (entry) { nodeFor(entry).match = true; continue; }
-    const host = outline ? outline.byId.get(outline.stepOf.get(o.id)) : null;
+    // A proof is listed under what it proves, wherever it is read (a proof
+    // read in its section is an entry of its own, `M.proofPlacement`).
+    if (entry && !entry.proof) { nodeFor(entry).match = true; continue; }
+    const host = outline ? outline.byId.get(outline.stepOf.get(o.id) || (entry && M.attachedTo(o))) : null;
     const n = { object: o, entry: null, match: true, children: [] };
     if (host) nodeFor(host).children.push(n);
     else elsewhere.push(n);

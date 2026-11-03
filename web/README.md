@@ -468,6 +468,14 @@ a reference to it, its `?focus=` and its page are its statement's. The
 statement's object page shows its proofs the same way. The "Proof." line is
 not a link: a click on it folds or unfolds the proof.
 
+A proof whose file is moved, to another section's directory or given an
+`order` of its own, is read there instead, as any node is (`proofPlacement`
+in `model.js`): an entry of that section, set as "*Proof of Theorem 2.1.* … ∎"
+(or "*Proof.*" when it still follows its statement), folded like every proof,
+with no number and taking none from its siblings, and in neither the contents
+nor the sidebar. Its `?focus=` and its page are then its own place's. Only the
+reading moves: the collapse order, and so the graph, are as before.
+
 A proof that lemmas refine has details of its own, and so is an entry of the
 document, numbered and with a page, its details below it. The collapse order
 puts it nowhere (a proof is below no statement), so it is read right after
