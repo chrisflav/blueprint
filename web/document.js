@@ -555,9 +555,13 @@ function proofBlock(app, o, outline, known, refs) {
  * 2.1.1, 2.1.2, ….  There a click on the page's own entry folds its entries
  * away, and another unfolds them again.
  *
+ * Either way it lists only the headings, chapters, sections and subsections,
+ * as the contents page does; a statement is read on the page its heading
+ * leads to, and a focus on one opens that heading.
+ *
  * Every entry, in the list or in the chain, leads to the page it heads, as
  * the contents do (`pageHref`): chapter 2 to the page of 2 with 2.1, 2.2, ….
- * Something with nothing under it heads no page and leads to the page it is
+ * A heading with nothing under it heads no page and leads to the page it is
  * read on, scrolled to it and opened; when that is this page the sidebar only
  * scrolls the page there.  The page's own entry scrolls to the top.
  */
@@ -568,12 +572,15 @@ function levelSidebar(app, outline, pageEntry, focus, pageHref, toc) {
   // the reader has folded the page's own entries away there.
   const whole = toc.classList.contains('toc-outline');
   let shut = false;
-  const kids = (e) => (e ? e.children : outline.roots).filter((c) => !c.duplicate && !c.text);
-  const listed = (e) => !!e && !e.duplicate && !e.text;
-  // What the page is scrolled to: an entry below it opens there; a step or
-  // a proof stands for what it is filed under.
+  // Only the headings have rows, as on the contents page (`M.isContentsEntry`):
+  // the statements are read on the pages they lead to.
+  const listed = (e) => M.isContentsEntry(e) && !e.duplicate;
+  const kids = (e) => (e ? e.children : outline.roots).filter(listed);
+  // What the page is scrolled to: the heading it is under opens there; a
+  // step or a proof stands for what it is filed under.
   const fid = focus && outline.stepOf.has(focus) ? outline.stepOf.get(focus) : focus;
-  const f = fid ? outline.byId.get(fid) : null;
+  let f = fid ? outline.byId.get(fid) : null;
+  while (f && !listed(f)) f = f.parent;
   const below = (e) => {
     for (let p = e.parent; p; p = p.parent) if (p === pageEntry) return true;
     return pageEntry === null;
