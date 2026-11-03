@@ -805,6 +805,40 @@ for bad_zoom in 'nodes = []|.nodes. is empty' \
     bad "a [[site.intro.zoom]] with $(printf "$conf" | tr '\n' ' ') is refused"; cat "$TMP/badzoom.out"
   fi
 done
+# `[site.comments]` sends the website's comments to Zulip: `site` writes
+# comments-config.json with the bot of the environment, never into the
+# snapshot; without the bot it writes none and says so, and a stale one goes.
+cp -r examples/minimal "$TMP/zulip"
+printf '\n[site.comments]\nzulip = "https://zulip.example"\nchannel = "blueprint comment"\n' \
+  >> "$TMP/zulip/blueprint.toml"
+if BLUEPRINT_ZULIP_EMAIL=bot@zulip.example BLUEPRINT_ZULIP_KEY=k3y \
+     "$BP" site --root "$TMP/zulip" -o "$TMP/zulip.site" > "$TMP/zulip.out" 2>&1 \
+   && grep -qF '{"zulip":{"channel":"blueprint comment","email":"bot@zulip.example","key":"k3y","site":"https://zulip.example"}}' \
+        "$TMP/zulip.site/comments-config.json" \
+   && ! grep -q 'k3y' "$TMP/zulip.site/blueprint.json" \
+   && env -u BLUEPRINT_ZULIP_EMAIL -u BLUEPRINT_ZULIP_KEY \
+        "$BP" site --root "$TMP/zulip" -o "$TMP/zulip.site" > "$TMP/zulip2.out" 2>&1 \
+   && grep -q 'BLUEPRINT_ZULIP_KEY is not' "$TMP/zulip2.out" \
+   && [ ! -e "$TMP/zulip.site/comments-config.json" ]; then
+  ok "[site.comments] writes comments-config.json with the bot of the environment, and only then"
+else
+  bad "[site.comments] writes comments-config.json with the bot of the environment, and only then"
+  cat "$TMP/zulip.out" "$TMP/zulip2.out"
+fi
+for bad_comments in 'channel = "c"|needs a .zulip.' \
+                    'zulip = "https://z"|needs a .channel.' \
+                    'zulip = "z.example"\nchannel = "c"|must be an http(s) address' \
+                    'zulip = "https://z"\nchannel = "c"\nkey = "x"|takes no .key.'; do
+  conf="${bad_comments%%|*}"; want="${bad_comments#*|}"
+  rm -rf "$TMP/badcomments"; cp -r examples/minimal "$TMP/badcomments"
+  printf "\n[site.comments]\n$conf\n" >> "$TMP/badcomments/blueprint.toml"
+  if ! "$BP" build --root "$TMP/badcomments" -o "$TMP/badcomments.json" > "$TMP/badcomments.out" 2>&1 \
+     && grep -q "$want" "$TMP/badcomments.out"; then
+    ok "a [site.comments] with $(printf "$conf" | tr '\n' ' ') is refused"
+  else
+    bad "a [site.comments] with $(printf "$conf" | tr '\n' ' ') is refused"; cat "$TMP/badcomments.out"
+  fi
+done
 rm -rf "$TMP/introsteps"; cp -r examples/minimal "$TMP/introsteps"
 printf '\n[site.intro]\nbody = "x"\nstep = [1, 1.5]\n' >> "$TMP/introsteps/blueprint.toml"
 if "$BP" build --root "$TMP/introsteps" -o "$TMP/introsteps.json" > "$TMP/introsteps.out" 2>&1 \

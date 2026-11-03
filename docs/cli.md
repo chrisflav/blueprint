@@ -388,7 +388,10 @@ Assembles the static website:
 * with `--history dir`, copies that directory to `<dir>/data/` and makes sure
   `data/index.json` lists the snapshot that was just built — as
   `data/<sha>.json` when `history add` already filed it, and otherwise as an
-  entry pointing at `blueprint.json` itself.
+  entry pointing at `blueprint.json` itself;
+* with `[site.comments]` in `blueprint.toml` and a Zulip bot in the
+  environment, writes `<dir>/comments-config.json`, which sends the website's
+  comments to Zulip (see `[site.comments]` below); otherwise removes it.
 
 With `--pdf` it then prepares the PDFs the website's *Export PDF* button
 hands out (`docs/pdf-export.md`): every choice its dialog offers — each
@@ -424,7 +427,8 @@ serves `dir` (default `<root>/_site`) on `--port` (default 8000).  With
 `python3` at hand that is `web/comments-server.py`, which also keeps the
 comments of object pages and of the document's pages and makes, on demand, a PDF the site was not built
 with (`POST api/export`, `docs/pdf-export.md`), reading images from the
-project root; otherwise it is the first of these that is installed:
+project root (a site with `comments-config.json` keeps its comments on
+Zulip instead); otherwise it is the first of these that is installed:
 
 ```
 python3 -m http.server <port> --directory <dir>
@@ -567,6 +571,10 @@ duration = 4                        # seconds, default 3
 #   nodes  = [{ id = "a", title = "Part A" }, { id = "b", title = "Part B" }]
 #   arrows = [["a", "b"]]
 
+[site.comments]                     # comments on Zulip, not the comment server
+zulip   = "https://example.zulipchat.com"
+channel = "blueprint comments"      # one topic per object
+
 [kinds.theorem]                     # extends the built-in `theorem`
 attrs = ["title", "lean", "review", "tags", "order", "aliases", "owner"]
 
@@ -696,6 +704,30 @@ a little taller than the title's letters.  With `logoInk = true` only its
 shape counts: it is filled with the title's colour, so a one-colour logo
 follows the style and dark mode; otherwise it keeps its own colours.  They
 reach the snapshot as `project.logo` and `project.logoInk`.
+
+`[site.comments]` keeps the comments of the website on a Zulip server rather
+than with the comment server of `blueprint serve`, so that a site served as
+plain files has them too.  `zulip` is the address of the server and
+`channel` the channel the comments go to; both are needed.  Each comment is
+posted by a bot, in the topic of its object: the object's id, or for an id
+longer than Zulip's 60 characters its first 50 and a hash.  The top page of
+the document has the topic `document (top page)`.  The first line of the
+message names the author and the page; the reader chooses whether the comment
+is public, shown below the page and on Zulip, or private, on Zulip only.  The
+website lists the bot's public messages of the topic, so a message edited or
+deleted on Zulip is a comment edited or deleted on the website.
+
+The bot is not part of `blueprint.toml`, which refuses an `email` or a
+`key`: `blueprint site` reads it from `BLUEPRINT_ZULIP_EMAIL` and
+`BLUEPRINT_ZULIP_KEY` (a generic bot subscribed to the channel) and writes
+the four into `comments-config.json`, which the website reads; the snapshot
+does not carry them.  Without the two variables it says so and writes no
+such file, and the website falls back on the comment server.  The website
+calls the Zulip API from the reader's browser, which the Zulip server allows
+(it answers cross-origin requests that carry an `Authorization` header).
+Anyone who can open the site can read the bot's key and post as the bot:
+the comments are only as private as the site, so give the bot nothing else
+to do, and deactivate it on Zulip should the key get out.
 
 ### The default schema
 
