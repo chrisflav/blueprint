@@ -857,12 +857,16 @@ function fetchSnapshot(url) {
   return fetch(url, { cache: 'no-cache' });
 }
 
-async function loadInto(url, { sha = null, keepBase = false, entry = null } = {}) {
+async function loadInto(url, { sha = null, keepBase = false, entry = null, before = null } = {}) {
   // The bytes, not just the JSON: the PDF export finds what was prepared for
   // this snapshot by their hash.
   const res = await fetchSnapshot(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
+  const buffer = await res.arrayBuffer();
+  // What follows keeps the page busy, for a second or more with a large
+  // snapshot: not while the intro's title is still playing (`before`).
+  if (before) await before;
+  const bytes = new Uint8Array(buffer);
   const snapshot = JSON.parse(new TextDecoder('utf-8').decode(bytes));
   if (!snapshot || !Array.isArray(snapshot.objects)) {
     throw new Error(`${url} is not a blueprint snapshot (no "objects" array)`);
@@ -1345,8 +1349,11 @@ async function boot() {
       intro = showIntro(app, { project });
     }
   });
+  // Reading the snapshot waits for a moving title to have played (`held` in
+  // intro.js); downloading it does not.
+  const titlePlayed = early.then(() => (intro && intro.held ? intro.held() : null)).catch(() => null);
   try {
-    await loadInto(url);
+    await loadInto(url, { before: titlePlayed });
   } catch (err) {
     await early;
     if (intro) intro.leave();

@@ -539,6 +539,10 @@ fades out, and the next in, within the first `CROSSFADE` of a step, and a
 picture at rest takes at most `PICTURE_FIT` of the stage, so that it is gone
 before it fills the screen. A title `<svg>` with SMIL animations is paused at
 time 0 and played as the intro opens, without the title growing in (`.film`).
+While it plays, the page only downloads the snapshot: reading it and drawing
+the graph, which keep the page busy for a second or more, wait for the title
+to have played (`held`, `before` of `loadInto`), so the title never stops in
+mid-stroke; it stays at its end until the graph is drawn.
 A title element marked `data-intro-logo` lands on the top bar's logo
 instead of the title on its title (`intro-logo` on `<html>`: the logo shows
 from `intro-landed` on, the title with the bar). The
