@@ -395,9 +395,6 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => zoomBy(app, 1.25) }, '+'),
     el('button', { onclick: () => zoomBy(app, 1 / 1.25) }, '\u2212')));
   bar.appendChild(statsToggle(app));
-  // Replay intro is the graph's alone, where the intro lands (app.js).
-  const intro = app.introButton ? app.introButton() : null;
-  if (intro) bar.appendChild(intro);
   bar.appendChild(sideToggle(app));
 }
 

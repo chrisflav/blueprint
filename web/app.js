@@ -765,7 +765,6 @@ const app = {
   documentLevelHref,
   documentPageHref,
   documentHeadHref,
-  introButton,
   /**
    * SHA-256 of the bytes of the snapshot on screen (a Promise), which its
    * prepared PDFs are filed under.  Worked out the first time it is asked
@@ -1043,17 +1042,31 @@ function progressToggle() {
 }
 
 /**
- * See the project's intro again, on the landing page where it ends.  In the
- * graph's toolbar, beside Show sidebar (graph.js); null when the project has
- * no intro.
+ * The top bar's icon (the website's mark, or the project's logo) plays the
+ * project's intro again, on the landing page where it ends; the rest of the
+ * brand, and the icon of a project with no intro, is the link to the graph it
+ * always was.  A click that opens the link elsewhere (a new tab) is left alone.
  */
-function introButton() {
-  if (!app.model || !introOf(app.model.project)) return null;
-  return el('button.intro-replay', {
-    type: 'button',
-    title: 'Play the introduction again',
-    onclick: () => replayIntro(app, { atLanding: parseHash().raw === '/graph' }),
-  }, 'Replay intro');
+export function watchBrand(brand = typeof document !== 'undefined' && document.querySelector('.brand')) {
+  if (!brand) return;
+  brand.addEventListener('click', (ev) => {
+    const icon = ev.target && ev.target.closest && ev.target.closest('.brand-mark, .brand-logo');
+    if (!icon || !app.model || !introOf(app.model.project)) return;
+    if (ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    ev.preventDefault();
+    replayIntro(app, { atLanding: parseHash().raw === '/graph' });
+  });
+}
+
+/** Say on the top bar's icon what a click on it does, when it replays the intro. */
+function brandTitle(project) {
+  const brand = typeof document !== 'undefined' && document.querySelector('.brand');
+  if (!brand) return;
+  const title = introOf(project) ? 'Play the introduction again' : '';
+  for (const icon of brand.querySelectorAll('.brand-mark, .brand-logo')) {
+    if (title) icon.setAttribute('title', title);
+    else icon.removeAttribute('title');
+  }
 }
 
 function themeMenu() {
@@ -1117,6 +1130,7 @@ function updateChrome() {
   document.getElementById('project-title').textContent = title;
   document.title = title;
   brandLogo(app.model && app.model.project);
+  brandTitle(app.model && app.model.project);
 
   const aside = document.getElementById('topbar-aside');
   clear(aside);
@@ -1342,6 +1356,7 @@ function scriptsReady() {
 async function boot() {
   applyTheme(currentTheme()); // before anything is drawn, so nothing flashes
   watchTopbar();
+  watchBrand();
   applyShowProgress(currentShowProgress());
   const url = dataUrlFromQuery();
   app.dataUrlOriginal = url;

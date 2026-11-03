@@ -1055,6 +1055,42 @@ await check('the sidebar lists the level the page writes out, the entry gone to 
   ok(link('lem-finite-subcover'), 'its entries listed');
 });
 
+await check('in the Outline style the sidebar is the contents unfolded down to the page, the page\'s own entry folding', async () => {
+  applyTheme('outline');
+  try {
+    const id = (li) => li.querySelector('a').getAttribute('data-id');
+    const link = (x) => root.querySelector('nav.toc a[data-id="' + x + '"]');
+    const top = () => root.querySelector('nav.toc ul.toc-levels').children.map(id).join(' ');
+    const out = modelMod.documentOutline(app.model, 'refines');
+    const listed = (es) => es.filter((e) => !e.text && !e.duplicate).map((e) => e.id).join(' ');
+    const under = (x) => listed(out.byId.get(x).children);
+    const listedUnder = (x) => {
+      const ul = link(x).parentNode.querySelector('ul');
+      return ul ? ul.children.map(id).join(' ') : '';
+    };
+    await go('#/document/sec-main-induction');
+    ok(root.querySelector('nav.toc.toc-outline'), 'the outline sidebar');
+    eq(top(), listed(out.roots), 'every chapter listed');
+    eq(listedUnder('sec-main'), under('sec-main'), 'the chapter unfolded on every one of its entries');
+    eq(listedUnder('sec-main-induction'), under('sec-main-induction'), 'the page\'s own entry unfolded on its entries');
+    eq(listedUnder('sec-foundations'), '', 'another chapter left folded');
+    // A click on the page's own entry folds its entries away, another
+    // unfolds them; it stays on the page.
+    let ev = fire(link('sec-main-induction'), 'click');
+    ok(ev.defaultPrevented, 'the page\'s own entry does not route');
+    eq(listedUnder('sec-main-induction'), '', 'folded by a click');
+    ok(link('sec-main-induction').parentNode.classList.contains('shut'), 'and marked so');
+    eq(listedUnder('sec-main'), under('sec-main'), 'the rest stays as it was');
+    fire(link('sec-main-induction'), 'click');
+    eq(listedUnder('sec-main-induction'), under('sec-main-induction'), 'unfolded by another');
+    // An entry of the chain above leads to its page, as before.
+    ev = fire(link('sec-main'), 'click');
+    ok(!ev.defaultPrevented, 'the chapter is another page: followed');
+  } finally {
+    applyTheme('');
+  }
+});
+
 await check('a nested page has the whole chain in its breadcrumbs', async () => {
   await go('#/document/sec-main-induction');
   ok(hrefs('.doc-crumbs a').includes('#/document/sec-main?collapse=refines'), 'the chapter is in the chain');
@@ -1778,33 +1814,41 @@ await check('the top bar: the style menu and Show progress on the first row; the
     'the style menu and Show progress are in the aside');
 });
 
-await check('Replay intro is in the graph\'s toolbar beside Show sidebar, and nowhere else', async () => {
+await check('the top bar\'s icon replays the intro, and the toolbar has no Replay intro', async () => {
   const project = app.model.project;
-  const aside = dom.document.getElementById('topbar-aside');
-  const redrawTopBar = async () => {
-    for (let i = 0; i < 2; i += 1) { fire(aside.querySelector('button.progress-toggle'), 'click'); await tick(5); }
-  };
+  const { watchBrand } = await import(path.join(webDir, 'app.js'));
+  const brand = dom.document.createElement('a');
+  brand.className = 'brand';
+  const mark = dom.document.createElement('span');
+  mark.className = 'brand-mark';
+  const text = dom.document.createElement('span');
+  text.className = 'brand-text';
+  brand.appendChild(mark);
+  brand.appendChild(text);
+  watchBrand(brand);
+  // A click on a part of the brand, as it reaches the brand's listener.
+  const click = (target, ev = {}) => fire(brand, 'click', { target, ...ev });
+  const intros = () => dom.document.body.querySelectorAll('.intro').filter((n) => !n.classList.contains('leaving'));
   try {
     app.model.project = { ...project, intro: { body: 'Welcome', durationMs: 60000 } };
-    await redrawTopBar();
     await go('#/progress');
-    await go('#/graph?collapse=refines');
-    const items = [...root.querySelector('.toolbar').childNodes];
-    const at = items.findIndex((n) => n.classList && n.classList.contains('intro-replay'));
-    ok(at >= 0, 'no Replay intro in the toolbar');
-    eq(items[at].textContent, 'Replay intro', 'its words');
-    ok(items[at + 1] && items[at + 1].classList.contains('tb-side'), 'it is not just before Show sidebar');
-    eq(aside.querySelectorAll('.intro-replay').length, 0, 'the top bar still has one');
-    await go('#/document');
-    eq(dom.document.querySelectorAll('.intro-replay').length, 0, 'a page that is not the graph has one');
+    await go('#/graph');
+    eq(root.querySelectorAll('.toolbar .intro-replay').length, 0, 'the toolbar still has Replay intro');
+    ok(!click(text).defaultPrevented, 'the title no longer links to the graph');
+    eq(intros().length, 0, 'the title plays the intro');
+    ok(!click(mark, { metaKey: true }).defaultPrevented && intros().length === 0, 'a click for a new tab plays it');
+    ok(click(mark).defaultPrevented, 'the icon follows its link');
+    eq(intros().length, 1, 'the icon does not play the intro');
+    click(mark);
+    eq(intros().length, 1, 'again over itself');
+    for (const n of intros()) n.parentNode.removeChild(n);
 
     app.model.project = { ...project };
-    await go('#/progress');
-    await go('#/graph?collapse=refines');
-    eq(root.querySelectorAll('.toolbar .intro-replay').length, 0, 'offered for a project with no intro');
+    ok(!click(mark).defaultPrevented, 'the icon of a project with no intro is not its link');
+    eq(intros().length, 0, 'an intro for a project with none');
   } finally {
+    for (const n of intros()) n.parentNode.removeChild(n);
     app.model.project = project;
-    await redrawTopBar();
   }
 });
 
@@ -3188,7 +3232,7 @@ await check('a click or a key ends the intro at once', async () => {
   }
 });
 
-await check('the top bar replays the intro, once at a time', async () => {
+await check('the top bar\'s icon replays the intro, once at a time', async () => {
   const host = dom.document.createElement('div');
   const project = app.model.project;
   app.model.project = { ...project, intro: { body: 'Welcome', durationMs: 60000 } };
