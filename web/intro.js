@@ -26,8 +26,8 @@
 // screen grows the first picture of `zoom`, boxes and arrows drawn as the
 // graph draws them; it grows on and fades while the next one grows out of the
 // middle, and so on, the last being the graph itself.  Every step takes
-// `stepMs` and makes everything `ZOOM` times bigger, so the zoom keeps one
-// speed throughout.  `stepMs` may instead give each step a length of its own
+// `stepMs` and makes everything `ZOOM` times bigger, quickly at first and then
+// settling slowly into place (`SETTLE`), each step alike.  `stepMs` may instead give each step a length of its own
 // (the last one standing for any steps after it); the speed is still one, so
 // a shorter step grows less: the longest grow `ZOOM` times (`zoomFactors`).
 //
@@ -61,6 +61,7 @@ export const STEP_MS = 1000; // how long each step of the zoom takes
 export const FILM_END_S = 3600; // a moving title's time with reduced motion: its end
 export const TITLE_IN_MS = 700; // the title growing in: `intro-title-in` in style.css
 export const ZOOM = 10; // how much bigger each step of the zoom makes everything
+export const SETTLE = 3; // each step quick, then slow: 1 - (1 - t)^SETTLE of the way at t
 export const PICTURE_MAX = 2; // the largest a picture is drawn, in units of the graph's
 export const PICTURE_FIT = 0.45; // and at most this share of the stage's width and height, at rest
 export const CROSSFADE = 0.3; // the share of a step in which one picture fades out and the next in
@@ -280,10 +281,11 @@ export function replayIntro(app, { atLanding, host = document.body, landing = '#
 
 /**
  * How far the zoom has got after `t` of its `steps` steps: one step per unit
- * of `t`, except that the first step starts from rest and the last comes to
- * rest, each joining the steady part at its speed.  Clamped to [0, steps].
- * `steps` may instead be the steps' lengths, `t` then counted in their unit:
- * each step takes its length, the first still from rest and the last to rest.
+ * of `t`, each step quick at first and settling slowly (`SETTLE`): what comes
+ * in reaches about 60% of its size in the first 40% of the step, and the rest
+ * of the step brings it to rest.  Clamped to [0, steps].  `steps` may instead
+ * be the steps' lengths, `t` then counted in their unit: each step takes its
+ * length.
  */
 export function zoomProgress(t, steps) {
   const lengths = Array.isArray(steps) ? steps : Array.from({ length: Math.max(0, steps) }, () => 1);
@@ -294,17 +296,12 @@ export function zoomProgress(t, steps) {
   let i = 0;
   while (i < n - 1 && u >= lengths[i]) { u -= lengths[i]; i += 1; }
   const x = Math.min(1, u / lengths[i]);
-  const out = (y) => y + y * y - y * y * y; // speed 1 down to 0
-  const into = (y) => 1 - out(1 - y); // speed 0 up to 1
-  if (n === 1) return x * x * (3 - 2 * x);
-  if (i === 0) return into(x);
-  if (i === n - 1) return n - 1 + out(x);
-  return i + x;
+  return i + 1 - Math.pow(1 - x, SETTLE);
 }
 
 /**
  * How much each step of the zoom grows everything, for steps of `lengths`:
- * one speed for all, at which the longest grow `zoom` times.
+ * one pace for all, at which the longest grow `zoom` times.
  */
 export function zoomFactors(lengths, zoom = ZOOM) {
   const longest = Math.max(...lengths);
