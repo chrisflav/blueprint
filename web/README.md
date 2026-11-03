@@ -387,18 +387,21 @@ reports the attribute (`hide-content-without-page`) and the site ignores it.
 The PDF export leaves the same heading and prose out (below).
 
 The table of contents is a page of its own, `#/contents` (`contents.js`), the
-*Contents* tab of the top bar: the whole document as a tree, along the same
-order and under the same numbers, a row per entry — a section or a
-statement — with its number, title and progress, each a link to the page
-its entry heads (below). Beside a row with entries below it is a small triangle that unfolds
-them, and folds them again; the tree opens on the top level, and what the
-reader unfolded is kept while the site is open. A row's entries are built when it is first unfolded.
+*Contents* tab of the top bar: the headings of the document as a tree, along
+the same order and under the same numbers, a row per chapter, section and
+subsection (an appendix too) with its number, title and progress, each a link
+to the page its entry heads (below). Statements, proofs, relations and the
+text between them have no row: they are read on the pages the headings lead
+to (`isContentsEntry` in `model.js`). Beside a row with headings below it is a
+small triangle that unfolds them, and folds them again; the tree opens on the
+top level, and what the reader unfolded is kept while the site is open. A
+row's entries are built when it is first unfolded.
 
 A row of the contents, of the contents page or of the sidebar, leads to the
 page its entry heads (`documentPageOf` in `model.js`, `documentPageHref` in
 `app.js`): chapter 2 to the page of 2, with 2.1, 2.2, … written out, at its
-top. A statement, which heads no page, leads to the page it is read on,
-scrolled to it (`?focus=`). A heading is one link, the kind, the number and
+top. A section with nothing under it, which heads no page, leads to the page
+it is read on, scrolled to it (`?focus=`). A heading is one link, the kind, the number and
 the title together, and it stays where it is: clicked, it is scrolled to the
 top of the page it is on, whatever page and whatever entry, the page's own
 title and a repeated entry's included, and the link says so (`?focus=`).
@@ -411,15 +414,18 @@ its *level* (`documentLevelOf` in `model.js`): the page of its parent, which
 writes out the entry and its siblings, scrolled to it (`?focus=`) — for a
 chapter, the top of the document (`#/document?focus=<id>`); a reference whose
 level is the page open only scrolls. The sidebar (`levelSidebar` in
-`document.js`) lists the level the page writes out, under the chain down to
-it as headings; reached by such a link, it shows the entry gone to opened on
-its own entries. So on chapter 2's page the sidebar is the heading 2 over
-2.1, 2.2, …; a click on 2.1 opens 2.1's page, with 2.1.1, 2.1.2, … written
-out and the sidebar the headings 2 and 2.1 over them. A statement of the page
-on screen is only scrolled to and opened, and the link updated, without
+`document.js`) lists, as the contents page does, only the headings:
+the sections of the level the page writes out, under the chain down to it;
+reached by such a link, it shows the entry gone to opened on its own
+sections, and a statement gone to opens the section it is under. So on
+chapter 2's page the sidebar is the heading 2 over 2.1, 2.2, …; a click on
+2.1 opens 2.1's page, with 2.1.1, 2.1.2, … written out and the sidebar the
+headings 2 and 2.1 over the sections among them. A section of the page on
+screen is only scrolled to and opened, and the link updated, without
 rebuilding the page; the page's own entry scrolls to the top. A page reached
-otherwise — by a *Read* line, the breadcrumbs, a number — lists
-its own entries under its chain. Every style has this sidebar; the Outline
+otherwise — by a *Read* line, the breadcrumbs, a number — lists its own
+sections under its chain, and a section with no section under it is shown
+opened among its siblings. Every style has this sidebar; the Outline
 style unfolds it and draws it as an outline (see below). Query parameters, which a link may
 carry (the page itself has no controls for them):
 

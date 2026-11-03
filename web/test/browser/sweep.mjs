@@ -1658,9 +1658,9 @@ async function pageChecks(d, f) {
     };
   });
 
-  // The contents are a page of their own: a row per top-level entry, folded,
-  // nothing written out, not even the text at the top level.
-  const rows = out.roots.filter((e) => !e.text).length;
+  // The contents are a page of their own: a row per top-level heading,
+  // folded, nothing written out, no statement, relation or text.
+  const rows = out.roots.filter((e) => M.isContentsEntry(e)).length;
   await check(d, 'contents/a-row-per-top-level-entry', async () => {
     await route(d, '#/contents');
     await waitFor(d, `return document.querySelectorAll('.contents-tree > li').length > 0`,
@@ -1668,7 +1668,7 @@ async function pageChecks(d, f) {
     const s = await d.js(PAGE_STATE);
     return {
       ok: s.rows === rows && s.entries === 0 && s.toc === 0,
-      evidence: `#/contents: ${s.rows} rows (top-level entries ${rows}), ${s.entries} .doc-entry (want 0), ${s.toc} sidebar links`,
+      evidence: `#/contents: ${s.rows} rows (top-level headings ${rows}), ${s.entries} .doc-entry (want 0), ${s.toc} sidebar links`,
     };
   });
 
@@ -1689,7 +1689,8 @@ async function pageChecks(d, f) {
   `;
   await check(d, 'contents/triangle-unfolds-an-entry', async () => {
     if (!f.chapter) return { skip: true, evidence: 'no top-level entry with children' };
-    const want = out.byId.get(f.chapter).children.filter((c) => !c.text).length;
+    const want = out.byId.get(f.chapter).children.filter((c) => M.isContentsEntry(c)).length;
+    if (!want) return { skip: true, evidence: `${f.chapter} has no heading under it, so nothing to unfold` };
     const before = await d.js(TREE_ROW(f.chapter));
     if (!before || !before.w) return { ok: false, evidence: `no triangle beside ${f.chapter}: ${j(before)}` };
     await d.click(before.x, before.y);
@@ -1733,7 +1734,7 @@ async function pageChecks(d, f) {
     const s = await d.js(PAGE_STATE);
     const side = await d.js(SIDEBAR);
     const r = await d.js(ENTRY_IN_VIEW(f.chapter));
-    const kids = entry.children.filter((c) => !c.duplicate && !c.text).map((c) => c.id);
+    const kids = entry.children.filter((c) => !c.duplicate && M.isContentsEntry(c)).map((c) => c.id);
     const want = M.documentPageEntries(out, f.chapter, 1).length;
     return {
       ok: !/focus=/.test(s.hash) && s.ids[0] === anchorOf(f.chapter) && s.entries === want
@@ -1748,8 +1749,9 @@ async function pageChecks(d, f) {
   await check(d, 'document/sidebar-goes-down-a-level', async () => {
     if (!f.chapter) return { skip: true, evidence: 'no chapter fixture' };
     const entry = out.byId.get(f.chapter);
-    const child = entry.children.find((c) => !c.duplicate && !c.text && c.children.length);
-    if (!child) return { skip: true, evidence: `nothing under ${f.chapter} has entries of its own` };
+    // The sidebar lists headings only: a section with a heading under it.
+    const child = entry.children.find((c) => !c.duplicate && M.isContentsEntry(c) && c.children.some((x) => M.isContentsEntry(x)));
+    if (!child) return { skip: true, evidence: `no section under ${f.chapter} has a section of its own` };
     const box = await d.js(`
       var a = document.querySelector('nav.toc a[data-id="${child.id}"]');
       if (!a) return null; a.scrollIntoView({ block: 'nearest' });
@@ -1767,7 +1769,7 @@ async function pageChecks(d, f) {
     return {
       ok: s.ids[0] === anchorOf(child.id) && s.entries === want && s.crumbs >= 2 && s.pagers >= 1
         && side.ups.join() === [f.chapter, child.id].join()
-        && !side.links.includes(out.roots.find((e) => e !== entry && !e.text && !e.duplicate).id),
+        && !side.links.includes(out.roots.find((e) => e !== entry && M.isContentsEntry(e) && !e.duplicate).id),
       evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, first entry #${s.ids[0]}, ${s.entries} entries (want ${want}), ${s.crumbs} breadcrumb links, `
         + `${s.pagers} pagers; sidebar chain ${j(side.ups)}`,
     };

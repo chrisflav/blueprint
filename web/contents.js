@@ -1,12 +1,13 @@
 // contents.js — the table of contents, a page of its own (`#/contents`).
 //
-// The whole document as a tree, along the same collapse order and under the
-// same numbers as the document (`documentOutline` in model.js): a row per
-// entry, a section or a statement, each a link into the document: to the
-// page the entry heads, chapter 2 to the page of 2 with 2.1, 2.2, …, and a
-// statement, which heads none, to the page it is read on, scrolled to it
-// (`app.documentPageHref`).  A row with entries below it has a small
-// triangle beside it that unfolds them, and folds them again; the top level
+// The headings of the document as a tree, along the same collapse order and
+// under the same numbers as the document (`documentOutline` in model.js): a
+// row per chapter, section and subsection (`M.isContentsEntry`), each a link
+// into the document, to the page the entry heads: chapter 2 to the page of 2
+// with 2.1, 2.2, … (`app.documentPageHref`).  Statements, proofs and
+// relations have no row; they are read on those pages.  A row with headings
+// below it has a small triangle beside it that unfolds them, and folds them
+// again; the top level
 // starts unfolded no further.  What the reader unfolded is kept while the
 // site is open, so coming back from the document finds the tree as it was
 // left.
@@ -38,7 +39,7 @@ export function render(root, app) {
   const outline = M.documentOutline(m, kind);
   if (!unfolded.has(kind)) unfolded.set(kind, new Set());
   const open = unfolded.get(kind);
-  const listed = (e) => !e.text;
+  const listed = (e) => M.isContentsEntry(e);
   const kids = (e) => (e.duplicate ? [] : e.children.filter((c) => listed(c)));
 
   const tree = el('ol.contents-tree');
@@ -103,8 +104,13 @@ export function render(root, app) {
     return a;
   };
 
-  if (!outline.roots.some(listed)) {
+  if (!outline.roots.some((e) => !e.text)) {
     page.appendChild(el('p.empty', 'Nothing to read: no object carries prose.'));
+    return;
+  }
+  if (!outline.roots.some(listed)) {
+    page.appendChild(el('p.empty', 'No chapters or sections to list: ',
+      el('a', { href: '#/document?' + new URLSearchParams({ collapse: kind }) }, 'read the document'), '.'));
     return;
   }
   for (const e of outline.roots) if (listed(e)) tree.appendChild(item(e));
