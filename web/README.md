@@ -173,9 +173,9 @@ opened in turn to see where it lands. Between two shut sections nothing of
 their contents is drawn. An edge object with contents of its own (one
 that can be expanded) stays whatever its ends, as the way into them. The arcs
 still carry their consistency state: solid when the contents witness the
-section's edge, a hollow head when nothing inside does. *Arcs of contents*
+section's edge, short dashes when nothing inside does. *Arcs of contents*
 (off by default) draws the full quotient of DESIGN.md §3 instead, the hidden
-statements' edges lifted onto their sections and dashed where no section edge
+statements' edges lifted onto their sections and in longer dashes where no section edge
 declares them; the status line counts the arcs of contents it hid.
 
 Both options that change which arcs are drawn are off by default, and the

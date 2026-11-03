@@ -200,20 +200,23 @@ function mount(root, app) {
   lastSignature = null;
 }
 
+// An arc's head is two strokes meeting at its end, "—>", one head for every
+// arc whether solid or dashed.  A marker is scaled by the stroke width of its
+// line, so a stroke of 10 / HEAD units draws the head as thick as the line.
+const HEAD = 7;
+function arrowMarker(svgEl, id, cls) {
+  return svgEl('marker', {
+    id, viewBox: '0 0 10 10', refX: 9, refY: 5,
+    markerWidth: HEAD, markerHeight: HEAD, orient: 'auto-start-reverse',
+  }, svgEl('path', { d: 'M 1 1.2 L 9 5 L 1 8.8', class: cls, 'stroke-width': round(10 / HEAD) }));
+}
+
 function defs(app) {
   const { svgEl } = app;
-  const marker = (id, hollow) =>
-    svgEl('marker', {
-      id, viewBox: '0 0 10 10', refX: 9, refY: 5,
-      markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse',
-    }, svgEl('path', {
-      d: 'M 0 0.8 L 10 5 L 0 9.2 z',
-      class: (hollow ? 'arrowhead hollow' : 'arrowhead') + (id.endsWith('-focus') ? ' focus' : ''),
-    }));
-  // The `-focus` pair is the accent-coloured head an edge of the selected node
-  // switches to, so the arrow matches its highlighted stroke.
-  return svgEl('defs', marker('bp-arrow', false), marker('bp-arrow-hollow', true),
-    marker('bp-arrow-focus', false), marker('bp-arrow-hollow-focus', true));
+  // `bp-arrow-focus` is the darker head a highlighted edge switches to, so the
+  // arrow matches its darkened stroke.
+  return svgEl('defs', arrowMarker(svgEl, 'bp-arrow', 'arrowhead'),
+    arrowMarker(svgEl, 'bp-arrow-focus', 'arrowhead focus'));
 }
 
 /** The key to the drawing; the fills say the statuses, so without the progress there are none. */
@@ -224,14 +227,16 @@ function legend(app, progress) {
     for (const c of children) s.appendChild(c);
     return s;
   };
+  // The dashes as style.css draws them on the arcs (`.gedge`).
   const line = (dash) => svgEl('line', {
-    x1: 1, y1: 5, x2: dash === 'hollow' ? 17 : 23, y2: 5,
-    stroke: 'currentColor', 'stroke-width': 1.6,
-    'stroke-dasharray': dash === 'dashed' ? '4 3' : null,
+    x1: 1, y1: 5, x2: 23, y2: 5,
+    stroke: 'currentColor', 'stroke-width': 1.3,
+    'stroke-dasharray': dash === 'short' ? '3 2' : dash === 'long' ? '5 4' : null,
   });
-  const head = (hollow) => svgEl('path', {
-    d: 'M 17 2 L 23 5 L 17 8 z',
-    fill: hollow ? 'none' : 'currentColor', stroke: 'currentColor', 'stroke-width': 1,
+  const head = () => svgEl('path', {
+    d: 'M 18 1.8 L 23 5 L 18 8.2',
+    fill: 'none', stroke: 'currentColor', 'stroke-width': 1.3,
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
   });
   const swatch = (s, text) =>
     el('div.row', el('span', { class: 'sw status-' + s }), el('span', text));
@@ -243,11 +248,11 @@ function legend(app, progress) {
     shape('remark', 'remark'),
     shape('section', 'section'),
     el('b', { style: { marginTop: '.3em' } }, 'lines'),
-    el('div.row', sample(line(), head(false)), 'declared + derived'),
-    el('div.row', sample(line('hollow'), head(true)), 'declared, unwitnessed'),
+    el('div.row', sample(line(), head()), 'declared + derived'),
+    el('div.row', sample(line('short'), head()), 'declared, unwitnessed'),
     // Only arcs into the contents of collapsed objects are drawn so (`arcs of
     // contents`, or out of an expanded section into a collapsed one).
-    el('div.row.lg-derived', sample(line('dashed'), head(false)), 'derived, undeclared'),
+    el('div.row.lg-derived', sample(line('long'), head()), 'derived, undeclared'),
     // Only while the graph is searched (`applyHighlight`).
     el('b.lg-search', { style: { marginTop: '.3em' } }, 'search'),
     el('div.row.lg-search', el('span.shp.hit'), el('span', 'matches')),
@@ -1825,11 +1830,7 @@ export async function sketch(app, layer) {
   // is drawn as visible as the place it is defined in.
   sketchCount += 1;
   const headId = 'bp-sketch-arrow-' + sketchCount;
-  const head = svgEl('marker', {
-    id: headId, viewBox: '0 0 10 10', refX: 9, refY: 5,
-    markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse',
-  }, svgEl('path', { d: 'M 0 0.8 L 10 5 L 0 9.2 z', class: 'arrowhead' }));
-  svg.appendChild(svgEl('defs', head));
+  svg.appendChild(svgEl('defs', arrowMarker(svgEl, headId, 'arrowhead')));
   const gEdges = svgEl('g', { class: 'edges' });
   const gNodes = svgEl('g', { class: 'nodes' });
   svg.appendChild(gEdges);
@@ -2015,18 +2016,16 @@ function drawEdge(app, meta, pts, a, b) {
   if (state) classes.push('state-' + state);
   if (entity && entity.synthetic) classes.push('synthetic');
   if (isSpoke) classes.push('spoke');
+  // Declared, but nothing inside witnesses it: drawn in short dashes.
+  if (state === 'declared-only' && elaborable) classes.push('unwitnessed');
 
   const g = svgEl('g', {
     class: classes.join(' '),
     'data-id': isSpoke ? meta.item.id : (entity.members[0] ? entity.members[0].id : entity.id),
   });
 
-  const hollow = state === 'declared-only' && elaborable;
   const directed = isSpoke ? meta.directed : (entity.directed !== false);
-  const path = svgEl('path', {
-    d: pathD(pts),
-    'marker-end': directed ? (hollow ? 'url(#bp-arrow-hollow)' : 'url(#bp-arrow)') : null,
-  });
+  const path = svgEl('path', { d: pathD(pts), 'marker-end': directed ? 'url(#bp-arrow)' : null });
   g.appendChild(path);
 
   // a wide invisible path makes the edge easy to hit with the mouse
@@ -2055,8 +2054,14 @@ function drawEdge(app, meta, pts, a, b) {
       ].filter(Boolean).join('\n');
   g.appendChild(svgEl('title', names));
 
-  g.addEventListener('mouseenter', () => g.classList.add('hovered'));
-  g.addEventListener('mouseleave', () => g.classList.remove('hovered'));
+  g.addEventListener('mouseenter', () => {
+    g.classList.add('hovered');
+    focusArrowhead(g, true);
+  });
+  g.addEventListener('mouseleave', () => {
+    g.classList.remove('hovered');
+    focusArrowhead(g, ui.layer.classList.contains('focusing') && g.classList.contains('focus'));
+  });
   g.addEventListener('click', (ev) => {
     ev.stopPropagation();
     if (panSuppressClick) return;
@@ -2222,7 +2227,7 @@ function applyFocus(own) {
   ui.layer.classList.add('focusing');
 }
 
-/** Give a highlighted edge the accent-coloured head of `defs`, or take it back. */
+/** Give a highlighted edge the darker head of `defs`, or take it back. */
 function focusArrowhead(g, on) {
   const p = g.querySelector('path'); // the drawn path; the wide hit path comes after it
   const mk = p && p.getAttribute('marker-end');
