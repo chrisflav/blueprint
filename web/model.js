@@ -200,6 +200,16 @@ export function isSectionKind(kind) {
 }
 
 /**
+ * Whether an entry of the outline has a row in the contents, the contents
+ * page's and the document's sidebar alike: a heading (a chapter, a section, a
+ * subsection, an appendix), and not a statement, a proof, a relation or the
+ * text between them, which are read on the pages the headings lead to.
+ */
+export function isContentsEntry(e) {
+  return !!e && !e.text && isSectionKind(e.object.kind);
+}
+
+/**
  * The kind of the text between statements that belongs to no statement: the
  * lines at the start of a section, a paragraph between two lemmas, as in the
  * Stacks project.  The document sets it as bare prose, with no heading and no

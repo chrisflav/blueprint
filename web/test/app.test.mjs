@@ -767,7 +767,7 @@ await check('the top page writes out the top level; the contents are a page of t
   eq(root.querySelectorAll('.doc-entry.page-head').length, 1, 'the leaf has a page of its own');
 });
 
-await check('the contents page: the top level, a triangle unfolding each entry, every row a link to its place', async () => {
+await check('the contents page: the headings only, a triangle unfolding each, every row a link to its place', async () => {
   await go('#/contents');
   const out = modelMod.documentOutline(app.model, 'refines');
   const tree = root.querySelector('ol.contents-tree');
@@ -781,34 +781,35 @@ await check('the contents page: the top level, a triangle unfolding each entry, 
   const targetOf = (href) => new URLSearchParams(href.slice(href.indexOf('?') + 1)).get('focus') ||
     decodeURIComponent((/^#\/document\/([^?]+)/.exec(href) || [])[1] || '');
   const row = (id) => rows().find((li) => targetOf(own(li, 'a.contents-link').getAttribute('href')) === id);
-  const listed = out.roots.filter((e) => !e.text);
-  eq(tree.children.length, listed.length, 'a row per top-level entry, folded');
+  const heading = (e) => modelMod.isContentsEntry(e);
+  const listed = out.roots.filter(heading);
+  eq(tree.children.length, listed.length, 'a row per top-level heading, folded');
+  ok(listed.length < out.roots.filter((e) => !e.text).length, 'the fixture has a top-level entry that is not a heading');
+  for (const e of out.roots.filter((x) => !x.text && !heading(x))) eq(row(e.id), undefined, `a row for ${e.id}, not a heading`);
   // Every row leads to the page it heads: a chapter to its own page.
   ok(hrefs('.contents-tree a').includes('#/document/sec-main?collapse=refines'), 'a chapter leads to its own page');
   const main = row('sec-main');
   const toggle = () => own(row('sec-main'), 'button.contents-toggle');
   ok(toggle(), 'a triangle beside an entry with entries below it');
   eq(toggle().getAttribute('aria-expanded'), 'false', 'folded');
-  const leaf = listed.find((e) => !e.children.length);
-  ok(row(leaf.id).querySelector('.contents-toggle.none'), 'none beside an entry without');
+  const leaf = listed.find((e) => !e.children.some(heading));
+  ok(row(leaf.id).querySelector('.contents-toggle.none'), 'none beside a heading with no heading below it');
   eq(main.querySelectorAll('ol').length, 0, 'its entries are not built yet');
 
   fire(toggle(), 'click');
   eq(toggle().getAttribute('aria-expanded'), 'true', 'a click unfolds it');
   const sub = subOf(row('sec-main'));
-  const kids = out.byId.get('sec-main').children.filter((c) => !c.text);
-  eq(sub.children.length, kids.length, 'a row per entry below it');
-  // A section below it leads to its own page; a statement, which heads no
-  // page, to the page it is read on, scrolled to it.
+  const kids = out.byId.get('sec-main').children.filter(heading);
+  eq(sub.children.length, kids.length, 'a row per heading below it');
+  eq(row('thm-tychonoff'), undefined, 'no row for a statement beside them');
+  // A section below it leads to its own page; the statements under it have no
+  // rows, so it has nothing to unfold.
   const section = kids.find((c) => c.children.length);
   ok(hrefs('.contents-tree a').includes('#/document/' + encodeURIComponent(section.id) + '?collapse=refines'),
     'a section below it leads to its own page');
-  const deeper = own(row(section.id), 'button.contents-toggle');
-  fire(deeper, 'click');
-  const stmt = section.children.find((c) => !c.text);
-  ok(hrefs('.contents-tree a').includes('#/document/' + encodeURIComponent(section.id) +
-    '?collapse=refines&focus=' + encodeURIComponent(stmt.id)), 'a statement two levels down leads to its section page');
-  ok(row(stmt.id).querySelector('.kindword'), 'a statement reads with its kind');
+  ok(section.children.some((c) => !c.text && !heading(c)), 'the fixture section has statements under it');
+  ok(row(section.id).querySelector('.contents-toggle.none'), 'with only statements under it, nothing to unfold');
+  eq(root.querySelectorAll('.contents-tree .kindword').length, 0, 'no statement anywhere in the tree');
 
   // What was unfolded stays so on the way back.
   await go('#/document');
@@ -1047,7 +1048,7 @@ await check('a click on any title stays on the page, scrolled to it', async () =
     'a ctrl-click is the browser\'s');
 });
 
-await check('the sidebar lists the level the page writes out, the entry gone to opened', async () => {
+await check('the sidebar lists the headings of the level the page writes out, the entry gone to opened', async () => {
   const own = (li) => li.querySelector('a');
   const id = (li) => own(li).getAttribute('data-id');
   const ups = () => root.querySelectorAll('nav.toc li.toc-up').map(id);
@@ -1056,14 +1057,16 @@ await check('the sidebar lists the level the page writes out, the entry gone to 
     .find((a) => a.getAttribute('data-id') === x);
   const opened = () => entries().filter((li) => li.classList.contains('open')).map(id);
   const out = modelMod.documentOutline(app.model, 'refines');
-  const chapters = out.roots.filter((e) => !e.text && !e.duplicate).map((e) => e.id).join(' ');
+  const chapters = out.roots.filter((e) => modelMod.isContentsEntry(e) && !e.duplicate).map((e) => e.id).join(' ');
   // A chapter from a reference: the page is the chapters, the sidebar the
   // chapters with this one opened on its sections.
   await go('#/document?collapse=refines&focus=sec-main');
   eq(ups().length, 0, 'no chain at the top level');
-  eq(entries().filter((li) => !li.parentNode.parentNode.classList.contains('open')).map(id).join(' '), chapters, 'the chapters');
+  eq(entries().filter((li) => !li.parentNode.parentNode.classList.contains('open')).map(id).join(' '), chapters,
+    'the chapters, and no relation or statement of the top level');
   eq(opened().join(' '), 'sec-main', 'the chapter gone to opened');
-  ok(link('sec-main-induction') && link('thm-tychonoff'), 'on its entries');
+  ok(link('sec-main-induction'), 'on its sections');
+  eq(link('thm-tychonoff'), undefined, 'not on its statements');
   // Every entry leads to the page it heads, as the contents do: another
   // chapter to its own page, even from the page that writes it out.
   eq(link('sec-foundations').getAttribute('href'), '#/document/sec-foundations?collapse=refines', 'a chapter leads to its page');
@@ -1073,30 +1076,31 @@ await check('the sidebar lists the level the page writes out, the entry gone to 
     'a section leads to its own page');
   ev = fire(link('sec-main-induction'), 'click');
   ok(!ev.defaultPrevented, 'which is another page: followed');
-  // On the chapter's page: a statement, which heads no page, is scrolled to
-  // and opened; the page's own entry scrolls to the top.
+  // On the chapter's page: its sections, not its statements; the page's own
+  // entry scrolls to the top.
   await go('#/document/sec-main');
-  eq(link('thm-tychonoff').getAttribute('href'), '#/document/sec-main?collapse=refines&focus=thm-tychonoff',
-    'a statement leads to the page it is read on');
-  ev = fire(link('thm-tychonoff'), 'click');
-  ok(ev.defaultPrevented, 'a statement on this page is scrolled to, not routed to');
-  eq(opened().join(' '), 'thm-tychonoff', 'and opened');
-  ok(/focus=thm-tychonoff/.test(global.location.hash), 'the link says so');
+  eq(ups().join(' '), 'sec-main', 'the chapter as a heading');
+  eq(entries().map(id).join(' '), 'sec-main-induction', 'over its one section');
   ev = fire(link('sec-main'), 'click');
   ok(ev.defaultPrevented, 'the page\'s own entry scrolls, it does not route');
+  // A statement gone to opens nothing of its own: the heading it is under.
+  await go('#/document/sec-main?collapse=refines&focus=thm-tychonoff');
+  eq(opened().length, 0, 'a statement of the page: nothing opened');
+  await go('#/document/sec-main?collapse=refines&depth=2&focus=lem-finite-subcover');
+  eq(opened().join(' '), 'sec-main-induction', 'a statement of a section written out: that section opened');
   await go('#/document/sec-main?collapse=refines&focus=sec-main-induction');
   eq(entryIds().join(' '), 'doc-sec-main doc-sec-main-induction doc-thm-tychonoff', 'the page writes out the sections');
   eq(ups().join(' '), 'sec-main', 'the sidebar: the chapter as a heading');
   eq(opened().join(' '), 'sec-main-induction', 'over the section gone to, opened');
-  ok(link('lem-finite-subcover') && link('thm-tychonoff'), 'on its entries, among its siblings');
+  eq(link('lem-finite-subcover'), undefined, 'its statements not listed');
   eq(link('sec-foundations'), undefined, 'the other chapters gone');
   // The chain leads to the pages its entries head.
   eq(link('sec-main').getAttribute('href'), '#/document/sec-main?collapse=refines', 'the heading leads to its page');
-  // A page reached otherwise lists its own entries under its chain.
+  // A section with only statements under it is read among its siblings.
   await go('#/document/sec-main-induction');
-  eq(ups().join(' '), 'sec-main sec-main-induction', 'a section page: its chain');
-  eq(opened().length, 0, 'nothing opened');
-  ok(link('lem-finite-subcover'), 'its entries listed');
+  eq(ups().join(' '), 'sec-main', 'a section page with no section under it: the chain above it');
+  eq(opened().join(' '), 'sec-main-induction', 'the section itself opened among its siblings');
+  eq(link('lem-finite-subcover'), undefined, 'and no statement listed');
 });
 
 await check('in the Outline style the sidebar is the contents unfolded down to the page, the page\'s own entry folding', async () => {
@@ -1106,7 +1110,7 @@ await check('in the Outline style the sidebar is the contents unfolded down to t
     const link = (x) => root.querySelector('nav.toc a[data-id="' + x + '"]');
     const top = () => root.querySelector('nav.toc ul.toc-levels').children.map(id).join(' ');
     const out = modelMod.documentOutline(app.model, 'refines');
-    const listed = (es) => es.filter((e) => !e.text && !e.duplicate).map((e) => e.id).join(' ');
+    const listed = (es) => es.filter((e) => modelMod.isContentsEntry(e) && !e.duplicate).map((e) => e.id).join(' ');
     const under = (x) => listed(out.byId.get(x).children);
     const listedUnder = (x) => {
       const ul = link(x).parentNode.querySelector('ul');
@@ -1114,22 +1118,26 @@ await check('in the Outline style the sidebar is the contents unfolded down to t
     };
     await go('#/document/sec-main-induction');
     ok(root.querySelector('nav.toc.toc-outline'), 'the outline sidebar');
-    eq(top(), listed(out.roots), 'every chapter listed');
-    eq(listedUnder('sec-main'), under('sec-main'), 'the chapter unfolded on every one of its entries');
-    eq(listedUnder('sec-main-induction'), under('sec-main-induction'), 'the page\'s own entry unfolded on its entries');
+    eq(top(), listed(out.roots), 'every chapter listed, and nothing else of the top level');
+    eq(listedUnder('sec-main'), under('sec-main'), 'the chapter unfolded on every one of its sections');
+    eq(listedUnder('sec-main-induction'), '', 'the section, with only statements under it, has nothing to unfold');
     eq(listedUnder('sec-foundations'), '', 'another chapter left folded');
-    // A click on the page's own entry folds its entries away, another
+    eq(root.querySelectorAll('nav.toc a[data-id="lem-finite-subcover"], nav.toc a[data-id="thm-tychonoff"]').length, 0,
+      'no statement listed');
+    // A click on the page's own entry folds its sections away, another
     // unfolds them; it stays on the page.
-    let ev = fire(link('sec-main-induction'), 'click');
+    await go('#/document/sec-main');
+    eq(listedUnder('sec-main'), under('sec-main'), 'the chapter\'s page: the chapter unfolded');
+    let ev = fire(link('sec-main'), 'click');
     ok(ev.defaultPrevented, 'the page\'s own entry does not route');
-    eq(listedUnder('sec-main-induction'), '', 'folded by a click');
-    ok(link('sec-main-induction').parentNode.classList.contains('shut'), 'and marked so');
-    eq(listedUnder('sec-main'), under('sec-main'), 'the rest stays as it was');
-    fire(link('sec-main-induction'), 'click');
-    eq(listedUnder('sec-main-induction'), under('sec-main-induction'), 'unfolded by another');
-    // An entry of the chain above leads to its page, as before.
-    ev = fire(link('sec-main'), 'click');
-    ok(!ev.defaultPrevented, 'the chapter is another page: followed');
+    eq(listedUnder('sec-main'), '', 'folded by a click');
+    ok(link('sec-main').parentNode.classList.contains('shut'), 'and marked so');
+    eq(top(), listed(out.roots), 'the rest stays as it was');
+    fire(link('sec-main'), 'click');
+    eq(listedUnder('sec-main'), under('sec-main'), 'unfolded by another');
+    // Another chapter leads to its page, as before.
+    ev = fire(link('sec-foundations'), 'click');
+    ok(!ev.defaultPrevented, 'another chapter is another page: followed');
   } finally {
     applyTheme('');
   }
