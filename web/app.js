@@ -262,17 +262,17 @@ function setSanitizedHtml(target, html) {
 
 // A body's `## Proof` heading and everything after it, up to the next heading
 // of the same level or above, becomes a disclosure: the heading is its
-// summary, so a click on "Proof." folds or unfolds that one proof.  Whether
-// proofs start folded is the reader's choice, kept in localStorage and offered
-// by `proofToggle` on the pages that show proofs.
+// summary, so a click on "Proof." folds or unfolds that one proof.  Proofs
+// start folded unless the reader has chosen otherwise, a choice kept in
+// localStorage and offered by `proofToggle` on the pages that show proofs.
 const PROOFS_KEY = 'blueprint.proofs';
 let proofsFolded = readProofsFolded();
 
 function readProofsFolded() {
   try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(PROOFS_KEY) === 'folded';
+    return typeof localStorage === 'undefined' || localStorage.getItem(PROOFS_KEY) !== 'shown';
   } catch (e) {
-    return false;
+    return true;
   }
 }
 
@@ -283,7 +283,7 @@ function isProofHeading(node) {
 
 /**
  * A proof as a disclosure: `head` is its summary, `body` what folds away, an
- * end mark closes it.  Open or folded as the reader last chose.  The one shape
+ * end mark closes it.  Folded, unless the reader has chosen to show proofs.  The one shape
  * for a proof object (`DESIGN.md` §2.5) and for a `## Proof` section still in
  * a body.
  */
