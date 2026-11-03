@@ -228,6 +228,27 @@ await check('a shared lemma whose first place is elsewhere is written out in ful
   ok(/\\hyperref\[bp\d+\]\{Lemma 2\.2\.3\}/.test(res.tex), 'a reference to the lemma written here links to it');
 });
 
+await check('a proof moved by its order is written where it is read, named by what it proves away from it', () => {
+  // Right after its statement: "Proof." as ever.
+  let m = paper();
+  m.byId.get('proof/lem-tube').attrs.order = 5;
+  let t = bodyOf(exportLatex(m, { scope: 'compact' }).tex);
+  const stmt = t.indexOf('% object: lem-tube');
+  let at = t.indexOf('% proof: proof/lem-tube');
+  ok(stmt > 0 && at > stmt, 'after its statement');
+  ok(t.slice(at).startsWith('% proof: proof/lem-tube\n\\begin{proof}[{Proof}]'), 'as "Proof."');
+  // Before it, with a statement between: "Proof of Lemma 2.2.3".
+  m = paper();
+  m.byId.get('proof/lem-tube').attrs.order = 2.5;
+  t = bodyOf(exportLatex(m, { scope: 'compact' }).tex);
+  at = t.indexOf('% proof: proof/lem-tube');
+  ok(at > t.indexOf('% text: compact-between') && at < t.indexOf('% object: thm-fip'), 'where its order puts it');
+  ok(t.includes('\\begin{proof}[{Proof of Lemma 2.2.3}]'), 'named by what it proves');
+  eq(t.indexOf('% proof: proof/lem-tube', at + 1), -1, 'once');
+  ok(t.includes('{Lemma~2.2.3}'), 'its statement keeps its number');
+  throwsExport(() => resolveRequest(m, { scope: 'proof/lem-tube' }), /'proof\/lem-tube' is a proof read in place inside 'compact'/, 'not a part of its own');
+});
+
 await check('a refined statement exports with its proof and the proof\'s details', () => {
   const m = paper();
   const res = exportLatex(m, { scope: 'thm-fip' });

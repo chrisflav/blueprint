@@ -1659,6 +1659,91 @@ check('a chapter and a subsection are headings, as a section is; a question is n
   eq(M.kindWord('question'), 'Question', 'referred to as a question');
 });
 
+// A proof is read where its file puts it, as any node is: in the section of
+// its directory, where its `order` puts it.  Unmoved, it stays with its
+// statement.
+const placedProofsSnapshot = () => {
+  const node = (id, kind, file, order) => ({
+    id, kind, boundary: [], attrs: order === undefined ? {} : { order }, body: 'text of ' + id, depth: 0,
+    source: { file, anonymous: false },
+  });
+  const edge = (kind, src, tgt) => ({
+    id: `${kind}/${src}/${tgt}`, kind, attrs: {}, body: '', depth: 1,
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }], source: { file: 'x.md', anonymous: true },
+  });
+  const proof = (of, file, order, id = 'proof/' + of) => ({
+    id, kind: 'proof', attrs: order === undefined ? {} : { order }, body: 'proof of ' + of, depth: 1,
+    boundary: [{ role: 'of', id: of }], source: { file, anonymous: false },
+  });
+  const binary = { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } } };
+  return {
+    version: 1,
+    schema: {
+      defaultCollapse: 'refines',
+      kinds: {
+        section: { boundary: {} },
+        hidden: { boundary: {}, graph: 'never' },
+        theorem: { boundary: {}, countable: true },
+        lemma: { boundary: {}, countable: true },
+        refines: { ...binary, collapse: true },
+        uses: binary,
+        proof: { boundary: { of: { min: 1, max: 1 } } },
+      },
+    },
+    objects: [
+      node('chap', 'section', 'blueprint/chap/_section.md', 1),
+      node('sa', 'section', 'blueprint/chap/a/_section.md', 1),
+      node('sb', 'section', 'blueprint/chap/b/_section.md', 2),
+      { ...node('sc', 'section', 'blueprint/chap/c/_section.md', 3), body: '' },
+      node('thm', 'theorem', 'blueprint/chap/a/thm.md', 1),
+      node('note', 'hidden', 'blueprint/chap/a/note.md', 2),
+      node('lem', 'lemma', 'blueprint/chap/a/lem.md', 4),
+      node('lemb', 'lemma', 'blueprint/chap/b/lemb.md', 1),
+      // moved within its section: after the note between them
+      proof('thm', 'blueprint/chap/a/thm.proof.md', 3),
+      // moved to another section, no order of its own
+      proof('lem', 'blueprint/chap/b/lem.proof.md'),
+      // unmoved: next to its statement, no order
+      proof('lemb', 'blueprint/chap/b/lemb.proof.md'),
+      // a second proof, alone in a section with no prose of its own
+      proof('thm', 'blueprint/chap/c/thm-again.proof.md', undefined, 'proof/thm-again'),
+      edge('refines', 'sa', 'chap'), edge('refines', 'sb', 'chap'), edge('refines', 'sc', 'chap'),
+      edge('refines', 'thm', 'sa'), edge('refines', 'note', 'sa'), edge('refines', 'lem', 'sa'),
+      edge('refines', 'lemb', 'sb'),
+      edge('uses', 'proof/thm', 'lemb'),
+    ],
+  };
+};
+
+check('a proof is read where its file puts it, as any node is, and stays with its statement unmoved', () => {
+  const m = M.buildModel(placedProofsSnapshot());
+  const out = M.documentOutline(m, 'refines');
+  const kids = (id) => out.byId.get(id).children.map((e) => e.id).join(' ');
+  eq(kids('sa'), 'thm note proof/thm lem', 'moved by its order: after the note between it and its statement');
+  eq(kids('sb'), 'lemb proof/lem', 'moved to the section of its file, after what has an order');
+  eq(kids('chap'), 'sa sb sc', 'a section holding only a proof is read too');
+  eq(kids('sc'), 'proof/thm-again', 'with the proof in it');
+  const p = out.byId.get('proof/thm');
+  ok(p.proof && !p.text, 'an entry set as a proof');
+  eq(p.number, null, 'with no number');
+  eq(out.byId.get('lem').number, '1.1.2', 'and taking none from its siblings');
+  eq(out.byId.get('lemb').number, '1.2.1', 'nor in the other section');
+  eq((out.proofs.get('lemb') || []).map((x) => x.id).join(' '), 'proof/lemb', 'an unmoved proof is filed under its statement');
+  eq(out.proofs.get('thm'), undefined, 'a moved one is not');
+  eq(out.byId.get('proof/lemb'), undefined, 'and is no entry');
+  // Where it is read, and how it is named there.
+  eq(M.documentPageOf(out, 'proof/thm'), 'sa', 'read on its section\'s page');
+  eq(M.documentLevelOf(out, 'proof/lem'), 'sb', 'and the other on the other section\'s');
+  eq(M.referenceOf(out, 'proof/thm'), null, 'no number to refer to it by');
+  eq(M.proofLeadAway(m, out, m.byId.get('proof/lem')), ' of Lemma 1.1.2.', 'away from its statement: what it proves');
+  eq(M.proofLeadRest(m.byId.get('proof/thm')), '.', 'right after it: "Proof." as ever');
+  // The graph is left alone: no node for a proof, and its uses are its statement's.
+  const view = M.makeView(m, 'refines', ['chap', 'sa', 'sb']);
+  ok(!M.visibleNodes(view).some((o) => o.kind === 'proof'), 'no proof drawn');
+  eq(view.anchor('proof/thm'), 'thm', 'a moved proof stands for its statement');
+  eq(M.parentsOf(M.collapseOrder(m, 'refines'), 'proof/lem').length, 0, 'below nothing in the collapse order');
+});
+
 // ---------------------------------------------------------------------------
 
 if (failures.length) {

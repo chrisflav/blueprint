@@ -38,7 +38,7 @@ export function render(root, app) {
   const outline = M.documentOutline(m, kind);
   if (!unfolded.has(kind)) unfolded.set(kind, new Set());
   const open = unfolded.get(kind);
-  const listed = (e) => !e.text;
+  const listed = (e) => !e.text && !e.proof;
   const kids = (e) => (e.duplicate ? [] : e.children.filter((c) => listed(c)));
 
   const tree = el('ol.contents-tree');

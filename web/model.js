@@ -119,6 +119,7 @@ export function buildModel(snapshot) {
     _positions: new Map(), // memoised document positions, per collapse kind
     _countable: null, // countable objects by title, for the progress listing
     _outlines: new Map(), // memoised document outlines, per collapse kind
+    _proofPlacement: new Map(), // memoised `proofPlacement`, per collapse kind
     _mixes: new Map(), // memoised status counts under each object, per collapse kind
     _types: new Map(), // memoised `nodeType`, per object
     _graphModels: new Map(), // memoised `graphModel`, per choice of what to hide
@@ -574,6 +575,24 @@ export function proofLeadRest(object) {
   const t = object && object.attrs && object.attrs.title;
   if (typeof t !== 'string' || !t) return '.';
   return /^of\s/.test(t) ? ' ' + t + '.' : ' (' + t + ').';
+}
+
+/**
+ * `proofLeadRest` for a proof read away from its statement (`proofPlacement`),
+ * which says what it proves: "Proof of Theorem 2.1.", "Proof of Theorem 2.1
+ * (by induction).", "Proof of the detailed form (Theorem 2.1).".  Right after
+ * its statement it is `proofLeadRest`, "Proof." as ever.
+ */
+export function proofLeadAway(model, outline, object) {
+  const rest = proofLeadRest(object);
+  const of = attachedTo(object);
+  const stmt = of == null ? null : model.byId.get(of);
+  if (!stmt) return rest;
+  const ref = referenceOf(outline, of);
+  const name = ref && ref.number ? ref.word + ' ' + ref.number : titleOf(stmt);
+  if (rest === '.') return ' of ' + name + '.';
+  if (rest.startsWith(' (')) return ' of ' + name + rest;
+  return rest.slice(0, -1) + ' (' + name + ').';
 }
 
 /**
@@ -1581,10 +1600,10 @@ function compareIds(model, a, b) {
  * itself one of its details keeps its place as a root, so the walk below still
  * reaches both.
  */
-function detailedProofs(model, order) {
+function detailedProofs(model, order, skip) {
   const out = new Map();
   for (const o of model.objects) {
-    if (o.kind !== 'proof') continue;
+    if (o.kind !== 'proof' || skip.has(o.id)) continue;
     if (parentsOf(order, o.id).length || !childrenOf(order, o.id).length) continue;
     const of = attachedTo(o);
     if (of == null || of === o.id || !model.byId.has(of)) continue;
@@ -1597,29 +1616,96 @@ function detailedProofs(model, order) {
 }
 
 /**
+ * The collapse kind the `_section.md` convention builds, as `blueprint` picks
+ * it (`sectionCollapseKind` in Parse.lean): `refines` when it collapses, else
+ * the main one.
+ */
+function sectionKind(model) {
+  return model.kinds.refines && model.kinds.refines.collapse ? 'refines' : model.defaultCollapse || null;
+}
+
+/**
+ * Where proofs are read along the collapse order `kind`: like any other file,
+ * a proof is read in the section of its directory (the object of the
+ * `_section.md` beside it), where its `order` puts it among that section's
+ * entries.  A proof with no `order` of its own in its statement's section is
+ * read right after its statement, as it always was (filed under it in
+ * `documentOutline`, or with details of its own in `detailedProofs`), and so
+ * is one with no section beside it, or along an order other than the one the
+ * sections build (`sectionKind`).  The collapse order itself is left alone: a
+ * proof is still below nothing in it, so the graph never draws it and it
+ * stands for its statement there (`anchor`).
+ * Returns { bySection: section id -> [proof id], placed: Set of proof ids },
+ * memoised per kind.
+ */
+export function proofPlacement(model, kind) {
+  if (model._proofPlacement.has(kind)) return model._proofPlacement.get(kind);
+  const bySection = new Map();
+  const placed = new Set();
+  if (kind && kind === sectionKind(model)) {
+    const order = collapseOrder(model, kind);
+    // directory -> the object of its `_section.md`
+    const sections = new Map();
+    const dirOf = (o) => {
+      const f = o && o.source && !o.source.anonymous ? o.source.file : null;
+      return typeof f === 'string' ? f.slice(0, Math.max(0, f.lastIndexOf('/'))) : null;
+    };
+    // The node a `_section.md` defines; the sugar written in it (a `uses` on
+    // the section) names the same file.
+    for (const o of model.objects) {
+      const f = o.source && !o.source.anonymous && !o.boundary.length ? o.source.file : null;
+      if (typeof f === 'string' && f.slice(f.lastIndexOf('/') + 1) === '_section.md') sections.set(dirOf(o), o.id);
+    }
+    for (const o of model.objects) {
+      if (o.kind !== 'proof' || parentsOf(order, o.id).length) continue;
+      const sec = sections.get(dirOf(o));
+      if (sec == null || sec === o.id || !model.byId.has(sec)) continue;
+      if (descendantsOf(order, o.id).includes(sec)) continue; // it would be read inside itself
+      // Next to its statement, with no place of its own: right after it.
+      const own = o.attrs && typeof o.attrs.order === 'number';
+      if (!own && childrenOf(order, sec).includes(attachedTo(o))) continue;
+      if (!bySection.has(sec)) bySection.set(sec, []);
+      bySection.get(sec).push(o.id);
+      placed.add(o.id);
+    }
+  }
+  const out = { bySection, placed };
+  model._proofPlacement.set(kind, out);
+  return out;
+}
+
+/**
+ * A section's entries in reading order: its children and the proofs read in
+ * it (`proofPlacement`), by `order` then id, as any entries are.
+ */
+function sectionEntries(model, kids, proofs) {
+  return kids.concat(proofs).sort((a, b) => compareIds(model, a, b));
+}
+
+/**
  * The linear document: roots of the collapse order sorted by `order` then id,
  * recursively through their children.  Objects with several parents appear
- * under each, the later occurrences flagged `duplicate`.  A proof with details
- * of its own is read right after its statement, before what refines the
- * statement (`detailedProofs`).
+ * under each, the later occurrences flagged `duplicate`.  A proof is read in
+ * the section of its file (`proofPlacement`); one with no section there but
+ * with details of its own is read right after its statement, before what
+ * refines the statement (`detailedProofs`).
  */
 export function readingOrder(model, kind) {
   const order = collapseOrder(model, kind);
   const seen = new Set();
   const out = [];
 
-  const proofsAfter = detailedProofs(model, order);
-  const placed = new Set([...proofsAfter.values()].flat());
-  const roots = [...order.roots].filter((id) => !placed.has(id)).sort((a, b) => compareIds(model, a, b));
+  const { bySection, placed: inSections } = proofPlacement(model, kind);
+  const proofsAfter = detailedProofs(model, order, inSections);
+  const placed = new Set([...proofsAfter.values()].flat().concat([...inSections]));
+  const roots = sectionEntries(model, [...order.roots].filter((id) => !placed.has(id)), []);
 
   const walk = (id, depth, path) => {
     const duplicate = seen.has(id);
     seen.add(id);
     out.push({ id, object: model.byId.get(id), depth, duplicate });
     if (duplicate) return; // do not repeat a whole subtree
-    const kids = (proofsAfter.get(id) || []).concat(childrenOf(order, id)
-      .slice()
-      .sort((a, b) => compareIds(model, a, b)));
+    const kids = (proofsAfter.get(id) || []).concat(sectionEntries(model, childrenOf(order, id), bySection.get(id) || []));
     for (const c of kids) {
       if (path.includes(c)) continue; // defensive
       walk(c, depth + 1, path.concat([id]));
@@ -1672,7 +1758,7 @@ export function topLevel(model, kind) {
  * Returns
  *   { kind,
  *     entries,  // the flow, in reading order: {id, object, depth, number,
- *               //   duplicate, text, parent, children}; `parent` is the enclosing
+ *               //   duplicate, text, proof, parent, children}; `parent` is the enclosing
  *               //   entry (null at the top), `children` the entries under it
  *     roots,    // the top-level entries
  *     byId,     // id -> its first (written-out) entry, text entries included
@@ -1686,7 +1772,9 @@ export function documentOutline(model, kind) {
 
   const hasProse = (o) => !!(o.body && o.body.trim());
   const hasTitle = (o) => !!(o.attrs && typeof o.attrs.title === 'string' && o.attrs.title);
-  const hasKids = (id) => childrenOf(order, id).length > 0;
+  // A section contains the proofs read in it, too (`proofPlacement`).
+  const { bySection } = proofPlacement(model, kind);
+  const hasKids = (id) => childrenOf(order, id).length > 0 || bySection.has(id);
   // An object earns a place in the flow if it says something or contains
   // something.
   const inFlow = (o) => o.kind !== kind && (hasProse(o) || hasKids(o.id) || (isReference(o) && hasTitle(o)));
@@ -1707,10 +1795,13 @@ export function documentOutline(model, kind) {
     stepOf.set(o.id, src);
   }
 
-  // Proofs: attached to a statement in the flow, filed under it.
+  // Proofs: attached to a statement in the flow, filed under it, unless they
+  // are read in the section of their file, as entries of their own
+  // (`proofPlacement`).
   const proofs = new Map();
+  const { placed: inSections } = proofPlacement(model, kind);
   for (const o of model.objects) {
-    if (o.kind !== 'proof' || hasKids(o.id)) continue;
+    if (o.kind !== 'proof' || hasKids(o.id) || inSections.has(o.id)) continue;
     const of = attachedTo(o);
     const ofObj = of && model.byId.get(of);
     if (!ofObj || !inFlow(ofObj)) continue;
@@ -1745,11 +1836,14 @@ export function documentOutline(model, kind) {
       // A reference is read in place as well, under its label.
       text: (e.object.kind === TEXT_KIND || isReference(e.object)) && !hasKids(e.id),
       reference: isReference(e.object) && !hasKids(e.id),
+      // A proof read in its section (`proofPlacement`), with no details of its
+      // own: set as a proof, with no number and taking none from its siblings.
+      proof: e.object.kind === 'proof' && !hasKids(e.id),
       parent,
       children: [],
     };
     if (entry.reference) entry.label = referenceLabelOf(model, e.id);
-    if (entry.text) {
+    if (entry.text || entry.proof) {
       if (!first) byId.set(e.id, entry);
     } else if (first) {
       entry.number = first.number;
@@ -1761,7 +1855,7 @@ export function documentOutline(model, kind) {
     }
     (parent ? parent.children : roots).push(entry);
     entries.push(entry);
-    if (!entry.duplicate && !entry.text) stack.push({ walkDepth: e.depth, entry });
+    if (!entry.duplicate && !entry.text && !entry.proof) stack.push({ walkDepth: e.depth, entry });
   }
 
   const outline = { kind, entries, roots, byId, steps, proofs, stepOf };
@@ -1787,7 +1881,7 @@ export function kindWord(kind) {
 export function referenceOf(outline, id) {
   const entry = outline.byId.get(id);
   if (entry && entry.reference) return { word: '', number: entry.label, cite: true };
-  if (!entry || entry.text) return null;
+  if (!entry || entry.text || entry.proof) return null;
   return { word: kindWord(entry.object.kind), number: entry.number };
 }
 
