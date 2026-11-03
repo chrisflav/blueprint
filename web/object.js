@@ -58,15 +58,15 @@ export function render(root, app) {
   app.renderBody(prose, M.displayBody(o), app.knownIds());
 
   // ---------------------------------------------------- its proofs, if any
-  // A statement's proofs follow it, as in the document, each leading to its
-  // own object page.
+  // A statement's proofs follow it, as in the document; a click on "Proof"
+  // folds or unfolds one.
   const proofs = M.incidentTo(m, o.id)
     .filter(({ object, role }) => object.kind === 'proof' && role === 'of')
     .map(({ object }) => object);
   for (const p of proofs) {
     const prose = el('div.body-prose.proof-prose');
     page.appendChild(el('div.panel', app.proofDisclosure(
-      el('a.objlink.proof-word', { href: app.objectHref(p.id) }, 'Proof' + M.proofLeadRest(p)),
+      el('span.proof-word', 'Proof' + M.proofLeadRest(p)),
       el('div.proof-body', prose))));
     app.renderBody(prose, p.body, app.knownIds());
   }

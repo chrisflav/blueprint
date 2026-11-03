@@ -301,9 +301,12 @@ The search is the Stacks project's (<https://stacks.math.columbia.edu/search>):
   chapter or section it is read in, listed once however much of its text
   matches (`headingsForText`). Each line is "Lemma 2.1.3: Title", its number
   a link into the document, as its references are: a chapter or a section to
-  the page it heads, under its own title, anything else to its section's
-  page, scrolled to it; only what the document does not hold goes to its
-  object page. A triangle folds what is under an entry (*Expand all*,
+  the page it heads, under its own title, a proof to the statement it
+  proves, anything else to its section's page, scrolled to it; only what the
+  document does not hold goes to its object page. A query with an unquoted
+  hyphenated word gets the Stacks project's hint under the count: "If the
+  keyword pro-etale is not giving you the results you expect, then try
+  searching for "pro-etale"" (`model.queryAlternative`). A triangle folds what is under an entry (*Expand all*,
   *Collapse all*), and a statement's magnifier shows the statement itself,
   rendered, in place of its line.
 
@@ -315,7 +318,13 @@ an unquoted `quasi-compact` asks for *quasi* but not *compact*), and `OR`
 between two terms wants either. It looks through id, title, the Lean
 declaration names in `attrs.lean` and body, split into words once per
 snapshot (letters and digits, lowercased, accents dropped, so `Nat.succ_le` is
-the phrase `nat succ le` and `cech` finds Čech). *All objects* leaves out the
+the phrase `nat succ le` and `cech` finds Čech, and TeX's accents go too, so
+`pro-\'etale` is `pro etale`). Unlike SQLite, a hyphenated word is also found
+written as one (`model.compoundWords`): `proetale` finds "pro-étale" and
+`quasicompact` "quasi-compact", where the Stacks project only suggests the
+hyphenated spelling from a fixed list; the phrase `"pro-etale"` finds
+"proetale" in turn. Neither uses regular expressions: the Stacks project's
+search is SQLite's full-text index. *All objects* leaves out the
 bare sugar edges (a `uses/a/b` with no title and no prose of its own repeats
 the ids of `a` and `b`); *statements* are the nodes that are neither a
 section nor text (`model.isStatement`).
@@ -451,7 +460,8 @@ it keeps its title rather than reading "Section 2.1".
 A proof (`DESIGN.md` §2.5) is set right after the statement it proves, as
 "*Proof.* … ∎", with the steps filed under it, and has no number of its own:
 a reference to it, its `?focus=` and its page are its statement's. The
-statement's object page shows its proofs the same way.
+statement's object page shows its proofs the same way. The "Proof." line is
+not a link: a click on it folds or unfolds the proof.
 
 A proof that lemmas refine has details of its own, and so is an entry of the
 document, numbered and with a page, its details below it. The collapse order
@@ -650,8 +660,9 @@ statement, the way a hover preview works on a wiki (`preview.js`):
   link in one, once it has been followed;
 * a link focused with the keyboard opens its card too. A touch has no hover,
   so on a phone a tap follows the link, as before;
-* not previewed: a broken reference, an object title in a heading (the
-  document writes the object out right under it) and a proof's "Proof." line.
+* not previewed: a broken reference and an object title in a heading (the
+  document writes the object out right under it). A proof's "Proof." line is
+  not a link at all.
   The link's tooltip (its slug) is held back while the pointer is on it, since
   the card says the same and the tooltip would cover it.
 

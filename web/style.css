@@ -1104,7 +1104,7 @@ ul.objlist .role {
    and an end mark at the right (`proofDisclosure` in app.js, which also
    makes it fold; see "Proofs fold" below). */
 .proof { margin: .6rem 0 1rem; }
-a.proof-word { font-style: italic; font-weight: 700; color: inherit; }
+.proof-word { font-style: italic; font-weight: 700; color: inherit; }
 .proof-prose > p:first-child { margin-top: 0; }
 .proof-body > :last-child { margin-bottom: .3em; }
 .proof-end { text-align: right; line-height: 1; color: var(--muted); }

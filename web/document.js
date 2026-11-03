@@ -520,10 +520,9 @@ function stepBlock(app, o, outline, known, refs, seen = new Set()) {
 function proofBlock(app, o, outline, known, refs) {
   const { el } = app;
   const rest = M.proofLeadRest(o);
-  // The lead words link to the proof's object page, as a statement's title
-  // links to the statement's.
-  const head = el('span.proof-word-wrap',
-    el('a.objlink.proof-word', { href: app.objectHref(o.id) }, 'Proof' + rest));
+  // The lead words are the disclosure's summary: a click on them folds or
+  // unfolds the proof, rather than leaving the page.
+  const head = el('span.proof-word-wrap', el('span.proof-word', 'Proof' + rest));
   if (rest !== '.') app.renderMath(head);
   const body = el('div.proof-body');
   if (o.body && o.body.trim()) {
