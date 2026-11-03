@@ -184,7 +184,7 @@ export function progressOf(model, kind, id) {
 /** The statement words a node's type can be, with their short marks. */
 const TYPE_MARK = {
   definition: 'def', theorem: 'thm', proposition: 'prop', lemma: 'lem',
-  corollary: 'cor', remark: 'rem', question: 'q?', chapter: 'chap',
+  corollary: 'cor', remark: 'rem', question: 'q?', example: 'ex', chapter: 'chap',
 };
 
 /**

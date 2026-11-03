@@ -1634,6 +1634,7 @@ check('a chapter and a subsection are headings, as a section is; a question is n
   ok(!M.isSectionKind('question'), 'a question is not a heading');
   eq(M.nodeType(types, { id: 'c', kind: 'chapter' }).mark, 'chap', 'a chapter\'s mark');
   eq(M.nodeType(types, { id: 'q', kind: 'question' }).mark, 'q?', 'a question\'s mark');
+  eq(M.nodeType(types, { id: 'x', kind: 'example' }).mark, 'ex', 'an example\'s mark');
   eq(M.kindWord('question'), 'Question', 'referred to as a question');
 });
 

@@ -714,6 +714,7 @@ reach the snapshot as `project.logo` and `project.logoInk`.
 | `concept` | — | |
 | `remark` | — | |
 | `question` | — | an open question, set as a remark is |
+| `example` | — | set as a remark is |
 | `reference` | — | a bibliography entry, cited as `[id]`: set as a paper sets its references, unnumbered, never drawn in the graph (`graph = "never"`); see *References* below |
 | `uses` | `src` 1, `tgt` 1 | sugar |
 | `refines` | `src` 1, `tgt` 1 | acyclic, collapse, sugar |
@@ -722,7 +723,7 @@ reach the snapshot as `project.logo` and `project.logoInk`.
 | `equivalent` | `src` 1, `tgt` 1 | sugar |
 | `implies` | `src` 1, `tgt` 1 | sugar |
 | `commutes` | `edges` 2.. | only edge kinds in `edges` |
-| `proof` | `of` 1 | only `definition`, `theorem`, `proposition`, `lemma`, `corollary`, `remark` in `of` |
+| `proof` | `of` 1 | only `definition`, `theorem`, `proposition`, `lemma`, `corollary`, `remark`, `example` in `of` |
 
 Node kinds permit `title`, `lean`, `review`, `tags`, `order`, `aliases`,
 `owner`; edge kinds and `proof` permit the same minus `lean`.  `defaultCollapse` is
