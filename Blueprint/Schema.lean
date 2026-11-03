@@ -58,10 +58,10 @@ def mkBinaryKind (name : String) (constraints : Array String := #[])
 def defaultEdgeKindNames : Array String :=
   #["uses", "implies", "refines", "instance_of", "generalises", "equivalent"]
 
-/-- Kinds a proof may be the proof of: every statement kind, and a remark,
-which often makes a small claim and justifies it. -/
+/-- Kinds a proof may be the proof of: every statement kind, and a remark or
+an example, which often makes a small claim and justifies it. -/
 def defaultProvableKindNames : Array String :=
-  #["corollary", "definition", "lemma", "proposition", "remark", "theorem"]
+  #["corollary", "definition", "example", "lemma", "proposition", "remark", "theorem"]
 
 /-- The schema that ships with the tool. -/
 def defaultSchema : Schema where
@@ -85,6 +85,8 @@ def defaultSchema : Schema where
       mkNodeKind "remark" false "#999",
       -- an open question, asked in passing as a remark is made
       mkNodeKind "question" false "#a98",
+      -- an example, set as a remark is
+      mkNodeKind "example" false "#8a9",
       -- a bibliography entry: cited as `[id]`, set as a paper sets its
       -- references, never drawn in the graph
       { mkNodeKind "reference" false "#b98" (graph := "never") with attrs := referenceAttrs },
