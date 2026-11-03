@@ -833,14 +833,15 @@ linked to `url`.  The label follows `alpha`'s rule: the first three
 letters of a single author's family name, the initials of two to four
 ("BBD"), three initials and "+" for more or for "and others", then the last
 two digits of the year, with a, b, c telling clashes apart (compared without
-regard to case, in the order of authors, year and title).  The family name
-is the last word of the name, after a "Jr." or "III", with the initials of a
-lower-case "von" part in front ("van Beethoven" gives "vBe"), or what
-precedes the comma in "Family, Given"; `alpha`'s finer points about
-multi-word family names are not followed.  `label = "SGA4"` gives one of
-your own, which no other entry is then given.  The entries of a section come after its other contents, sorted by
-label, unless they carry an `order`; a directory `references/` with a
-`_section.md` titled *References* is the usual home.  The object's prose,
+regard to case, in the order of authors, year and title).  A lower-case
+"von" part adds its initials, and then the family name gives its initials
+too: "L. van Beethoven" is "vB", "A. van Dam and B. Cee" "vDC".  A name is
+"Given von Family" (a trailing "Jr." or "III" left out) or "von Family,
+Given", and `{…}` keeps words together ("{van Dam}, A." is "van").
+`label = "SGA4"` gives one of your own, which no other entry is then given.
+The entries of a section come after its other contents, sorted by label,
+unless they carry an `order`; a directory `references/` with a `_section.md`
+titled *References* is the usual home.  The object's prose,
 if any, follows the entry (a note, a link to a copy); an entry with no
 `title` is its prose alone.
 

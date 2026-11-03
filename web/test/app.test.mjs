@@ -998,6 +998,9 @@ await check('a citation reads as a paper sets it, "[Del74, Exp. X]", each label 
       '<a class="objlink ref cite-label" href="#/document/sec-refs?collapse=refines&amp;focus=del80" title="del80" data-ref="del80">Del80</a>&#93;</span>'), `several at once: ${html}`);
     ok(html.includes('data-ref="sga4">SGA4</a>, Thm. $x$, *Cor.* 4.3&#93;</span>'), 'a locator, its Markdown left to marked');
     ok(html.includes('but [m, n] and [def-compact, 2] stay'), 'brackets that cite nothing stay text');
+    const code = dom.document.createElement('div');
+    app.renderBody(code, 'Code: `` a ` [del74, x] ``, and\n\n~~~\n[del74, y]\n~~~\n\n    [del74, z]\n\nand a link [see [del74, w]](https://e.org).', app.knownIds());
+    ok(!code.innerHTML.includes('cite-label'), `no citation is made in code or in a link's text: ${code.innerHTML}`);
     eq(div.querySelectorAll('a.objlink.broken').length, 0, 'and are not broken links');
     await go('#/document/sec-refs');
     await app.rendered;

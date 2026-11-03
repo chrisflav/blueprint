@@ -227,25 +227,39 @@ function nameList(v) {
 
 const NAME_SUFFIX = /^(?:jr|sr|ii|iii|iv)\.?$/i;
 
+// The words of a name, a `{…}` group one word ("{van Dam}").
+function nameWords(s) {
+  return (String(s).match(/\{[^}]*\}|[^\s{}]+/g) || []).filter(Boolean);
+}
+
 /**
- * The family name of a name written "Given Family", "Given von Family" or
- * "Family, Given", as the label takes it: the last word, after a trailing
- * "Jr." or "III", with a lower-case "von" part in front of it ("van
- * Beethoven" gives "vBeethoven", read as alpha reads it).
+ * The parts of a name the label is made of, written "Given Family", "Given
+ * von Family" or "von Family, Given": `von`, the initials of the lower-case
+ * words before the family name ("van" gives "v", "de la" gives "dl"), and
+ * `last`, the words of the family name ("Vallée Poussin"), after a trailing
+ * "Jr." or "III".  A `{…}` group is one word and is never a "von".
  */
-export function familyName(name) {
-  const s = String(name).replace(/[{}]/g, '').trim();
+export function nameParts(name) {
+  const s = String(name).trim();
   const comma = s.indexOf(',');
-  let words = (comma >= 0 ? s.slice(0, comma) : s).trim().split(/\s+/);
+  let words = nameWords(comma >= 0 ? s.slice(0, comma) : s);
   if (comma < 0) {
     while (words.length > 1 && NAME_SUFFIX.test(words[words.length - 1])) words.pop();
-    const last = words.length - 1;
-    let first = last;
+    let first = words.length - 1;
     while (first > 1 && /^\p{Ll}/u.test(words[first - 1])) first -= 1;
-    words = words.slice(first, last + 1);
+    words = words.slice(first);
   }
-  const von = words.slice(0, -1).filter((w) => /^\p{Ll}/u.test(w)).map((w) => [...w][0]).join('');
-  return von + words[words.length - 1];
+  const isVon = (w) => !w.startsWith('{') && /^\p{Ll}/u.test(w);
+  let k = 0;
+  while (k < words.length - 1 && isVon(words[k])) k += 1;
+  const strip = (w) => w.replace(/[{}]/g, '');
+  return { von: words.slice(0, k).map((w) => [...w][0]).join(''), last: words.slice(k).map(strip).filter(Boolean) };
+}
+
+/** The family name of a name, its "von" part included: "van Dam" for "A. van Dam". */
+export function familyName(name) {
+  const p = nameParts(name);
+  return p.last.join(' ');
 }
 
 function attrString(o, key) {
@@ -268,11 +282,15 @@ function baseLabel(o) {
   if (!names.length) names = nameList(o.attrs && o.attrs.editor);
   const others = names.length > 0 && /^others$/i.test(names[names.length - 1]);
   if (others) names = names.slice(0, -1);
-  const fams = names.map(familyName).filter(Boolean);
+  const parts = names.map(nameParts).filter((p) => p.last.length);
+  // One author: the first three letters of the family name, or with a "von"
+  // part its initials and the family name's ("vB", "dlVP"); several: the
+  // "von" initials and the family name's initials of each ("vDC").
+  const initials = (p) => p.von + p.last.map((w) => [...w][0]).join('');
   let head;
-  if (fams.length === 1 && !others) head = [...fams[0]].slice(0, 3).join('');
-  else if (fams.length >= 1 && fams.length <= 4 && !others) head = fams.map((f) => [...f][0]).join('');
-  else if (fams.length >= 1) head = fams.slice(0, 3).map((f) => [...f][0]).join('') + '+';
+  if (parts.length === 1 && !others) head = parts[0].von ? initials(parts[0]) : [...parts[0].last.join('')].slice(0, 3).join('');
+  else if (parts.length >= 1 && parts.length <= 4 && !others) head = parts.map(initials).join('');
+  else if (parts.length >= 1) head = parts.slice(0, 3).map(initials).join('') + '+';
   else head = [...(attrString(o, 'title').replace(/[^\p{L}\p{N}]/gu, '') || o.id)].slice(0, 3).join('');
   // The last two digits of the year, as alpha takes them: "1972–1973" is 73.
   return head + attrString(o, 'year').replace(/[^0-9]/g, '').slice(-2);
@@ -312,7 +330,7 @@ export function referenceLabels(model) {
   }
   // A clash is told apart by a, b, c in the order alpha sorts by: authors,
   // then year, then title.
-  const sortKey = (o) => [nameList(o.attrs && o.attrs.author).map(familyName).join(' '),
+  const sortKey = (o) => [nameList(o.attrs && o.attrs.author).map((n) => nameParts(n).last.join(' ')).join(' '),
     attrString(o, 'year'), attrString(o, 'title'), o.id].join('\u0000').toLowerCase();
   for (const [k, { base, os }] of groups) {
     if (os.length === 1 && !taken.has(k)) {
@@ -2004,7 +2022,7 @@ function searchIndex(model) {
       id: o.id.toLowerCase(),
       title: titleOf(o).toLowerCase(),
       lean: leanNamesOf(o).map((n) => n.toLowerCase()),
-      body: (o.body || '').toLowerCase(),
+      body: displayBody(o).toLowerCase(),
     }));
   }
   return model._search;

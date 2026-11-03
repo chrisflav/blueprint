@@ -509,24 +509,36 @@ export function renderMath(root) {
  * first part names no reference.
  */
 const CITE_SOURCE_RE = new RegExp(model.CITE_PATTERN, 'g');
+// What is code in Markdown, never a citation: fenced blocks (``` or ~~~),
+// lines indented as code (four spaces or a tab; a list's continuation lines
+// too, where a plain citation is still linked in the text afterwards), and
+// code spans of any number of backticks.
+const CODE_SOURCE_RE = /((?:^|\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n\2[^\n]*|$)|(?:^|\n)(?: {4}|\t)[^\n]*|(`+)[\s\S]*?\3)/g;
 function markCitations(text, refs) {
   const m0 = app.model;
   if (!m0) return text;
-  const parts = text.split(/(```[\s\S]*?```|`[^`\n]*`)/);
-  for (let i = 0; i < parts.length; i += 2) {
-    parts[i] = parts[i].replace(CITE_SOURCE_RE, (whole, inner) => {
-      const c = model.parseCitation(m0, inner);
-      if (!c) return whole;
-      const links = c.items.map((id) => {
-        const ref = refs ? refs(id) : null;
-        const href = (ref && ref.href) || objectHref(id);
-        return `<a class="objlink ref cite-label" href="${escapeHtml(href)}" title="${escapeHtml(id)}" data-ref="${escapeHtml(id)}">` +
-          escapeHtml(model.referenceLabelOf(m0, id) || id) + '</a>';
-      });
-      return '<span class="cite">&#91;' + links.join(', ') + (c.locator ? ', ' + c.locator : '') + '&#93;</span>';
+  const out = [];
+  let last = 0;
+  const cite = (chunk) => chunk.replace(CITE_SOURCE_RE, (whole, inner, at, all) => {
+    // Not in a link's text, `[see [a, x]](url)`, nor inside an HTML tag.
+    if (all.startsWith('](', at + whole.length)) return whole;
+    if (all.lastIndexOf('<', at) > all.lastIndexOf('>', at)) return whole;
+    const c = model.parseCitation(m0, inner);
+    if (!c) return whole;
+    const links = c.items.map((id) => {
+      const ref = refs ? refs(id) : null;
+      const href = (ref && ref.href) || objectHref(id);
+      return `<a class="objlink ref cite-label" href="${escapeHtml(href)}" title="${escapeHtml(id)}" data-ref="${escapeHtml(id)}">` +
+        escapeHtml(model.referenceLabelOf(m0, id) || id) + '</a>';
     });
+    return '<span class="cite">&#91;' + links.join(', ') + (c.locator ? ', ' + c.locator : '') + '&#93;</span>';
+  });
+  for (const m of text.matchAll(CODE_SOURCE_RE)) {
+    out.push(cite(text.slice(last, m.index)), m[0]);
+    last = m.index + m[0].length;
   }
-  return parts.join('');
+  out.push(cite(text.slice(last)));
+  return out.join('');
 }
 
 /**

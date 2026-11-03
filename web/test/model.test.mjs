@@ -1569,6 +1569,8 @@ check('references: a label of its own is never taken again or suffixed', () => {
   eq(L([r('c1', { label: 'del80' }), r('c2', { author: ['P. Deligne'], year: '1980' })]), 'c1=del80 c2=Del80a', 'case aside');
   eq(L([r('o', { author: 'A. Alpha and B. Beta and others', year: '2001' }), r('j', { author: ['J. Smith Jr.'], year: '1990' }), r('s', { author: ['A. Bee'], year: '1974/75' })]),
     'j=Smi90 o=AB+01 s=Bee75', '"and others", "Jr.", the last two digits');
+  eq(L([r('a', { author: ['A. van Dam', 'B. Cee'], year: '1999' }), r('b', { author: ['Ludwig van Beethoven'], year: '1800' }), r('d', { author: ['{van Dam}, A.'], year: '1990' })]),
+    'a=vDC99 b=vB00 d=van90', 'a "von" part: its initials, then the family name\'s; braces keep words together');
 });
 
 check('references: an entry in the order and punctuation of alpha', () => {
