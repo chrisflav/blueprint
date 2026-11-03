@@ -437,7 +437,7 @@ await check('the search page lists the results in document order, as a tree', as
   eq(searchCount(), `${want.length} results (now showing results 1\u2013${Math.min(10, want.length)})`, 'the count');
   const hits = searchItems();
   eq(hits.length, Math.min(10, want.length), 'ten to a page');
-  eq(itemHref(hits[0]), '#/object/def-compact', 'Definition 1.1 first');
+  eq(itemHref(hits[0]), '#/document/sec-foundations?collapse=refines&focus=def-compact', 'Definition 1.1 first, in its section');
   eq(hits[0].querySelector('span.preview-title').textContent, 'Definition 1.1: Compact space', 'its line');
   // Its section is there, as context, with the definition under it.
   const top = root.querySelector('ul.search-tree').children[0];
@@ -498,6 +498,68 @@ await check('the search page: magnifier, folding, statements only, no results', 
   await app.rendered;
   ok(!searchCount(), 'no count without a query');
   ok(root.querySelector('.search-tips'), 'the tips are there');
+});
+
+await check('the search leads into the document; text is found as its section', async () => {
+  const node = (id, kind, order, attrs = {}, body = '') =>
+    ({ id, kind, boundary: [], attrs: { order, ...attrs }, body, depth: 0 });
+  const refines = (src, tgt) => ({ id: `refines/${src}/${tgt}`, kind: 'refines', attrs: {}, body: '', depth: 1,
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }] });
+  const binary = { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } } };
+  const snapshot = {
+    version: 1,
+    project: { name: 'search' },
+    schema: { defaultCollapse: 'refines', kinds: {
+      chapter: { boundary: {} }, section: { boundary: {} }, hidden: { boundary: {}, graph: 'never' },
+      lemma: { boundary: {}, countable: true }, refines: { ...binary, collapse: true } } },
+    objects: [
+      node('top', 'hidden', 1, {}, 'A banana before every chapter.'),
+      node('ch', 'chapter', 2, { title: 'Fruit' }),
+      node('sec', 'section', 3, { title: 'Bananas' }),
+      node('note-1', 'hidden', 4, {}, 'The banana opens the section.'),
+      node('lem', 'lemma', 5, { title: 'Apples' }, 'Every apple is round.'),
+      node('note-2', 'hidden', 6, {}, 'A banana again, between two lemmas.'),
+      node('empty', 'section', 7, { title: 'Cherries' }),
+      refines('sec', 'ch'), refines('note-1', 'sec'), refines('lem', 'sec'), refines('note-2', 'sec'),
+      refines('empty', 'ch')],
+    derived: {},
+  };
+  const saved = { model: app.model, snapshot: app.snapshot };
+  app.snapshot = snapshot;
+  app.model = modelMod1.buildModel(snapshot);
+  try {
+    await go('#/search?query=banana');
+    await app.rendered;
+    eq(searchCount(), '2 results (now showing results 1–2)', 'the section once for its two texts, and the top text');
+    const hits = searchItems();
+    eq(hits.map((li) => li.querySelector('span.preview-title').textContent).join(' | '), 'Text | Section 1.1: Bananas',
+      'no line says Text for the text inside a section');
+    eq(itemHref(hits[1]), '#/document/sec?collapse=refines', 'a section leads to its own page');
+    eq(itemHref(hits[0]), '#/document?collapse=refines&focus=top', 'text under no heading to its place');
+
+    await go('#/search?query=apple');
+    await app.rendered;
+    const lem = searchItems()[0];
+    eq(itemHref(lem), '#/document/sec?collapse=refines&focus=lem', "a lemma to its section's page, scrolled to it");
+    eq(itemHref(root.querySelector('ul.search-tree li.kind-chapter')), '#/document/ch?collapse=refines',
+      'the chapter above it, as context, to its own page');
+    fire(lem.querySelector('button.previewable'), 'click');
+    eq(lem.querySelector('a.environment-identifier').getAttribute('href'), '#/document/sec?collapse=refines&focus=lem',
+      "the magnifier's statement too");
+
+    await go('#/search?query=bananas');
+    await app.rendered;
+    await go(itemHref(searchItems()[0]));
+    await app.rendered;
+    eq(root.querySelector('section.doc-entry').id, 'doc-sec', "the section's link opens the page it heads");
+
+    await go('#/search?query=cherries');
+    await app.rendered;
+    eq(itemHref(searchItems()[0]), '#/object/empty', 'what the document leaves out, to its object page');
+  } finally {
+    app.model = saved.model;
+    app.snapshot = saved.snapshot;
+  }
 });
 
 await check('the search page pages its results as the Stacks project does', async () => {

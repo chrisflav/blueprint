@@ -297,10 +297,15 @@ The search is the Stacks project's (<https://stacks.math.columbia.edu/search>):
   along the default collapse order, and set as its tree: each under the
   chapters and sections it is read in, which are repeated as context on every
   page of results, a proof or a step under what it is read with, and what the
-  document does not hold at the end. Each line is "Lemma 2.1.3: Title", its
-  number the link to the object page; a triangle folds what is under an
-  entry (*Expand all*, *Collapse all*), and a statement's magnifier shows the
-  statement itself, rendered, in place of its line.
+  document does not hold at the end. Text between statements is found as the
+  chapter or section it is read in, listed once however much of its text
+  matches (`headingsForText`). Each line is "Lemma 2.1.3: Title", its number
+  a link into the document, as its references are: a chapter or a section to
+  the page it heads, under its own title, anything else to its section's
+  page, scrolled to it; only what the document does not hold goes to its
+  object page. A triangle folds what is under an entry (*Expand all*,
+  *Collapse all*), and a statement's magnifier shows the statement itself,
+  rendered, in place of its line.
 
 The page's matcher is `model.fullTextSearch`, whole words in the syntax of
 SQLite's full-text queries, which is what the Stacks project runs on

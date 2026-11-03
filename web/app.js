@@ -403,6 +403,16 @@ function documentPageHref(outline, kind, id) {
 }
 
 /**
+ * The document's page that `id` heads, at its top, whether or not anything is
+ * under it: where the search sends a chapter or a section, so that the page
+ * reads with its title.  null when the document leaves it out.
+ */
+function documentHeadHref(outline, kind, id) {
+  if (!outline.byId.has(id)) return null;
+  return buildHash('document', id, new URLSearchParams({ collapse: kind }));
+}
+
+/**
  * Markdown and TeX disagree about `_`, `*`, `\` and blank lines: marked turns
  * `\varpi_E^n` into emphasis and a display formula into two paragraphs
  * before KaTeX ever sees them.  So every maths span is lifted out first and
@@ -754,6 +764,7 @@ const app = {
   referenceFor: pageReferences,
   documentLevelHref,
   documentPageHref,
+  documentHeadHref,
   introButton,
   /**
    * SHA-256 of the bytes of the snapshot on screen (a Promise), which its
