@@ -347,15 +347,20 @@ structure Project where
   serves, such as the pictures of the intro.  `blueprint site` copies it into
   the site as `assets/`.  Empty for none; not part of the snapshot. -/
   assets : String := ""
-  /-- `[site.comments] zulip`: the address of the Zulip server the website
-  keeps its comments on, rather than with the comment server of `blueprint
-  serve`; empty for that server.  Not part of the snapshot: `blueprint site`
-  writes it to `comments-config.json`, with the bot of `BLUEPRINT_ZULIP_EMAIL`
-  and `BLUEPRINT_ZULIP_KEY`. -/
+  /-- `[site.comments] zulip`: the address of the Zulip server the comment
+  server keeps the website's comments on, rather than in its comment files;
+  empty for those.  Not part of the snapshot: `blueprint site` writes it to
+  `comments-config.json`, where the comment server reads it, and the comment
+  server posts with the bot of `BLUEPRINT_ZULIP_EMAIL` and
+  `BLUEPRINT_ZULIP_KEY` in its own environment, which the site never holds. -/
   commentsZulip : String := ""
   /-- `[site.comments] channel`: the Zulip channel the comments are posted to,
   one topic per object. -/
   commentsChannel : String := ""
+  /-- `[site.comments] server`: the address of the comment server a site
+  served elsewhere (a static host) sends its comments to; empty for the site's
+  own, as `blueprint serve` runs it. -/
+  commentsServer : String := ""
   deriving Inhabited, BEq
 
 /-- A check produced by `blueprint check`. -/
