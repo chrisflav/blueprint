@@ -548,6 +548,14 @@
     "proved": 2,
     "byStatus":
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "29a05720633b9a5987f3905b5028e528efa505ae",
+   "file": "data/29a05720633b9a5987f3905b5028e528efa505ae.json",
+   "date": "2026-11-03"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "483b5ddef440ca892de98e88170ec643c41857d6",
    "file": "data/483b5ddef440ca892de98e88170ec643c41857d6.json",
    "date": "2026-11-03"},
