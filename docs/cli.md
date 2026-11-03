@@ -701,7 +701,9 @@ reach the snapshot as `project.logo` and `project.logoInk`.
 
 | kind | boundary | notes |
 |------|----------|-------|
+| `chapter` | — | a heading, as a section is |
 | `section` | — | |
+| `subsection` | — | a heading, as a section is |
 | `appendix` | — | a section the graph can hide: `graph = "optional"` |
 | `hidden` | — | text belonging to no statement, such as the lines that open a section: read in place in the document, unnumbered, never drawn in the graph (`graph = "never"`) |
 | `definition` | — | countable |
@@ -711,6 +713,7 @@ reach the snapshot as `project.logo` and `project.logoInk`.
 | `corollary` | — | countable |
 | `concept` | — | |
 | `remark` | — | |
+| `question` | — | an open question, set as a remark is |
 | `reference` | — | a bibliography entry, cited as `[id]`: set as a paper sets its references, unnumbered, never drawn in the graph (`graph = "never"`); see *References* below |
 | `uses` | `src` 1, `tgt` 1 | sugar |
 | `refines` | `src` 1, `tgt` 1 | acyclic, collapse, sugar |

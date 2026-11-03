@@ -1149,12 +1149,12 @@ async function graphChecks(d, f) {
     };
   });
 
-  await check(d, 'graph/side-panel-open-in-document-link', async () => {
-    // Beside the title, at the top of the panel; it leads to the document's
-    // page with the selected object's level, scrolled to it.
+  await check(d, 'graph/side-panel-title-into-document', async () => {
+    // The title, at the top of the panel; it leads to the document's page with
+    // the selected object's level, scrolled to it.
     const id = await d.js(`var h = document.querySelector('aside.side .side-head'); return h && h.getAttribute('data-id');`);
-    const a = await d.js(elBoxByText('aside.side .side-head a', 'Open in document'));
-    if (!a) return { ok: false, evidence: `no "Open in document" link (selected: ${j(id)})` };
+    const a = await d.js(elBox('aside.side .side-head a.side-title'));
+    if (!a) return { ok: false, evidence: `the title is not a link (selected: ${j(id)})` };
     await clickAndWait(d, a, `return location.hash.indexOf('#/document') === 0
       && !!document.getElementById(${j(anchorOf(id))})`, 'document page from the graph');
     await sleep(900);

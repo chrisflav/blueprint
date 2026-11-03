@@ -245,14 +245,13 @@ The three choices are the reader's, kept in `localStorage`
 (`blueprint.graph.tools`, `blueprint.graph.side` and `blueprint.graph.stats`,
 `shown` or `hidden`; no choice is hidden).
 
-The side panel of a selected node heads with its title and, beside it, *Open
-in document →*: the document's page with the node's level, scrolled to it,
-where every link to it in the document leads (in the graph's collapse kind).
-What the document leaves out has *Open object page →* there instead. Under
-them its kind and status, but not its id. Its prose
-comes next, open, and folds like the listings after it (*Incident objects*,
-*Hidden inside*), which start shut. Whether each is open is kept while the
-reader clicks from node to node.
+The side panel of a selected node heads with its title, a link to the
+document's page with the node's level, scrolled to it, where every link to it
+in the document leads (in the graph's collapse kind); what the document leaves
+out leads to its object page instead. Beside the title is its kind, and under
+it its status, but not its id. Its prose comes next, folded like the listings
+after it (*Incident objects*, *Hidden inside*): all three start shut. Whether
+each is open is kept while the reader clicks from node to node.
 
 The progress route carries the "All countable objects" listing's search and
 filters, so a filtered listing is a link too: `q=<search>`, `kind=<kind>`,
@@ -272,7 +271,7 @@ nothing changes on a wider screen:
 * the side panel is a sheet over the bottom of the graph, there only while
   something is selected, whatever *Show sidebar* was set to on a wide screen
   (the button is not offered). Its bar minimises it to the title, with
-  *Open in document →*, and the *Expand/Collapse* button, or closes it, which deselects. A node tapped under
+  its kind, and the *Expand/Collapse* button, or closes it, which deselects. A node tapped under
   the sheet is panned up into view;
 * two fingers pinch to zoom about their midpoint and pan; one finger pans;
 * a double tap on a node expands or collapses it. It is counted by the page
@@ -394,7 +393,7 @@ title and a repeated entry's included, and the link says so (`?focus=`).
 step aside, on the small *object* link.
 
 Every other link to an entry — a cross reference in prose, *In the document →*
-on an object page, *Open in document →* in the graph's side panel — leads to
+on an object page, the title in the graph's side panel — leads to
 its *level* (`documentLevelOf` in `model.js`): the page of its parent, which
 writes out the entry and its siblings, scrolled to it (`?focus=`) — for a
 chapter, the top of the document (`#/document?focus=<id>`); a reference whose
