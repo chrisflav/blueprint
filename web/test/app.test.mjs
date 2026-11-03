@@ -831,6 +831,91 @@ await check('every page of the document ends with the comments of its entry, the
   }
 });
 
+await check('with comments-config.json the comments go to Zulip: one topic per object, public ones shown, private ones not', async () => {
+  const comments = await import(path.join(webDir, 'comments.js'));
+  const routes = dom.net.routes;
+  const Z = 'https://zulip.example/api/v1/';
+  const bot = 'bot@zulip.example';
+  // The Zulip of the test: the messages of the channel, each with its topic.
+  const msgs = [
+    { id: 11, topic: 'sec-main', sender: bot, timestamp: 1793606400,
+      content: comments.headLine('public', 'Ada', 'Main [chapter]', 'x') + '\n\nOn **this** chapter.' },
+    { id: 12, topic: 'sec-main', sender: bot, timestamp: 1793606460,
+      content: comments.headLine('private', 'Bob', 'Main', 'x') + '\n\nOnly for Zulip.' },
+    { id: 13, topic: 'sec-main', sender: bot, timestamp: 1793606520, content: 'A message by hand.' },
+    { id: 14, topic: 'sec-other', sender: bot, timestamp: 1793606580,
+      content: comments.headLine('public', 'Eve', 'Other', 'x') + '\n\nElsewhere.' },
+  ];
+  const posts = [];
+  const auths = new Set();
+  routes.push((u, init) => {
+    if (u === 'comments-config.json') {
+      return [200, JSON.stringify({ zulip: { site: 'https://zulip.example', channel: 'blueprint comment', email: bot, key: 'k3y' } }), 'application/json'];
+    }
+    if (!u.startsWith(Z)) return null;
+    auths.add(init.headers && init.headers.Authorization);
+    const q = new URL(u).searchParams;
+    if (u.startsWith(Z + 'get_stream_id')) {
+      return [200, JSON.stringify(q.get('stream') === 'blueprint comment' ? { result: 'success', stream_id: 7 } : { result: 'error', msg: 'Invalid channel name' }), 'application/json'];
+    }
+    if (init.method === 'POST') {
+      const p = Object.fromEntries(init.body);
+      posts.push(p);
+      msgs.push({ id: 20 + posts.length, topic: p.topic, sender: bot, timestamp: 1793606640, content: p.content });
+      return [200, '{"result": "success", "id": 99}', 'application/json'];
+    }
+    const n = Object.fromEntries(JSON.parse(q.get('narrow')).map((d) => [d.operator, d.operand]));
+    const found = msgs.filter((m) => m.topic === n.topic && m.sender === n.sender);
+    return [200, JSON.stringify({ result: 'success', messages: found }), 'application/json'];
+  });
+  comments.resetCommentsConfig();
+  try {
+    dom.net.fetches.length = 0;
+    await go('#/object/sec-main');
+    await tick(5);
+    const panel = root.querySelector('.comments');
+    eq(dom.net.fetches.filter((f) => f.url.startsWith('api/comments/')).length, 0, 'the comment server is not asked');
+    eq([...auths].join(' '), 'Basic ' + btoa(bot + ':k3y'), 'Zulip is asked as the bot');
+    eq(panel.querySelector('h3').textContent, 'Comments (1)', 'the public comment of the topic, not the private one or one by hand');
+    ok(panel.querySelector('article.comment').textContent.includes('Ada'), 'by its author');
+    eq(panel.querySelector('.comment-visibility').hidden, false, 'public or private can be chosen');
+    eq(panel.querySelector('textarea').getAttribute('maxlength'), '9000', 'a comment fits a Zulip message');
+    eq(panel.querySelector('form a[target=_blank]').getAttribute('href'),
+      'https://zulip.example/#narrow/channel/7-blueprint.20comment/topic/sec-main', 'a link to the topic');
+
+    const [isPublic, isPrivate] = panel.querySelectorAll('input[type=radio]');
+    panel.querySelector('input[name=name]').value = 'Ada';
+    panel.querySelector('textarea').value = 'A second **public** one.';
+    isPublic.checked = true; isPrivate.checked = false;
+    fire(panel.querySelector('form'), 'submit');
+    await tick(5);
+    eq(posts.length, 1, 'posted');
+    eq(posts[0].to + ' / ' + posts[0].topic + ' / ' + posts[0].type, 'blueprint comment / sec-main / stream', 'to the topic of the object');
+    ok(posts[0].content.startsWith('🌐 **Public** comment by **Ada** on [') &&
+      posts[0].content.includes('(http://localhost/index.html#/object/sec-main)\n\nA second **public** one.'), 'with who, where and what');
+    eq(panel.querySelector('h3').textContent, 'Comments (2)', 'and shown');
+
+    panel.querySelector('textarea').value = 'A private one.';
+    isPublic.checked = false; isPrivate.checked = true;
+    fire(panel.querySelector('form'), 'submit');
+    await tick(5);
+    eq(posts.length, 2, 'a private one is posted too');
+    ok(posts[1].content.startsWith('🔒 **Private** comment by **Ada**'), 'marked private');
+    eq(panel.querySelector('.comment-note').textContent, 'Posted to Zulip (private: not shown here).', 'and said so');
+    eq(panel.querySelector('h3').textContent, 'Comments (2)', 'but not shown');
+
+    const long = 'a'.repeat(80);
+    eq([...comments.topicOf(long)].length, 60, 'a long id is cut to a topic Zulip takes');
+    ok(comments.topicOf(long) !== comments.topicOf('a'.repeat(81)), 'ids cut alike keep topics apart');
+    eq(comments.topicOf(comments.DOCUMENT_THREAD), 'document (top page)', 'the top page has a topic of its own');
+    eq(JSON.stringify(comments.parseMessage(comments.headLine('public', 'Ada', 'A [b] c', 'u') + '\n\nBody')),
+      '{"visibility":"public","name":"Ada","body":"Body"}', 'a message reads back');
+  } finally {
+    routes.length = 0;
+    comments.resetCommentsConfig();
+  }
+});
+
 await check('hide_content takes an entry off its parent\'s page, and leads every link to its own', async () => {
   const o = app.model.byId.get('sec-main');
   const before = o.attrs;

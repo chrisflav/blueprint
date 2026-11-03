@@ -643,6 +643,24 @@ def assembleSite (root : System.FilePath) (out : System.FilePath) (args : Args) 
     IO.FS.writeFile introFile (Lean.Json.mkObj [
       ("title", Lean.Json.str (if project.title.isEmpty then project.name else project.title)),
       ("intro", project.introJson)]).compress
+  -- Where the website keeps its comments: with `[site.comments]` and a bot
+  -- in the environment, on Zulip, as `comments-config.json` says; without
+  -- that file, with the comment server of `blueprint serve`.
+  let commentsFile := out / "comments-config.json"
+  if ← commentsFile.pathExists then IO.FS.removeFile commentsFile
+  unless project.commentsZulip.isEmpty do
+    let email := (← IO.getEnv "BLUEPRINT_ZULIP_EMAIL").getD ""
+    let key := (← IO.getEnv "BLUEPRINT_ZULIP_KEY").getD ""
+    if email.isEmpty || key.isEmpty then
+      IO.eprintln "blueprint: [site.comments] is set, but BLUEPRINT_ZULIP_EMAIL or \
+        BLUEPRINT_ZULIP_KEY is not: the site keeps no comments on Zulip"
+    else
+      IO.FS.writeFile commentsFile ((Lean.Json.mkObj [("zulip", Lean.Json.mkObj [
+        ("site", Lean.Json.str project.commentsZulip),
+        ("channel", Lean.Json.str project.commentsChannel),
+        ("email", Lean.Json.str email),
+        ("key", Lean.Json.str key)])]).compress ++ "\n")
+      IO.println s!"comments: on Zulip, {project.commentsZulip} #{project.commentsChannel}"
   -- The project's own files, such as the pictures of its intro, which
   -- refers to them as `assets/…`.
   let assets := l.blueprint.project.assets
