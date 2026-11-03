@@ -604,6 +604,14 @@
     "proved": 2,
     "byStatus":
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "92c863358e4db6eb8ccaa194b918dec417a5f38c",
+   "file": "data/92c863358e4db6eb8ccaa194b918dec417a5f38c.json",
+   "date": "2026-11-03"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "babb837b4ada1eb31f97f2c79a285a613d2b4681",
    "file": "data/babb837b4ada1eb31f97f2c79a285a613d2b4681.json",
    "date": "2026-11-03"},
