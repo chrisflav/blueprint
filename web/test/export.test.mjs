@@ -324,6 +324,15 @@ await check('proofs and steps come with their statement at any depth', () => {
   ok(tex.includes('\\bpomitted{3 entries below 2.4 are left out at this detail level.}'), 'the detailed proof is a level down');
 });
 
+await check('matter is exported as a section, numbered as one', () => {
+  const m = paper();
+  m.byId.get('intro').kind = 'matter';
+  const tex = exportLatex(m, {}).tex;
+  ok(tex.includes('\\section*{\\texorpdfstring{1\\quad Introduction}{1 Introduction}}'), 'a section heading, numbered 1');
+  ok(tex.includes('\\section*{\\texorpdfstring{2\\quad Covers and compact spaces}'), 'the next chapter counts on');
+  ok(!/Matter/.test(tex), 'never called "Matter"');
+});
+
 // ---------------------------------------------------------------------------
 // 4. text, appendices, hierarchies
 // ---------------------------------------------------------------------------

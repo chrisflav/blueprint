@@ -74,6 +74,9 @@ def defaultSchema : Schema where
       mkNodeKind "subsection" false "#99aabb",
       -- a section the graph can hide, contents and all
       mkNodeKind "appendix" false "#99a0aa" (graph := "optional"),
+      -- a section the graph never draws, contents and all: an introduction,
+      -- the references; read as a section in the contents and the document
+      mkNodeKind "matter" false "#a4a8b0" (graph := "never"),
       -- read in the document, never drawn in the graph
       mkNodeKind "hidden" false "#aaaaaa" (graph := "never"),
       mkNodeKind "definition" true "#4a7",

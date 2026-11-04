@@ -190,10 +190,11 @@ const TYPE_MARK = {
 
 /**
  * Kinds the document sets as headings rather than as numbered statements, and
- * the graph draws as sections: a chapter, a section, a subsection, and an
- * appendix (a section the graph can hide).
+ * the graph draws as sections: a chapter, a section, a subsection, an
+ * appendix (a section the graph can hide) and matter (a section the graph
+ * never draws: an introduction, the references).
  */
-const SECTION_KINDS = new Set(['chapter', 'section', 'subsection', 'appendix']);
+const SECTION_KINDS = new Set(['chapter', 'section', 'subsection', 'appendix', 'matter']);
 
 export function isSectionKind(kind) {
   return SECTION_KINDS.has(kind);
@@ -1891,6 +1892,8 @@ export function documentOutline(model, kind) {
 
 /** "Definition", "Section", "Main theorem": the lead word of a numbered entry. */
 export function kindWord(kind) {
+  // Matter is a section to the reader: "Section 1", not "Matter 1".
+  if (kind === 'matter') return 'Section';
   const s = String(kind);
   return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ');
 }

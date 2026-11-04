@@ -408,9 +408,10 @@ by CI. Separate TypeScript package under `web/`.
   checkbox away, *arcs of contents*, which is where the undeclared-detail lint
   shows as dashed arcs; the consistency state of an own arc is still §3's.
   A kind's `graph` display hint keeps objects out of the picture: an
-  `appendix` (`optional`) is drawn unless the reader hides it, a `hidden`
-  object (`never`) only ever in the document, and either takes its contents
-  and the relations touching it along.  A `hidden` object is the text that
+  `appendix` (`optional`) is drawn unless the reader hides it, a `matter`
+  section (an introduction, the references) or a `hidden` object (`never`)
+  only ever in the document, and each takes its contents and the relations
+  touching it along.  A `hidden` object is the text that
   belongs to no statement, the lines that open a section say: the document
   sets it in place as bare prose, unnumbered.
 - Object page: rendered prose with KaTeX, Lean signature linking to doc-gen4,

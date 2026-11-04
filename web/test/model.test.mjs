@@ -1463,6 +1463,42 @@ check('the graph never draws a hidden object, or what touches it', () => {
   eq(M.documentPageShows(top, null, 1, 'intro'), true, 'the top level written out does');
 });
 
+check('matter is a section to the reader and nothing to the graph', () => {
+  const node = (id, kind) => ({ id, kind, boundary: [], attrs: { title: id }, body: 'text', depth: 0 });
+  const edge = (kind, src, tgt) => ({ id: `${kind}/${src}/${tgt}`, kind, attrs: {}, body: '', depth: 1,
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }] });
+  const binary = { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } } };
+  const m = M.buildModel({
+    version: 1,
+    schema: { defaultCollapse: 'refines', kinds: {
+      chapter: { boundary: {} }, matter: { boundary: {}, graph: 'never' },
+      theorem: { boundary: {} }, remark: { boundary: {} },
+      refines: { ...binary, collapse: true }, uses: binary } },
+    objects: [
+      { ...node('intro', 'matter'), attrs: { title: 'Introduction', order: 1 } }, node('motive', 'remark'),
+      { ...node('ch', 'chapter'), attrs: { title: 'Chapter', order: 2 } }, node('thm', 'theorem'),
+      { ...node('refs', 'matter'), attrs: { title: 'References', order: 9 } },
+      edge('refines', 'motive', 'intro'), edge('refines', 'thm', 'ch'), edge('uses', 'thm', 'motive'),
+    ],
+  });
+  ok(M.isSectionKind('matter'), 'a heading');
+  eq(M.graphHint(m, 'matter'), 'never', 'never drawn');
+  sameSet(M.outOfGraph(m), ['intro', 'motive', 'refs', 'refines/motive/intro', 'uses/thm/motive'],
+    'out of the graph, contents and the relations touching them along');
+  const gm = M.graphModel(m);
+  ok(gm.byId.has('thm') && gm.byId.has('ch'), 'the rest is drawn');
+  const outline = M.documentOutline(m, 'refines');
+  const num = (id) => outline.byId.get(id).number;
+  eq(num('intro'), '1', 'numbered among the headings');
+  eq(num('ch'), '2', 'the chapter after it counts on');
+  eq(num('motive'), '1.1', 'a statement in it numbered in it, as in a chapter');
+  eq(num('refs'), '3', 'where its order puts it');
+  ok(M.isContentsEntry(outline.byId.get('intro')), 'a row in the contents');
+  const r = M.referenceOf(outline, 'intro');
+  eq(r.word + ' ' + r.number, 'Section 1', 'referred to as a section');
+  eq(M.kindWord('matter'), 'Section', 'its lead word');
+});
+
 check('the arcs between nodes are exactly the rule, in every expanded set', () => {
   // For nodes A and B of a view: A -> B exactly when A, or something inside
   // A, has an edge to B itself, or A itself has one to B or to something
