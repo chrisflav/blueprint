@@ -773,7 +773,10 @@ export function exportLatex(model, request, options = {}) {
     back.push('\\addcontentsline{toc}{section}{Outside this export}');
     back.push('References marked \\ensuremath{{}^\\ast} are to parts of the blueprint this document leaves out:');
     back.push('\\begin{description}');
-    const sorted = [...outside.entries()].sort((a, b) => compareNumbers(a[1].ref.number, b[1].ref.number));
+    // In reading order: headings and statements are numbered in two series,
+    // so their numbers do not sort.
+    const place = new Map(outline.entries.map((e, i) => [e, i]));
+    const sorted = [...outside.entries()].sort((a, b) => place.get(a[1].entry) - place.get(b[1].entry));
     for (const [id, { ref, entry }] of sorted) {
       const top = entry && topAncestor(entry);
       const where = top && top !== entry ? `, in ${escapeText(top.number)} ${titleTex(M.titleOf(top.object))}` : '';
@@ -855,16 +858,6 @@ function topAncestor(entry) {
   let e = entry;
   while (e.parent) e = e.parent;
   return e;
-}
-
-function compareNumbers(a, b) {
-  const pa = String(a).split('.').map(Number);
-  const pb = String(b).split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
-    const d = (pa[i] || 0) - (pb[i] || 0);
-    if (d) return d;
-  }
-  return 0;
 }
 
 /** Text for a PDF string (bookmarks, metadata): no TeX specials at all. */

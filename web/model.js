@@ -1757,13 +1757,18 @@ export function topLevel(model, kind) {
  * Objects of the collapse kind itself are never in the flow: they *are* the
  * structure.
  *
- * Numbers are the paper's: the third entry under the second top-level entry is
- * "2.3".  An object with several parents is written out under the first and
- * repeated, as a pointer, under the others; the repetition carries the number
- * of the first occurrence and uses none of its own, so every object has exactly
- * one number and a cross reference to it means one place.  A piece of text
- * (`TEXT_KIND`) is read where it stands and numbered not at all: the lemma
- * after the lines that open a section is still that section's first.
+ * Numbers are the paper's, in two series.  The headings (`isSectionKind`) are
+ * numbered by their place among the headings alone: the second section of
+ * chapter 4 is "4.2" however many statements stand before it, and its first
+ * subsection "4.2.1".  Every other entry, a statement at whatever depth, is
+ * "n.m": n the number of the outermost heading it lies in (its chapter), m its
+ * place among all the statements of that chapter, whatever sections lie
+ * between; a statement under no heading is numbered among the others under
+ * none, by m alone.  An object with several parents is written out under the
+ * first and repeated, as a pointer, under the others; the repetition carries
+ * the number of the first occurrence and uses none of its own, so every object
+ * has exactly one number and a cross reference to it means one place.  A piece
+ * of text (`TEXT_KIND`) is read where it stands and numbered not at all.
  *
  * Returns
  *   { kind,
@@ -1828,7 +1833,15 @@ export function documentOutline(model, kind) {
   const entries = [];
   const roots = [];
   const byId = new Map();
-  const counts = new Map(); // entry (or null) -> written-out children so far
+  // Written-out entries so far: headings per enclosing heading, statements
+  // per chapter (null for none).
+  const headingCounts = new Map();
+  const statementCounts = new Map();
+  const nextNumber = (counts, key) => {
+    const k = (counts.get(key) || 0) + 1;
+    counts.set(key, k);
+    return key ? key.number + '.' + k : String(k);
+  };
   const stack = []; // the chain of open entries, with their walk depths
   for (const e of readingOrder(model, kind)) {
     if (!e.object || !inFlow(e.object) || stepOf.has(e.id)) continue;
@@ -1858,9 +1871,12 @@ export function documentOutline(model, kind) {
     } else if (first) {
       entry.number = first.number;
     } else {
-      const k = (counts.get(parent) || 0) + 1;
-      counts.set(parent, k);
-      entry.number = parent ? parent.number + '.' + k : String(k);
+      // The headings above it, nearest first.
+      const headings = [];
+      for (let a = parent; a; a = a.parent) if (isSectionKind(a.object.kind)) headings.push(a);
+      entry.number = isSectionKind(e.object.kind)
+        ? nextNumber(headingCounts, headings[0] || null)
+        : nextNumber(statementCounts, headings[headings.length - 1] || null);
       byId.set(e.id, entry);
     }
     (parent ? parent.children : roots).push(entry);

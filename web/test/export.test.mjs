@@ -220,12 +220,12 @@ await check('a shared lemma whose first place is elsewhere is written out in ful
   ok(!marks(res.tex).some((x) => x.startsWith('repeated')), 'not a pointer to a page that is not in the PDF');
   ok(res.tex.includes('Written out here; in the full blueprint it is read under 2.2 Compact spaces, outside this export.'),
     'the PDF says where it usually is');
-  ok(res.tex.includes('{Lemma~2.2.3}'), 'with its own number, the one references use');
+  ok(res.tex.includes('{Lemma~2.8}'), 'with its own number, the one references use');
   // References to section 2 are references to outside the export.
-  ok(/\\bpout\{Theorem 2\.2\.2\}/.test(res.tex), 'a reference outside is marked');
+  ok(/\\bpout\{Theorem 2\.4\}/.test(res.tex), 'a reference outside is marked');
   ok(res.tex.includes('\\section*{Outside this export}'), 'and listed');
-  ok(/\\item\[Theorem 2\.2\.2\] Compactness by closed sets, in 2 Covers and compact spaces/.test(res.tex), 'with what and where');
-  ok(/\\hyperref\[bp\d+\]\{Lemma 2\.2\.3\}/.test(res.tex), 'a reference to the lemma written here links to it');
+  ok(/\\item\[Theorem 2\.4\] Compactness by closed sets, in 2 Covers and compact spaces/.test(res.tex), 'with what and where');
+  ok(/\\hyperref\[bp\d+\]\{Lemma 2\.8\}/.test(res.tex), 'a reference to the lemma written here links to it');
 });
 
 await check('a proof moved by its order is written where it is read, named by what it proves away from it', () => {
@@ -237,15 +237,15 @@ await check('a proof moved by its order is written where it is read, named by wh
   let at = t.indexOf('% proof: proof/lem-tube');
   ok(stmt > 0 && at > stmt, 'after its statement');
   ok(t.slice(at).startsWith('% proof: proof/lem-tube\n\\begin{proof}[{Proof}]'), 'as "Proof."');
-  // Before it, with a statement between: "Proof of Lemma 2.2.3".
+  // Before it, with a statement between: "Proof of Lemma 2.8".
   m = paper();
   m.byId.get('proof/lem-tube').attrs.order = 2.5;
   t = bodyOf(exportLatex(m, { scope: 'compact' }).tex);
   at = t.indexOf('% proof: proof/lem-tube');
   ok(at > t.indexOf('% text: compact-between') && at < t.indexOf('% object: thm-fip'), 'where its order puts it');
-  ok(t.includes('\\begin{proof}[{Proof of Lemma 2.2.3}]'), 'named by what it proves');
+  ok(t.includes('\\begin{proof}[{Proof of Lemma 2.8}]'), 'named by what it proves');
   eq(t.indexOf('% proof: proof/lem-tube', at + 1), -1, 'once');
-  ok(t.includes('{Lemma~2.2.3}'), 'its statement keeps its number');
+  ok(t.includes('{Lemma~2.8}'), 'its statement keeps its number');
   throwsExport(() => resolveRequest(m, { scope: 'proof/lem-tube' }), /'proof\/lem-tube' is a proof read in place inside 'compact'/, 'not a part of its own');
 });
 
@@ -255,13 +255,13 @@ await check('a refined statement exports with its proof and the proof\'s details
   same(marks(res.tex), ['object thm-fip', 'object proof/thm-fip', 'step uses/proof~thm-fip/def-fip',
     'object lem-complements', 'object lem-finite-subfamily'], 'the statement, its proof, the step, the lemmas');
   const t = bodyOf(res.tex);
-  const open = t.indexOf('\\begin{proof}[{Proof 2.2.2.1}]');
+  const open = t.indexOf('\\begin{proof}[{Proof 2.5}]');
   const close = t.indexOf('\\end{proof}', t.indexOf('% object: lem-finite-subfamily'));
   ok(open > 0 && close > open, 'the lemmas are inside the proof');
-  ok(t.indexOf('% object: lem-complements') > open && t.indexOf('% object: lem-complements') < close, 'Lemma 2.2.2.1.1 is in it');
+  ok(t.indexOf('% object: lem-complements') > open && t.indexOf('% object: lem-complements') < close, 'Lemma 2.6 is in it');
   ok(t.includes('Of \\hyperref['), 'the proof says what it proves');
-  ok(res.tex.includes('2.2.2.1\\quad Proof of Theorem 2.2.2'), 'and is named that in the contents');
-  ok(/\\bpout\{Definition 2\.1\.2\}/.test(res.tex), 'the step\'s target is outside');
+  ok(res.tex.includes('2.5\\quad Proof of Theorem 2.4'), 'and is named that in the contents');
+  ok(/\\bpout\{Definition 2\.2\}/.test(res.tex), 'the step\'s target is outside');
 });
 
 await check('a proof with details of its own is read right after its statement, on the website too', () => {
@@ -270,9 +270,9 @@ await check('a proof with details of its own is read right after its statement, 
   const proof = outline.byId.get('proof/thm-fip');
   ok(proof, 'the proof is an entry');
   eq(proof.parent && proof.parent.id, 'thm-fip', 'under its statement, not at the top of the document');
-  eq(proof.number, '2.2.2.1', 'numbered among the statement\'s entries');
+  eq(proof.number, '2.5', 'numbered as the next statement of its chapter');
   eq(outline.roots.some((e) => e.id === 'proof/thm-fip'), false, 'not a root');
-  eq(outline.byId.get('lem-complements').number, '2.2.2.1.1', 'its details below it');
+  eq(outline.byId.get('lem-complements').number, '2.6', 'its details below it');
   eq(M.documentPageOf(outline, 'lem-complements'), 'proof/thm-fip', 'read on its page');
 });
 
@@ -321,7 +321,7 @@ await check('proofs and steps come with their statement at any depth', () => {
   const tex = exportLatex(paper(), { scope: 'compact', depth: 1 }).tex;
   same(written(tex), ['compact', 'def-compact', 'thm-fip', 'lem-tube'], 'the statements of 2.2');
   ok(marks(tex).includes('proof proof/lem-tube'), 'the tube lemma\'s proof is part of it');
-  ok(tex.includes('\\bpomitted{3 entries below 2.2.2 are left out at this detail level.}'), 'the detailed proof is a level down');
+  ok(tex.includes('\\bpomitted{3 entries below 2.4 are left out at this detail level.}'), 'the detailed proof is a level down');
 });
 
 // ---------------------------------------------------------------------------
@@ -481,7 +481,7 @@ await check('the parts on offer are the document\'s pages, named by their titles
   const m = paper();
   const scopes = exportScopes(m, 'refines');
   same(scopes.map((s) => s.id), [null, 'spaces', 'covers', 'compact', 'thm-fip', 'proof/thm-fip', 'products', 'conventions'], 'the parts');
-  eq(scopes.find((s) => s.id === 'proof/thm-fip').title, 'Proof of Theorem 2.2.2', 'a detailed proof by what it proves');
+  eq(scopes.find((s) => s.id === 'proof/thm-fip').title, 'Proof of Theorem 2.4', 'a detailed proof by what it proves');
   eq(scopes[0].title, 'Compactness through finite intersections', 'the whole blueprint by the project\'s title');
   const reqs = allRequests(m);
   eq(reqs.length, 25, 'every choice the dialog can make, once');

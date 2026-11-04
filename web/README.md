@@ -370,8 +370,12 @@ server makes PDFs on demand for the Export PDF dialog (`POST api/export`,
 
 ### The document's pages
 
-The document is the reading order of DESIGN.md §6, numbered as a paper is
-("Definition 1.2.14"), and split into pages along the collapse order.
+The document is the reading order of DESIGN.md §6, numbered as a paper is,
+in two series: the headings by their place among the headings alone ("Section
+4.1.2"), every statement as "n.m", n its chapter and m its place among all the
+statements of that chapter, whatever sections lie between ("Definition 4.14";
+`documentOutline` in `model.js`). The document is split into pages along the
+collapse order.
 `#/document` is the top level written out — usually the chapters — with the
 text between them. `#/document/<id>` writes out one entry and the levels
 below it. An entry whose children are not on the page links on to its own
