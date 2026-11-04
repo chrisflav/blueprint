@@ -606,8 +606,9 @@ default) draws objects of the kind, `optional` draws them unless the reader
 ticks *hide appendix* in the graph's toolbar, and `never` leaves them to the
 document alone.  An object the graph leaves out takes along everything below
 it in every collapse order, everything attached to it (its proofs), and every
-relation with it on its boundary.  The built-in `appendix` is `optional` and
-the built-in `hidden` is `never`; every other built-in kind is `always`.
+relation with it on its boundary.  The built-in `appendix` is `optional`,
+the built-in `matter`, `hidden` and `reference` are `never`; every other
+built-in kind is `always`.
 
 A `[kinds.X]` table *extends* the built-in kind `X` if there is one: keys you
 do not mention keep their default.  Giving `boundary` replaces the whole role
@@ -758,6 +759,7 @@ the comment server answers no other site (`--allow-origin`, repeatable).
 | `section` | — | |
 | `subsection` | — | a heading, as a section is |
 | `appendix` | — | a section the graph can hide: `graph = "optional"` |
+| `matter` | — | a section the graph never draws, with everything in it (`graph = "never"`): an introduction, the references.  In the contents, the document and the PDF it is a section like any other, numbered as one, and a reference to it reads "Section 1" |
 | `hidden` | — | text belonging to no statement, such as the lines that open a section: read in place in the document, unnumbered, never drawn in the graph (`graph = "never"`) |
 | `definition` | — | countable |
 | `theorem` | — | countable |

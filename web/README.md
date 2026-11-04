@@ -138,16 +138,16 @@ The graph route carries its full view state as query parameters:
 is on, and `appendix=0` when *hide appendix* is on.
 
 The graph is drawn from `graphModel` in `model.js`: the snapshot without the
-objects of a kind with `graph = "never"` (the built-in `hidden`), and, while
-*hide appendix* is ticked, without those of a kind with `graph = "optional"`
-(the built-in `appendix`). Either takes everything below it in any collapse
-order, its proofs and every relation touching it along (`outOfGraph`), so
-every view, consistency state and reduction is that of a blueprint in which
-they were never written. The checkbox is offered only when the snapshot has an
-appendix. The document, the object pages and the progress page read the whole
-snapshot; there an appendix is a section and a hidden object is text (see
-below), and an object the graph never draws says so instead of offering
-*Show in graph*.
+objects of a kind with `graph = "never"` (the built-in `matter`, `hidden` and
+`reference`), and, while *hide appendix* is ticked, without those of a kind
+with `graph = "optional"` (the built-in `appendix`). Either takes everything
+below it in any collapse order, its proofs and every relation touching it
+along (`outOfGraph`), so every view, consistency state and reduction is that
+of a blueprint in which they were never written. The checkbox is offered only
+when the snapshot has an appendix. The document, the object pages and the
+progress page read the whole snapshot; there an appendix or matter is a
+section and a hidden object is text (see below), and an object the graph
+never draws says so instead of offering *Show in graph*.
 
 By default the graph draws, for two nodes A and B (statements and collapsed
 sections, at any depth; an expanded section is a box, never an end), an arc
