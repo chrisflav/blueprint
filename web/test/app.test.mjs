@@ -2247,7 +2247,7 @@ await check('the key shows the dashed line when an expanded section draws a dash
   ok(!stage().classList.contains('derived-arcs'), 'collapsed again, the key still shows it');
 });
 
-await check('"hide implied" starts on and the arcs of contents off, the Filters dot shows when one filters, and no arc carries a count', async () => {
+await check('every option that changes the arcs starts off, the Filters dot shows when one is on, and no arc carries a count', async () => {
   const w = dom.workers.created[dom.workers.created.length - 1];
   const layout = async (hash) => {
     await go(hash);
@@ -2258,21 +2258,18 @@ await check('"hide implied" starts on and the arcs of contents off, the Filters 
   const bar = () => root.querySelector('.toolbar');
   const box = (group, n = 0) => bar().querySelectorAll(`.group.${group} input`)[n];
   const dot = () => bar().querySelector('.tb-toggle').classList.contains('filtered');
-  const status = () => root.querySelector('.graph-status').textContent;
   await layout('#/graph?collapse=refines');
-  ok(box('reduce') && box('reduce').hasAttribute('checked'), '"hide implied" starts unticked');
+  ok(box('reduce') && !box('reduce').hasAttribute('checked'), '"hide implied" starts ticked');
   ok(box('reduce', 1) && !box('reduce', 1).hasAttribute('checked'), '"arcs of contents" starts ticked');
-  ok(!dot(), 'the Filters dot shows by default');
-  ok(/\d+ implied arcs? hidden/.test(status()), 'the status line does not count the hidden implied arcs');
-  fire(box('reduce'), 'change', { target: { checked: false } });
+  ok(!dot(), 'the Filters dot shows with nothing filtered');
+  ok(!/implied arc/.test(root.querySelector('.graph-status').textContent), 'the status line counts hidden implied arcs');
+  fire(box('reduce'), 'change', { target: { checked: true } });
   await tick(5);
   const req = lastLayoutMessage(w);
   w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
   await tick(5);
-  eq(new URLSearchParams(location.hash.split('?')[1]).get('reduce'), '0', 'unticking it writes reduce=0');
-  ok(!/implied arc/.test(status()), 'with every arc, the status line counts no hidden implied arcs');
-  ok(!dot(), 'no Filters dot with every arc drawn');
-  for (const hash of ['#/graph?collapse=refines&inner=1']) {
+  eq(new URLSearchParams(location.hash.split('?')[1]).get('reduce'), '1', 'ticking it writes reduce=1');
+  for (const hash of ['#/graph?collapse=refines&reduce=1', '#/graph?collapse=refines&inner=1']) {
     await layout(hash);
     ok(dot(), `no Filters dot with ${hash.split('&')[1]}`);
   }
@@ -2305,16 +2302,16 @@ await check('unfolding or folding a node fits the graph into the stage; a filter
   ok(z !== fit(), 'the zoom did not move the view');
   zoomed();
   const before = transform();
-  await layout('#/graph?collapse=refines&reduce=0');
+  await layout('#/graph?collapse=refines&reduce=1');
   eq(transform(), before, 'a filter moved the view');
   // Unfolding a section fits the new graph, as Fit would.
   zoomed();
-  await layout('#/graph?collapse=refines&reduce=0&expand=sec-main');
+  await layout('#/graph?collapse=refines&reduce=1&expand=sec-main');
   const opened = transform();
   eq(fit(), opened, 'unfolding did not fit the graph');
   // So does folding it again.
   zoomed();
-  await layout('#/graph?collapse=refines&reduce=0');
+  await layout('#/graph?collapse=refines&reduce=1');
   const shut = transform();
   eq(fit(), shut, 'folding did not fit the graph');
   ok(opened !== shut, 'the two graphs fit the same way: nothing was checked');
