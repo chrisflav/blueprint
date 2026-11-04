@@ -134,7 +134,7 @@ nowhere.
 The graph route carries its full view state as query parameters:
 `collapse=<kind>`, `expand=<comma separated ids>`, `ekinds=<edge kinds>`,
 `status=<derived statuses>`, `q=<search>`, `sel=<selected id>`,
-`reduce=0` when *hide implied* is off, `inner=1` when *arcs of contents*
+`reduce=1` when *hide implied* is on, `inner=1` when *arcs of contents*
 is on, and `appendix=0` when *hide appendix* is on.
 
 The graph is drawn from `graphModel` in `model.js`: the snapshot without the
@@ -178,14 +178,12 @@ section's edge, short dashes when nothing inside does. *Arcs of contents*
 statements' edges lifted onto their sections and in longer dashes where no section edge
 declares them; the status line counts the arcs of contents it hid.
 
-Of the two options that change which arcs are drawn, *hide implied* is on
-by default and *arcs of contents* off; the *Filters* button carries its dot
-while the arcs of contents are on.
+Both options that change which arcs are drawn are off by default, and the
+*Filters* button carries its dot while either is on.
 
-*Hide implied* (on by default; untick it for every arc) draws the transitive
-reduction of the graph as drawn: an arc is left out when a longer path of the
-same kind already joins its ends, so of "A uses B, B uses C, A uses C" only
-the first two are drawn.
+*Hide implied* (off by default) draws the transitive reduction of the graph as
+drawn: an arc is left out when a longer path of the same kind already joins
+its ends, so of "A uses B, B uses C, A uses C" only the first two are drawn.
 The reduction (`transitiveReduction` in `model.js`) works
 
 * per kind: a path implies an arc only of its own kind;
