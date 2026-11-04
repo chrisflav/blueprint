@@ -416,9 +416,10 @@ by CI. Separate TypeScript package under `web/`.
 - Object page: rendered prose with KaTeX, Lean signature linking to doc-gen4,
   derived and declared status, boundary, everything incident to the object,
   and its position in each collapse order.
-- Document view: linear reading order, numbered like a paper and split into
-  one page per level of the chosen collapse order, with a chosen number of
-  levels inlined on each page.
+- Document view: linear reading order, numbered like a paper (chapters and
+  sections as 4, 4.1, 4.1.1 among themselves; statements as 4.m, counted
+  through the whole chapter) and split into one page per level of the
+  chosen collapse order, with a chosen number of levels inlined on each page.
 - Progress dashboard and a time slider that replays snapshots.
 - PDF export of the document or of one part of it, in the document's order
   and numbering, prepared with the site for the snapshot it was made from

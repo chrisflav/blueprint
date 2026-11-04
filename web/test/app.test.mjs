@@ -1182,7 +1182,7 @@ await check('a repeated object points at where it is written out', async () => {
   const dup = root.querySelectorAll('.doc-entry.dup');
   eq(dup.length, 1, 'lem-diagonal is repeated here');
   eq(dup[0].id, '', 'the repetition does not take the anchor');
-  ok(/2\.1\.2/.test(dup[0].textContent), 'it carries the number of the first occurrence');
+  ok(/Lemma 2\.2\b/.test(dup[0].textContent), 'it carries the number of the first occurrence');
   ok([...dup[0].querySelectorAll('a')].some((a) =>
     a.getAttribute('href') === '#/document/sec-main-induction?collapse=refines&focus=lem-diagonal'), 'and links to it');
 });
@@ -1310,7 +1310,7 @@ await check('the graph numbers along its own collapse order', async () => {
   const div = dom.document.createElement('div');
   await go('#/graph?collapse=instance_of&sel=def-compact');
   app.renderBody(div, '[thm-heine-borel]', app.knownIds());
-  eq(div.querySelectorAll('a')[0].textContent, 'Theorem 6.1', 'instance_of numbers');
+  eq(div.querySelectorAll('a')[0].textContent, 'Theorem 6', 'instance_of numbers');
   await go('#/graph?sel=def-compact');
   app.renderBody(div, '[thm-heine-borel]', app.knownIds());
   eq(div.querySelectorAll('a')[0].textContent, 'Theorem 3.1', 'the default order');
@@ -1338,7 +1338,7 @@ await check('in the document a reference leads to the level of the entry', async
   eq(same.href, '#/document/sec-foundations?collapse=refines&focus=def-filter', 'this page, scrolled to it');
   // sec-foundations' own prose refers to thm-tychonoff, read on sec-main's page.
   const other = refTo('thm-tychonoff');
-  eq(other.text, 'Theorem 2.2', 'numbered');
+  eq(other.text, 'Theorem 2.3', 'numbered');
   eq(other.href, '#/document/sec-main?collapse=refines&focus=thm-tychonoff', 'the page it is read on');
   // A section: its chapter's page, with its siblings, never its own.
   await go('#/document/sec-main?depth=2');
@@ -2984,7 +2984,7 @@ if (ELK_PATH && fs.existsSync(ELK_PATH) && fs.existsSync(ELK_WORKER_PATH)) {
     const d = dialogEl();
     ok(d.querySelector('input[value="part"]').hasAttribute('checked'), 'an object page: a part');
     ok(/Section 2\.1/.test(d.querySelector('.export-part-title').textContent), 'the part the lemma is read in');
-    ok(/where Lemma 2\.1\.2 is read/.test(d.querySelector('.export-why').textContent), 'and why');
+    ok(/where Lemma 2\.2 is read/.test(d.querySelector('.export-why').textContent), 'and why');
     pdf.closeExport();
   });
 

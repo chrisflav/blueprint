@@ -885,12 +885,17 @@ check('the document outline numbers entries the way a paper does', () => {
   eq(num('sec-foundations'), '1', 'first chapter');
   eq(num('def-compact'), '1.1', 'first entry of the first chapter');
   eq(num('lem-ultrafilter'), '1.5', 'numbers count up through a chapter');
-  eq(num('sec-main-induction'), '2.1', 'a section in a chapter');
-  eq(num('lem-finite-subcover'), '2.1.1', 'three levels');
-  eq(num('thm-tychonoff'), '2.2', 'numbering continues after a nested section');
+  eq(num('sec-main-induction'), '2.1', 'a section in a chapter, numbered among the headings');
+  eq(num('lem-finite-subcover'), '2.1', 'a statement in a section: numbered in its chapter');
+  eq(num('lem-diagonal'), '2.2', 'statements count up through a chapter, whatever its sections');
+  eq(num('thm-tychonoff'), '2.3', 'numbering continues after a nested section');
+  eq(num('sec-applications'), '3', 'the headings their own series');
   // The prose edge with children is a top-level entry; its steps are not.
-  eq(num('uses/thm-tychonoff/lem-ultrafilter'), '6', 'an edge heading its own part');
-  eq(num('lem-base-case'), '6.1', 'under the edge');
+  // Under no heading, statements are numbered among themselves.
+  eq(num('commutes/uses~thm-heine-borel~thm-tychonoff/uses~thm-tychonoff~def-compact/uses~thm-heine-borel~def-compact'), '1',
+    'a statement under no heading');
+  eq(num('uses/thm-tychonoff/lem-ultrafilter'), '3', 'an edge heading its own part');
+  eq(num('lem-base-case'), '4', 'under the edge, still under no heading');
   eq(out.byId.has('refines/def-compact/sec-foundations'), false, 'collapse edges are structure');
   eq(out.stepOf.get('uses/sec-main/sec-foundations'), 'sec-main', 'a leaf edge with prose is a step');
   eq(out.byId.has('uses/sec-main/sec-foundations'), false, 'a step has no number of its own');
@@ -906,8 +911,8 @@ check('an object with two parents has one number, and its repetition none', () =
   eq(occ.length, 2, 'written out once, repeated once');
   eq(occ[0].duplicate, false, 'first occurrence written out');
   eq(occ[1].duplicate, true, 'second occurrence a pointer');
-  eq(occ[0].number, '2.1.2', 'the number of the first occurrence');
-  eq(occ[1].number, '2.1.2', 'the repetition carries the same number');
+  eq(occ[0].number, '2.2', 'the number of the first occurrence');
+  eq(occ[1].number, '2.2', 'the repetition carries the same number');
   eq(out.byId.get('lem-diagonal'), occ[0], 'byId is the written-out entry');
   // The repetition sits under sec-applications and takes no number there.
   eq(occ[1].parent.id, 'sec-applications', 'repeated under its second parent');
@@ -921,7 +926,7 @@ check('the outline follows the collapse order it is asked for', () => {
   eq(M.documentOutline(model, 'refines'), a, 'memoised');
   eq(a !== b, true, "one outline per collapse kind");
   eq(b.byId.get('thm-heine-borel').parent.id, 'thm-tychonoff', 'instance_of nests differently');
-  eq(b.byId.get('thm-heine-borel').number, '6.1', 'and numbers differently');
+  eq(b.byId.get('thm-heine-borel').number, '6', 'and numbers differently');
 });
 
 check('pages of the split document', () => {
@@ -985,14 +990,14 @@ check('cross references read as the document numbers them', () => {
   const ref = (id) => { const r = M.referenceOf(out, id); return r && r.word + ' ' + r.number; };
   eq(ref('def-filter'), 'Definition 1.2', 'a statement');
   eq(ref('sec-main-induction'), 'Section 2.1', 'a section, by the same rule');
-  eq(ref('lem-diagonal'), 'Lemma 2.1.2', 'two parents: the first occurrence');
-  eq(ref('uses/thm-tychonoff/lem-ultrafilter'), 'Uses 6', 'an edge heading its own part, as the document sets it');
+  eq(ref('lem-diagonal'), 'Lemma 2.2', 'two parents: the first occurrence');
+  eq(ref('uses/thm-tychonoff/lem-ultrafilter'), 'Uses 3', 'an edge heading its own part, as the document sets it');
   eq(ref('uses/sec-main/sec-foundations'), null, 'a step has no number');
   eq(ref('refines/def-compact/sec-foundations'), null, 'not in the document');
   eq(ref('no-such-object'), null, 'unknown');
   // Along another order, other numbers.
   const r = M.referenceOf(M.documentOutline(model, 'instance_of'), 'thm-heine-borel');
-  eq(r.word + ' ' + r.number, 'Theorem 6.1', 'instance_of numbering');
+  eq(r.word + ' ' + r.number, 'Theorem 6', 'instance_of numbering');
 });
 
 check('kindWord', () => {
@@ -1367,9 +1372,10 @@ check('a proof with details of its own is read after its statement, not at the t
   const flow = outline.entries.map((e) => e.id);
   eq(flow.join(' '), 'proof/odd odd sec thm proof/thm detail aux', 'reading order');
   eq(outline.byId.get('proof/thm').parent.id, 'thm', 'under its statement');
-  eq(outline.byId.get('proof/thm').number, '2.1.1', 'its first entry');
-  eq(outline.byId.get('aux').number, '2.1.2', 'before what refines the statement');
-  eq(outline.byId.get('detail').number, '2.1.1.1', 'its details below it');
+  eq(outline.byId.get('sec').number, '1', 'the headings numbered among themselves');
+  eq(outline.byId.get('proof/thm').number, '1.2', 'the next statement of the chapter');
+  eq(outline.byId.get('detail').number, '1.3', 'its details below it, and after it');
+  eq(outline.byId.get('aux').number, '1.4', 'before what refines the statement');
   eq(outline.byId.get('proof/odd').parent, null, 'the odd one stays a root, so both are still read');
 });
 
@@ -1726,8 +1732,9 @@ check('a proof is read where its file puts it, as any node is, and stays with it
   const p = out.byId.get('proof/thm');
   ok(p.proof && !p.text, 'an entry set as a proof');
   eq(p.number, null, 'with no number');
-  eq(out.byId.get('lem').number, '1.1.2', 'and taking none from its siblings');
-  eq(out.byId.get('lemb').number, '1.2.1', 'nor in the other section');
+  eq(out.byId.get('lem').number, '1.2', 'and taking none from its siblings');
+  eq(out.byId.get('lemb').number, '1.3', 'nor in the other section');
+  eq(out.byId.get('sb').number, '1.2', 'the sections numbered among themselves');
   eq((out.proofs.get('lemb') || []).map((x) => x.id).join(' '), 'proof/lemb', 'an unmoved proof is filed under its statement');
   eq(out.proofs.get('thm'), undefined, 'a moved one is not');
   eq(out.byId.get('proof/lemb'), undefined, 'and is no entry');
@@ -1735,7 +1742,7 @@ check('a proof is read where its file puts it, as any node is, and stays with it
   eq(M.documentPageOf(out, 'proof/thm'), 'sa', 'read on its section\'s page');
   eq(M.documentLevelOf(out, 'proof/lem'), 'sb', 'and the other on the other section\'s');
   eq(M.referenceOf(out, 'proof/thm'), null, 'no number to refer to it by');
-  eq(M.proofLeadAway(m, out, m.byId.get('proof/lem')), ' of Lemma 1.1.2.', 'away from its statement: what it proves');
+  eq(M.proofLeadAway(m, out, m.byId.get('proof/lem')), ' of Lemma 1.2.', 'away from its statement: what it proves');
   eq(M.proofLeadRest(m.byId.get('proof/thm')), '.', 'right after it: "Proof." as ever');
   // The graph is left alone: no node for a proof, and its uses are its statement's.
   const view = M.makeView(m, 'refines', ['chap', 'sa', 'sb']);

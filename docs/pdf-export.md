@@ -25,7 +25,7 @@ outline, along the collapse order chosen, and only chooses a part of it:
   section's statements are one level below it.  A proof and a step belong to
   their statement and come with it at any depth; a proof with details of its
   own is an entry, so its details are one level below it.  What a depth cuts
-  is said in the PDF ("3 entries below 2.2.2 are left out at this detail
+  is said in the PDF ("3 entries below 2.4 are left out at this detail
   level").  A depth that cuts nothing is `all`.
 * **Appendices.**  An entry of a kind the graph may hide (`graph =
   "optional"`, the built-in `appendix`) inside the scope is in by default
@@ -35,8 +35,8 @@ outline, along the collapse order chosen, and only chooses a part of it:
 
 Within the chosen part:
 
-* sibling order, numbers and lead words are the website's: "Lemma 2.2.3" in
-  the PDF is "Lemma 2.2.3" on the site, in a section export too;
+* sibling order, numbers and lead words are the website's: "Lemma 2.8" in
+  the PDF is "Lemma 2.8" on the site, in a section export too;
 * a statement is followed by its proofs, then its steps (relations with prose
   of their own, read under the object they start from — including a
   relation between relations, under the relation it starts from), then what

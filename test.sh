@@ -1235,7 +1235,7 @@ if command -v node > /dev/null 2>&1; then
     bad "export says a proof is read with its statement (exit $status)"; cat "$TMP/export.bad"
   fi
   if "$BP" export --root examples/paper --list > "$TMP/export.list" 2>&1 \
-     && grep -q "^refines	thm-fip	2.2.2	Compactness by closed sets	2 level(s)" "$TMP/export.list"; then
+     && grep -q "^refines	thm-fip	2.4	Compactness by closed sets	2 level(s)" "$TMP/export.list"; then
     ok "export --list lists the parts with their levels"
   else
     bad "export --list lists the parts with their levels"; cat "$TMP/export.list"

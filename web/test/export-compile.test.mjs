@@ -94,9 +94,9 @@ try {
     if (!pdftotext) return;
     const t = text(r.json.pdf);
     const problem = inOrder(t, ['Compactness through finite intersections', 'The complete blueprint', 'Contents',
-      '1 Introduction', '2 Covers and compact spaces', '2.1 Covers', 'Definition 2.1.1 (Open cover)',
-      'Definition 2.1.2', 'Definition 2.2.1', 'Theorem 2.2.2', 'Proof 2.2.2.1', 'Lemma 2.2.2.1.1',
-      'Lemma 2.2.2.1.2', 'Lemma 2.2.3 (Tube lemma)', '3 Products', 'Theorem 3.1', 'Remark 3.2',
+      '1 Introduction', '2 Covers and compact spaces', '2.1 Covers', 'Definition 2.1 (Open cover)',
+      'Definition 2.2', 'Definition 2.3', 'Theorem 2.4', 'Proof 2.5', 'Lemma 2.6',
+      'Lemma 2.7', 'Lemma 2.8 (Tube lemma)', '3 Products', 'Theorem 3.1', 'Remark 3.2',
       'belongs here too', '4 Conventions', 'Remark 4.1 (Symbols)', 'Remark 4.2']);
     eq(problem, null, 'reading order in the PDF');
     ok(!/\?\?/.test(t), 'no unresolved reference marks');
@@ -110,8 +110,8 @@ try {
     if (!pdftotext) return;
     const t = text(r.json.pdf);
     eq(inOrder(t, ['Section 3: Products', '3 Products', 'Theorem 3.1', 'Proof.', 'Remark 3.2',
-      'Written out here', 'Lemma 2.2.3 (Tube lemma)', 'Outside this export', 'Theorem 2.2.2']), null, 'order');
-    ok(!t.includes('Definition 2.1.1 (Open cover)'), 'nothing of section 2 but the shared lemma');
+      'Written out here', 'Lemma 2.8 (Tube lemma)', 'Outside this export', 'Theorem 2.4']), null, 'order');
+    ok(!t.includes('Definition 2.1 (Open cover)'), 'nothing of section 2 but the shared lemma');
   });
 
   await check('a smaller part compiles at a chosen depth', () => {
@@ -120,10 +120,10 @@ try {
     eq(r.json.request.depth, 1, 'depth 1');
     if (!pdftotext) return;
     const t = text(r.json.pdf);
-    ok(t.includes('Theorem 2.2.2: Compactness by closed sets') && t.includes('1 level below Theorem 2.2.2'), 'the title block');
+    ok(t.includes('Theorem 2.4: Compactness by closed sets') && t.includes('1 level below Theorem 2.4'), 'the title block');
     ok(t.includes('left out at this detail level'), 'it says what it leaves out');
-    ok(!t.includes('Lemma 2.2.2.1.1 (Complements)'), 'the lemmas are one level too far');
-    ok(t.includes('Lemma 2.2.2.1.1∗') || t.includes('Lemma 2.2.2.1.1 ∗') || t.includes('Outside this export'), 'a reference to one is to outside the export');
+    ok(!t.includes('Lemma 2.6 (Complements)'), 'the lemmas are one level too far');
+    ok(t.includes('Lemma 2.6∗') || t.includes('Lemma 2.6 ∗') || t.includes('Outside this export'), 'a reference to one is to outside the export');
   });
 
   await check('a TeX error fails the export, says where, and leaves no PDF behind', () => {

@@ -370,8 +370,12 @@ server makes PDFs on demand for the Export PDF dialog (`POST api/export`,
 
 ### The document's pages
 
-The document is the reading order of DESIGN.md §6, numbered as a paper is
-("Definition 1.2.14"), and split into pages along the collapse order.
+The document is the reading order of DESIGN.md §6, numbered as a paper is,
+in two series: the headings by their place among the headings alone ("Section
+4.1.2"), every statement as "n.m", n its chapter and m its place among all the
+statements of that chapter, whatever sections lie between ("Definition 4.14";
+`documentOutline` in `model.js`). The document is split into pages along the
+collapse order.
 `#/document` is the top level written out — usually the chapters — with the
 text between them. `#/document/<id>` writes out one entry and the levels
 below it. An entry whose children are not on the page links on to its own
@@ -424,7 +428,7 @@ the sections of the level the page writes out, under the chain down to it;
 reached by such a link, it shows the entry gone to opened on its own
 sections, and a statement gone to opens the section it is under. So on
 chapter 2's page the sidebar is the heading 2 over 2.1, 2.2, …; a click on
-2.1 opens 2.1's page, with 2.1.1, 2.1.2, … written out and the sidebar the
+2.1 opens 2.1's page, with what is in it written out and the sidebar the
 headings 2 and 2.1 over the sections among them. A section of the page on
 screen is only scrolled to and opened, and the link updated, without
 rebuilding the page; the page's own entry scrolls to the top. A page reached

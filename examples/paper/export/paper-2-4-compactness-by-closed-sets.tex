@@ -72,7 +72,7 @@
 \newcommand{\bpmissingimage}[1]{\fbox{\parbox{0.8\linewidth}{\centering\small\color{bpmuted}Image not included: #1}}}
 \DefineVerbatimEnvironment{bpverbatim}{Verbatim}{fontsize=\small,xleftmargin=1em}
 \renewcommand{\qedsymbol}{\ensuremath{\blacksquare}}
-\hypersetup{pdftitle={Compactness through finite intersections — 2.2.2 Compactness by closed sets},pdfsubject={Theorem 2.2.2 Compactness by closed sets; all levels},pdfcreator={blueprint}}
+\hypersetup{pdftitle={Compactness through finite intersections — 2.4 Compactness by closed sets},pdfsubject={Theorem 2.4 Compactness by closed sets; all levels},pdfcreator={blueprint}}
 % KaTeX commands the website knows
 \providecommand{\R}{\mathbb{R}}\providecommand{\N}{\mathbb{N}}\providecommand{\Z}{\mathbb{Z}}
 \providecommand{\Q}{\mathbb{Q}}\providecommand{\C}{\mathbb{C}}
@@ -109,7 +109,7 @@
 \begin{center}
 {\LARGE\bfseries Compactness through finite intersections\par}
 \vspace{0.7em}
-{\large Theorem 2.2.2: Compactness by closed sets\par}
+{\large Theorem 2.4: Compactness by closed sets\par}
 \vspace{0.5em}
 {\small\color{bpmuted}All levels \textperiodcentered{} read along the \texttt{refines} order\par}
 {\small\color{bpmuted}Snapshot 1671ccb1e155\par}
@@ -120,24 +120,24 @@
 
 % object: thm-fip (blueprint/spaces/compact/thm-fip.md)
 \phantomsection\label{bp1}%
-\addcontentsline{toc}{section}{\texorpdfstring{2.2.2\quad Compactness by closed sets}{2.2.2 Compactness by closed sets}}
-\begin{bpstatementit}{Theorem~2.2.2}{ (Compactness by closed sets)}
+\addcontentsline{toc}{section}{\texorpdfstring{2.4\quad Compactness by closed sets}{2.4 Compactness by closed sets}}
+\begin{bpstatementit}{Theorem~2.4}{ (Compactness by closed sets)}
 \(X\) is compact if and only if every family \((F_i)_{i \in I}\) of closed subsets of \(X\) with the finite intersection property has \(\bigcap_{i \in I} F_i \neq \emptyset\).
 \end{bpstatementit}
 % object: proof/thm-fip (blueprint/spaces/compact/thm-fip.proof.md)
 \phantomsection\label{bp2}%
-\addcontentsline{toc}{subsection}{\texorpdfstring{2.2.2.1\quad Proof of Theorem 2.2.2}{2.2.2.1 Proof of Theorem 2.2.2}}
-\begin{proof}[{Proof 2.2.2.1}]
-{\small\color{bpmuted}Of \hyperref[bp1]{Compactness by closed sets} (Theorem 2.2.2).}\par
-Both directions are the contrapositive of each other once the complements are taken: \hyperref[bp3]{Lemma 2.2.2.1.1} exchanges the two conditions, and \hyperref[bp4]{Lemma 2.2.2.1.2} says what a finite subcover becomes.
+\addcontentsline{toc}{subsection}{\texorpdfstring{2.5\quad Proof of Theorem 2.4}{2.5 Proof of Theorem 2.4}}
+\begin{proof}[{Proof 2.5}]
+{\small\color{bpmuted}Of \hyperref[bp1]{Compactness by closed sets} (Theorem 2.4).}\par
+Both directions are the contrapositive of each other once the complements are taken: \hyperref[bp3]{Lemma 2.6} exchanges the two conditions, and \hyperref[bp4]{Lemma 2.7} says what a finite subcover becomes.
 % step: uses/proof~thm-fip/def-fip
-\begin{bpstep}{\textsc{uses} \ensuremath{\to} Finite intersection property (\bpout{Definition 2.1.2})}\phantomsection\label{bp5}%
+\begin{bpstep}{\textsc{uses} \ensuremath{\to} Finite intersection property (\bpout{Definition 2.2})}\phantomsection\label{bp5}%
 \textit{Where the finite intersection property enters.}
-Only in \hyperref[bp4]{Lemma 2.2.2.1.2}: the property is the statement that no finite subfamily has empty intersection, word for word.
+Only in \hyperref[bp4]{Lemma 2.7}: the property is the statement that no finite subfamily has empty intersection, word for word.
 \end{bpstep}
 % object: lem-complements (blueprint/spaces/compact/lem-complements.md)
 \phantomsection\label{bp3}%
-\begin{bpstatementit}{Lemma~2.2.2.1.1}{ (Complements)}
+\begin{bpstatementit}{Lemma~2.6}{ (Complements)}
 For a family \((F_i)_{i \in I}\) of closed sets put \(U_i = X \setminus F_i\). Then \[
 \bigcap_{i \in I} F_i = \emptyset
 \iff
@@ -147,7 +147,7 @@ For a family \((F_i)_{i \in I}\) of closed sets put \(U_i = X \setminus F_i\). T
 
 % object: lem-finite-subfamily (blueprint/spaces/compact/lem-finite-subfamily.md)
 \phantomsection\label{bp4}%
-\begin{bpstatementit}{Lemma~2.2.2.1.2}{ (Finite subfamilies)}
+\begin{bpstatementit}{Lemma~2.7}{ (Finite subfamilies)}
 For \(J \subseteq I\) finite, \((U_j)_{j \in J}\) covers \(X\) if and only if \(\bigcap_{j \in J} F_j = \emptyset\).  Hence \((U_i)\) has no finite subcover if and only if \((F_i)\) has the finite intersection property.
 \end{bpstatementit}
 
@@ -159,6 +159,6 @@ For \(J \subseteq I\) finite, \((U_j)_{j \in J}\) covers \(X\) if and only if \(
 \addcontentsline{toc}{section}{Outside this export}
 References marked \ensuremath{{}^\ast} are to parts of the blueprint this document leaves out:
 \begin{description}
-\item[Definition 2.1.2] Finite intersection property, in 2 Covers and compact spaces (\bpslug{def-{}\allowbreak{}fip})
+\item[Definition 2.2] Finite intersection property, in 2 Covers and compact spaces (\bpslug{def-{}\allowbreak{}fip})
 \end{description}
 \end{document}

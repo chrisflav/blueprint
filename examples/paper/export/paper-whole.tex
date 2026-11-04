@@ -132,7 +132,7 @@
 \section*{\texorpdfstring{1\quad Introduction}{1 Introduction}}
 \phantomsection\label{bp1}%
 \addcontentsline{toc}{section}{\texorpdfstring{1\quad Introduction}{1 Introduction}}
-We prove that a space is compact exactly when every family of closed sets with the finite intersection property has a point in common (\hyperref[bp10]{Theorem 2.2.2}), and use it to show that a product of two compact spaces is compact (\hyperref[bp16]{Theorem 3.1}).  The argument is the one in Čech's and Erdős' lecture notes, written so that every step can be checked on its own.
+We prove that a space is compact exactly when every family of closed sets with the finite intersection property has a point in common (\hyperref[bp10]{Theorem 2.4}), and use it to show that a product of two compact spaces is compact (\hyperref[bp16]{Theorem 3.1}).  The argument is the one in Čech's and Erdős' lecture notes, written so that every step can be checked on its own.
 
 Throughout, \(X\) and \(Y\) are topological spaces and \(\Opens{X}\) is the set of open subsets of \(X\).
 
@@ -151,7 +151,7 @@ Two notions recur below, and both are about families of subsets indexed by an ar
 
 % object: def-cover (blueprint/spaces/covers/def-cover.md)
 \phantomsection\label{bp5}%
-\begin{bpstatement}{Definition~2.1.1}{ (Open cover)}
+\begin{bpstatement}{Definition~2.1}{ (Open cover)}
 An \emph{open cover} of \(X\) is a family \(\fam{U} = (U_i)_{i \in I}\) of open sets with
 
 \[
@@ -163,13 +163,13 @@ A \emph{subcover} is a subfamily \((U_j)_{j \in J}\), \(J \subseteq I\), that is
 
 % object: def-fip (blueprint/spaces/covers/def-fip.md)
 \phantomsection\label{bp6}%
-\begin{bpstatement}{Definition~2.1.2}{ (Finite intersection property)}
+\begin{bpstatement}{Definition~2.2}{ (Finite intersection property)}
 A family \((F_i)_{i \in I}\) of subsets of \(X\) has the \emph{finite intersection property} when every finite subfamily meets: \[
 \begin{aligned}
 F_{i_1} \cap \dots \cap F_{i_n} &\neq \emptyset
   &&\text{for all } n \ge 1 \text{ and } i_1, \dots, i_n \in I .
 \end{aligned}
-\] It is the dual of \hyperref[bp5]{Definition 2.1.1} under complements.
+\] It is the dual of \hyperref[bp5]{Definition 2.1} under complements.
 \end{bpstatement}
 
 
@@ -179,8 +179,8 @@ F_{i_1} \cap \dots \cap F_{i_n} &\neq \emptyset
 \addcontentsline{toc}{subsection}{\texorpdfstring{2.2\quad Compact spaces}{2.2 Compact spaces}}
 % object: def-compact (blueprint/spaces/compact/def-compact.md)
 \phantomsection\label{bp8}%
-\begin{bpstatement}{Definition~2.2.1}{ (Compact space)}
-\(X\) is \emph{compact} when every open cover of \(X\) (\hyperref[bp5]{Definition 2.1.1}) has a finite subcover.
+\begin{bpstatement}{Definition~2.3}{ (Compact space)}
+\(X\) is \emph{compact} when every open cover of \(X\) (\hyperref[bp5]{Definition 2.1}) has a finite subcover.
 \end{bpstatement}
 
 % text: compact-between
@@ -189,23 +189,23 @@ Passing to complements turns open covers into families of closed sets, and \text
 
 % object: thm-fip (blueprint/spaces/compact/thm-fip.md)
 \phantomsection\label{bp10}%
-\addcontentsline{toc}{subsubsection}{\texorpdfstring{2.2.2\quad Compactness by closed sets}{2.2.2 Compactness by closed sets}}
-\begin{bpstatementit}{Theorem~2.2.2}{ (Compactness by closed sets)}
+\addcontentsline{toc}{subsubsection}{\texorpdfstring{2.4\quad Compactness by closed sets}{2.4 Compactness by closed sets}}
+\begin{bpstatementit}{Theorem~2.4}{ (Compactness by closed sets)}
 \(X\) is compact if and only if every family \((F_i)_{i \in I}\) of closed subsets of \(X\) with the finite intersection property has \(\bigcap_{i \in I} F_i \neq \emptyset\).
 \end{bpstatementit}
 % object: proof/thm-fip (blueprint/spaces/compact/thm-fip.proof.md)
 \phantomsection\label{bp11}%
-\begin{proof}[{Proof 2.2.2.1}]
-{\small\color{bpmuted}Of \hyperref[bp10]{Compactness by closed sets} (Theorem 2.2.2).}\par
-Both directions are the contrapositive of each other once the complements are taken: \hyperref[bp12]{Lemma 2.2.2.1.1} exchanges the two conditions, and \hyperref[bp13]{Lemma 2.2.2.1.2} says what a finite subcover becomes.
+\begin{proof}[{Proof 2.5}]
+{\small\color{bpmuted}Of \hyperref[bp10]{Compactness by closed sets} (Theorem 2.4).}\par
+Both directions are the contrapositive of each other once the complements are taken: \hyperref[bp12]{Lemma 2.6} exchanges the two conditions, and \hyperref[bp13]{Lemma 2.7} says what a finite subcover becomes.
 % step: uses/proof~thm-fip/def-fip
-\begin{bpstep}{\textsc{uses} \ensuremath{\to} \hyperref[bp6]{Finite intersection property} (Definition 2.1.2)}\phantomsection\label{bp21}%
+\begin{bpstep}{\textsc{uses} \ensuremath{\to} \hyperref[bp6]{Finite intersection property} (Definition 2.2)}\phantomsection\label{bp21}%
 \textit{Where the finite intersection property enters.}
-Only in \hyperref[bp13]{Lemma 2.2.2.1.2}: the property is the statement that no finite subfamily has empty intersection, word for word.
+Only in \hyperref[bp13]{Lemma 2.7}: the property is the statement that no finite subfamily has empty intersection, word for word.
 \end{bpstep}
 % object: lem-complements (blueprint/spaces/compact/lem-complements.md)
 \phantomsection\label{bp12}%
-\begin{bpstatementit}{Lemma~2.2.2.1.1}{ (Complements)}
+\begin{bpstatementit}{Lemma~2.6}{ (Complements)}
 For a family \((F_i)_{i \in I}\) of closed sets put \(U_i = X \setminus F_i\). Then \[
 \bigcap_{i \in I} F_i = \emptyset
 \iff
@@ -215,7 +215,7 @@ For a family \((F_i)_{i \in I}\) of closed sets put \(U_i = X \setminus F_i\). T
 
 % object: lem-finite-subfamily (blueprint/spaces/compact/lem-finite-subfamily.md)
 \phantomsection\label{bp13}%
-\begin{bpstatementit}{Lemma~2.2.2.1.2}{ (Finite subfamilies)}
+\begin{bpstatementit}{Lemma~2.7}{ (Finite subfamilies)}
 For \(J \subseteq I\) finite, \((U_j)_{j \in J}\) covers \(X\) if and only if \(\bigcap_{j \in J} F_j = \emptyset\).  Hence \((U_i)\) has no finite subcover if and only if \((F_i)\) has the finite intersection property.
 \end{bpstatementit}
 
@@ -224,7 +224,7 @@ For \(J \subseteq I\) finite, \((U_j)_{j \in J}\) covers \(X\) if and only if \(
 
 % object: lem-tube (blueprint/spaces/compact/lem-tube.md)
 \phantomsection\label{bp14}%
-\begin{bpstatementit}{Lemma~2.2.3}{ (Tube lemma)}
+\begin{bpstatementit}{Lemma~2.8}{ (Tube lemma)}
 Let \(Y\) be compact, \(x \in X\), and \(W \subseteq X \times Y\) open with \(\{x\} \times Y \subseteq W\).  Then there is an open \(U \ni x\) with \(U \times Y \subseteq W\).
 \end{bpstatementit}
 % proof: proof/lem-tube
@@ -238,21 +238,21 @@ Cover \(\{x\} \times Y\) by basic open sets \(U_y \times V_y \subseteq W\).  The
 \section*{\texorpdfstring{3\quad Products}{3 Products}}
 \phantomsection\label{bp15}%
 \addcontentsline{toc}{section}{\texorpdfstring{3\quad Products}{3 Products}}
-Finite products of compact spaces are compact.  The tube lemma (\hyperref[bp14]{Lemma 2.2.3}) is stated in Section \hyperref[bp7]{2.2}; it is the whole content of the argument.
+Finite products of compact spaces are compact.  The tube lemma (\hyperref[bp14]{Lemma 2.8}) is stated in Section \hyperref[bp7]{2.2}; it is the whole content of the argument.
 % object: thm-product (blueprint/products/thm-product.md)
 \phantomsection\label{bp16}%
 \begin{bpstatementit}{Theorem~3.1}{ (Products of two compact spaces)}
 If \(X\) and \(Y\) are compact, so is \(X \times Y\) with the product topology.
 
 \begin{proof}[{Proof}]
-Let \(\fam{W}\) be an open cover of \(X \times Y\).  For each \(x \in X\) the slice \(\{x\} \times Y \cong Y\) is compact, so finitely many members of \(\fam{W}\) cover it; call their union \(W_x\).  By \hyperref[bp14]{Lemma 2.2.3} there is an open \(U_x \ni x\) with \(U_x \times Y \subseteq W_x\).
+Let \(\fam{W}\) be an open cover of \(X \times Y\).  For each \(x \in X\) the slice \(\{x\} \times Y \cong Y\) is compact, so finitely many members of \(\fam{W}\) cover it; call their union \(W_x\).  By \hyperref[bp14]{Lemma 2.8} there is an open \(U_x \ni x\) with \(U_x \times Y \subseteq W_x\).
 
 \begin{enumerate}
-\item The \(U_x\) cover \(X\), so by \hyperref[bp8]{Definition 2.2.1} finitely many do: \(U_{x_1}, \dots, U_{x_m}\).
+\item The \(U_x\) cover \(X\), so by \hyperref[bp8]{Definition 2.3} finitely many do: \(U_{x_1}, \dots, U_{x_m}\).
 \item Then \(X \times Y = \bigcup_{k=1}^{m} U_{x_k} \times Y \subseteq \bigcup_k W_{x_k}\), a union of finitely many members of \(\fam{W}\).
 \end{enumerate}
 
-Compare the closed-set form, \hyperref[bp10]{Theorem 2.2.2}, which gives the same result by a less direct route.
+Compare the closed-set form, \hyperref[bp10]{Theorem 2.4}, which gives the same result by a less direct route.
 \end{proof}
 \end{bpstatementit}
 
@@ -263,7 +263,7 @@ For an arbitrary family \((X_\alpha)_{\alpha \in A}\) the statement is Tychonoff
 \end{bpstatement}
 
 % repeated: lem-tube
-\begin{bpnote}\hyperref[bp14]{Lemma 2.2.3} (Tube lemma) belongs here too; it is written out under \hyperref[bp7]{2.2 Compact spaces}, on page~\pageref{bp14}.\end{bpnote}
+\begin{bpnote}\hyperref[bp14]{Lemma 2.8} (Tube lemma) belongs here too; it is written out under \hyperref[bp7]{2.2 Compact spaces}, on page~\pageref{bp14}.\end{bpnote}
 
 % object: conventions (blueprint/appendix/_section.md)
 \section*{\texorpdfstring{4\quad Conventions}{4 Conventions}}
@@ -278,9 +278,9 @@ Notation used above, collected in one place.
 \toprule
 Symbol & Meaning & First used \\
 \midrule
-\(\cl{A}\) & the closure of \(A\) & \hyperref[bp6]{Definition 2.1.2} \\
+\(\cl{A}\) & the closure of \(A\) & \hyperref[bp6]{Definition 2.2} \\
 \(\Opens{X}\) & the open subsets of \(X\) & \hyperref[bp1]{Section 1} \\
-\(\fam{U}\), \(\fam{W}\) & families of open sets & \hyperref[bp5]{Definition 2.1.1} \\
+\(\fam{U}\), \(\fam{W}\) & families of open sets & \hyperref[bp5]{Definition 2.1} \\
 \(\Top\) & the category of spaces, \(f\colon X \to Y\) continuous & — \\
 \bottomrule
 \end{tabular}

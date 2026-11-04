@@ -117,7 +117,7 @@ export function render(root, app) {
   const known = app.knownIds();
   const entries = M.documentPageEntries(outline, pageId, shown);
 
-  // Cross references in the prose read "Lemma 2.3.1" in this order's numbers,
+  // Cross references in the prose read "Lemma 2.3" in this order's numbers,
   // and stay in the paper: they lead to the level of the entry, as its heading
   // does.  A reader who wants the object page has the "object" link beside the
   // entry's heading for that.  Objects the document does not number keep their
@@ -243,7 +243,7 @@ export function render(root, app) {
     const prog = app.showProgress ? M.progressMixOf(m, kind, o.id) : null;
 
     // Sections are headings; everything else is a numbered statement in the
-    // way a paper sets one: "Definition 1.2.14 (Title)." with the kind as the
+    // way a paper sets one: "Definition 1.14 (Title)." with the kind as the
     // lead word, and the body indented under it.  The heading, kind, number
     // and title, is one link, to this very place on this page: clicked, it
     // stays here, scrolled to the top (the handler above), whatever entry it
