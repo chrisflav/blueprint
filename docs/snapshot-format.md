@@ -20,6 +20,7 @@ by editing this file first. Version 1.
       "\\poly": "#1[T]"
     },
     "theme": "outline",                          // optional, see below
+    "numbering": "nested",                       // optional, see below
     "logo": "assets/logo.svg",                   // optional, see below
     "logoInk": true,                             // optional
     "intro": {                                   // optional, see below
@@ -115,6 +116,10 @@ Notes
   the website opens in for a reader who has not picked one.  It is left out
   when the project names none; a reader defaults it to the website's default
   style, and so treats an id it does not know.
+- `project.numbering` is `[site] numbering` of `blueprint.toml`: `"nested"`
+  numbers a statement inside a statement within it (`n.m.k` under `n.m`);
+  left out, or `"flat"`, every statement of a chapter is numbered in one
+  series (`documentOutline` in `web/model.js`).
 - `project.logo` is `[site] logo` of `blueprint.toml`: the address of a
   picture the website shows left of its title, resolved against the
   directory holding the snapshot.  `project.logoInk`, `[site] logoInk`, says

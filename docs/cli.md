@@ -554,6 +554,7 @@ descend = ["MyProject", "MyLib"]    # optional: where the dependency walk goes
 
 [site]
 theme   = "outline"                 # the style the website opens in
+numbering = "nested"                # statements inside statements: n.m.k, default "flat"
 assets  = "site-assets"             # copied into the site as assets/
 logo    = "assets/logo.svg"         # left of the title in the top bar
 logoInk = true                      # drawn in the title's colour, default false
@@ -641,6 +642,16 @@ is optional and defaults to the website's default style; the menu keeps
 every style.  `blueprint build` copies it into the snapshot as
 `project.theme`, and the website reads an id it does not know as its
 default.
+
+`[site] numbering` says how the document numbers a statement that lies
+inside another statement, a detail under the statement it refines.  With
+`"flat"`, the default, every statement of a chapter is numbered in one
+series whatever its depth, as `documentOutline` describes, so details take
+numbers from the chapter's series.  With `"nested"` such a statement is
+numbered within the one it lies in, `2.3.1`, `2.3.2`, … under `2.3`, and the
+chapter's statements keep the numbers they have without their details.
+Headings and statements directly under headings are numbered as before.
+`blueprint build` copies it into the snapshot as `project.numbering`.
 
 `[site.intro]` is what the website shows in the middle of the screen when
 it is opened at its landing page, drawn as a single graph node, before it
@@ -1016,7 +1027,7 @@ merge.  `Topology.coverChoice` is a custom axiom (`proved_with_axioms`),
 * **`project.katexMacros` is left out of the snapshot when it is empty**, so
   that a project without `[katex.macros]` gets exactly the `project` object
   it got before the field existed.  So is `project.theme` when `[site] theme`
-  is not given, and `project.intro` when there is no `[site.intro]`.
+  is not given, `project.numbering` when `[site] numbering` is not given, and `project.intro` when there is no `[site.intro]`.
 * **`blueprint read`** is an extra command, see above.
 * **The `attrMap` is merged into the object mapping (§5).**
   `docs/snapshot-format.md` records `attrMap` but says only that the names

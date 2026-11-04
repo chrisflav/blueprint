@@ -1765,7 +1765,10 @@ export function topLevel(model, kind) {
  * "n.m": n the number of the outermost heading it lies in (its chapter), m its
  * place among all the statements of that chapter, whatever sections lie
  * between; a statement under no heading is numbered among the others under
- * none, by m alone.  An object with several parents is written out under the
+ * none, by m alone.  With `project.numbering` "nested" (`[site] numbering` in
+ * `blueprint.toml`) a statement whose parent entry is itself a statement is
+ * numbered within it instead, "n.m.k" under "n.m", and leaves the chapter's
+ * series alone.  An object with several parents is written out under the
  * first and repeated, as a pointer, under the others; the repetition carries
  * the number of the first occurrence and uses none of its own, so every object
  * has exactly one number and a cross reference to it means one place.  A piece
@@ -1836,6 +1839,7 @@ export function documentOutline(model, kind) {
   const byId = new Map();
   // Written-out entries so far: headings per enclosing heading, statements
   // per chapter (null for none).
+  const nested = !!(model.project && model.project.numbering === 'nested');
   const headingCounts = new Map();
   const statementCounts = new Map();
   const nextNumber = (counts, key) => {
@@ -1875,9 +1879,12 @@ export function documentOutline(model, kind) {
       // The headings above it, nearest first.
       const headings = [];
       for (let a = parent; a; a = a.parent) if (isSectionKind(a.object.kind)) headings.push(a);
+      // Under `[site] numbering = "nested"`, inside a statement: numbered within it.
+      const host = nested && !isSectionKind(e.object.kind) && parent && !isSectionKind(parent.object.kind)
+        ? parent : null;
       entry.number = isSectionKind(e.object.kind)
         ? nextNumber(headingCounts, headings[0] || null)
-        : nextNumber(statementCounts, headings[headings.length - 1] || null);
+        : nextNumber(statementCounts, host || headings[headings.length - 1] || null);
       byId.set(e.id, entry);
     }
     (parent ? parent.children : roots).push(entry);
