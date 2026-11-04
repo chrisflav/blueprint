@@ -120,21 +120,21 @@
 \section*{\texorpdfstring{3\quad Products}{3 Products}}
 \phantomsection\label{bp1}%
 \addcontentsline{toc}{section}{\texorpdfstring{3\quad Products}{3 Products}}
-Finite products of compact spaces are compact.  The tube lemma (\hyperref[bp4]{Lemma 2.2.3}) is stated in Section \bpout{2.2}; it is the whole content of the argument.
+Finite products of compact spaces are compact.  The tube lemma (\hyperref[bp4]{Lemma 2.8}) is stated in Section \bpout{2.2}; it is the whole content of the argument.
 % object: thm-product (blueprint/products/thm-product.md)
 \phantomsection\label{bp2}%
 \begin{bpstatementit}{Theorem~3.1}{ (Products of two compact spaces)}
 If \(X\) and \(Y\) are compact, so is \(X \times Y\) with the product topology.
 
 \begin{proof}[{Proof}]
-Let \(\fam{W}\) be an open cover of \(X \times Y\).  For each \(x \in X\) the slice \(\{x\} \times Y \cong Y\) is compact, so finitely many members of \(\fam{W}\) cover it; call their union \(W_x\).  By \hyperref[bp4]{Lemma 2.2.3} there is an open \(U_x \ni x\) with \(U_x \times Y \subseteq W_x\).
+Let \(\fam{W}\) be an open cover of \(X \times Y\).  For each \(x \in X\) the slice \(\{x\} \times Y \cong Y\) is compact, so finitely many members of \(\fam{W}\) cover it; call their union \(W_x\).  By \hyperref[bp4]{Lemma 2.8} there is an open \(U_x \ni x\) with \(U_x \times Y \subseteq W_x\).
 
 \begin{enumerate}
-\item The \(U_x\) cover \(X\), so by \bpout{Definition 2.2.1} finitely many do: \(U_{x_1}, \dots, U_{x_m}\).
+\item The \(U_x\) cover \(X\), so by \bpout{Definition 2.3} finitely many do: \(U_{x_1}, \dots, U_{x_m}\).
 \item Then \(X \times Y = \bigcup_{k=1}^{m} U_{x_k} \times Y \subseteq \bigcup_k W_{x_k}\), a union of finitely many members of \(\fam{W}\).
 \end{enumerate}
 
-Compare the closed-set form, \bpout{Theorem 2.2.2}, which gives the same result by a less direct route.
+Compare the closed-set form, \bpout{Theorem 2.4}, which gives the same result by a less direct route.
 \end{proof}
 \end{bpstatementit}
 
@@ -147,7 +147,7 @@ For an arbitrary family \((X_\alpha)_{\alpha \in A}\) the statement is Tychonoff
 % object: lem-tube (blueprint/spaces/compact/lem-tube.md)
 \phantomsection\label{bp4}%
 \begin{bpnote}Written out here; in the full blueprint it is read under 2.2 Compact spaces, outside this export.\end{bpnote}
-\begin{bpstatementit}{Lemma~2.2.3}{ (Tube lemma)}
+\begin{bpstatementit}{Lemma~2.8}{ (Tube lemma)}
 Let \(Y\) be compact, \(x \in X\), and \(W \subseteq X \times Y\) open with \(\{x\} \times Y \subseteq W\).  Then there is an open \(U \ni x\) with \(U \times Y \subseteq W\).
 \end{bpstatementit}
 % proof: proof/lem-tube
@@ -162,7 +162,7 @@ Cover \(\{x\} \times Y\) by basic open sets \(U_y \times V_y \subseteq W\).  The
 References marked \ensuremath{{}^\ast} are to parts of the blueprint this document leaves out:
 \begin{description}
 \item[Section 2.2] Compact spaces, in 2 Covers and compact spaces (\bpslug{compact})
-\item[Definition 2.2.1] Compact space, in 2 Covers and compact spaces (\bpslug{def-{}\allowbreak{}compact})
-\item[Theorem 2.2.2] Compactness by closed sets, in 2 Covers and compact spaces (\bpslug{thm-{}\allowbreak{}fip})
+\item[Definition 2.3] Compact space, in 2 Covers and compact spaces (\bpslug{def-{}\allowbreak{}compact})
+\item[Theorem 2.4] Compactness by closed sets, in 2 Covers and compact spaces (\bpslug{thm-{}\allowbreak{}fip})
 \end{description}
 \end{document}

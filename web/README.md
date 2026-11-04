@@ -428,7 +428,7 @@ the sections of the level the page writes out, under the chain down to it;
 reached by such a link, it shows the entry gone to opened on its own
 sections, and a statement gone to opens the section it is under. So on
 chapter 2's page the sidebar is the heading 2 over 2.1, 2.2, …; a click on
-2.1 opens 2.1's page, with 2.1.1, 2.1.2, … written out and the sidebar the
+2.1 opens 2.1's page, with what is in it written out and the sidebar the
 headings 2 and 2.1 over the sections among them. A section of the page on
 screen is only scrolled to and opened, and the link updated, without
 rebuilding the page; the page's own entry scrolls to the top. A page reached

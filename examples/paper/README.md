@@ -31,7 +31,7 @@ rm examples/paper/export/*-source.zip
 * `paper-3-products` — section 3 alone: the tube lemma, whose first place is
   section 2.2, is written out in it with its proof, and the references to
   section 2 are listed as outside the export;
-* `paper-2-2-2-compactness-by-closed-sets` — one refined theorem: the
+* `paper-2-4-compactness-by-closed-sets` — one refined theorem: the
   statement, its proof with the step and the two lemmas inside it.
 
 `web/sample/paper/blueprint.json` is the snapshot (`lake exe blueprint
