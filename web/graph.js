@@ -80,12 +80,13 @@ function readState(app) {
     status: app.showProgress && p.has('status') ? split('status') : null, // null = all
     q: p.get('q') || '',
     sel: p.get('sel') || null,
-    // Off unless asked for, as every option that changes which arcs are
-    // drawn: by default the graph draws A -> B for two nodes exactly when A,
-    // or something inside A, has an arc to B itself, or A itself has an arc
-    // to B or to something inside B (`M.ownEdges`).
-    // Hide arcs implied by a longer path of their kind.
-    reduce: p.get('reduce') === '1',
+    // The options below change which arcs are drawn.  By default the graph
+    // draws A -> B for two nodes exactly when A, or something inside A, has
+    // an arc to B itself, or A itself has an arc to B or to something inside
+    // B (`M.ownEdges`), less the arcs a longer path implies.
+    // Hide arcs implied by a longer path of their kind: on unless the reader
+    // asks for every arc.
+    reduce: p.get('reduce') !== '0',
     // Draw a collapsed object's contents' arcs on it as well (DESIGN 3's
     // derived arcs).
     inner: p.get('inner') === '1',
@@ -301,7 +302,8 @@ function renderToolbar(app, st) {
   // button (style.css): unfolded, on a wide screen the wrapper is `display:
   // contents` and the toolbar is the one row it always was, and on a phone it
   // is a second row.
-  const filtered = !!(st.ekinds || st.status || st.reduce || st.inner || !st.appendix);
+  // Hiding implied arcs is the default, and no dot.
+  const filtered = !!(st.ekinds || st.status || st.inner || !st.appendix);
   bar.classList.toggle('open', !!ui.toolbarOpen);
   const toggle = bar.appendChild(el('button.tb-toggle', {
     type: 'button',
@@ -338,12 +340,12 @@ function renderToolbar(app, st) {
       }), k))));
 
   // Transitive reduction of what is drawn (see `buildElk`): a group of its
-  // own, since it is not a kind and is off when all the kinds are on.
+  // own, since it is not a kind.  On by default.
   filters.appendChild(el('div.group.reduce',
     el('label.chk', { title: 'hide arcs already implied by a longer path of the same kind' },
       el('input', {
         type: 'checkbox', checked: st.reduce,
-        onchange: (e) => writeState(app, { reduce: e.target.checked ? '1' : null }),
+        onchange: (e) => writeState(app, { reduce: e.target.checked ? null : '0' }),
       }), 'hide implied'),
     el('label.chk', { title: 'also draw, on a collapsed object, the arcs of what is hidden inside it' },
       el('input', {
