@@ -343,6 +343,9 @@ def decodeConfig (t : TValue) (defaultName : String) :
       | some s => pure s
       | none => throw s!"'[site] {k}' must be a string, got a {v.typeName}"
   let theme ← siteStr "theme"
+  let numbering ← siteStr "numbering"
+  unless numbering ∈ ["", "flat", "nested"] do
+    throw s!"'[site] numbering' must be \"flat\" or \"nested\", got \"{numbering}\""
   let logo ← siteStr "logo"
   let logoInk ← match site.bind (·.get? "logoInk") with
     | none => pure false
@@ -409,7 +412,7 @@ def decodeConfig (t : TValue) (defaultName : String) :
       pure (zulip, channel, server)
     | some v => throw s!"'[site] comments' must be a table, got a {v.typeName}"
   let project : Project :=
-    { name, title, dir, leanModules, leanDescend, katexMacros, theme, logo, logoInk,
+    { name, title, dir, leanModules, leanDescend, katexMacros, theme, numbering, logo, logoInk,
       intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom,
       assets, commentsZulip, commentsChannel, commentsServer }
   let mut schema := defaultSchema

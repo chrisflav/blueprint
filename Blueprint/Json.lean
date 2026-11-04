@@ -135,7 +135,7 @@ def Project.introJson (p : Project) : Json :=
 def Snapshot.toJson (s : Snapshot) : Json :=
   Json.mkObj [
     ("version", Json.num (JsonNumber.fromInt s.version)),
-    -- `katexMacros`, `theme`, `logo` and `intro` are left out when the project
+    -- `katexMacros`, `theme`, `numbering`, `logo` and `intro` are left out when the project
     -- declares none, so that a blueprint without them has exactly the
     -- `project` it had before the fields existed.
     ("project", Json.mkObj ([("name", Json.str s.project.name),
@@ -146,6 +146,8 @@ def Snapshot.toJson (s : Snapshot) : Json :=
           objOf (s.project.katexMacros.map fun (n, d) => (n, Json.str d)))]) ++
       (if s.project.theme.isEmpty then [] else
         [("theme", Json.str s.project.theme)]) ++
+      (if s.project.numbering.isEmpty then [] else
+        [("numbering", Json.str s.project.numbering)]) ++
       (if s.project.logo.isEmpty then [] else
         [("logo", Json.str s.project.logo)] ++
         (if s.project.logoInk then [("logoInk", Json.bool true)] else [])) ++
@@ -310,6 +312,7 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
       dir := fieldStrD p "dir" "blueprint"
       katexMacros
       theme := fieldStrD p "theme" ""
+      numbering := fieldStrD p "numbering" ""
       logo := fieldStrD p "logo" ""
       logoInk := fieldBoolD p "logoInk" false
       intro := fieldStrD intro "body" ""

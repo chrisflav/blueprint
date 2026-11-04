@@ -929,6 +929,35 @@ check('the outline follows the collapse order it is asked for', () => {
   eq(b.byId.get('thm-heine-borel').number, '6', 'and numbers differently');
 });
 
+check('[site] numbering = "nested" numbers a statement inside a statement within it', () => {
+  const nested = M.buildModel({ ...JSON.parse(JSON.stringify(snapshot)),
+    project: { ...(snapshot.project || {}), numbering: 'nested' } });
+  const out = M.documentOutline(nested, 'instance_of');
+  const tych = out.byId.get('thm-tychonoff');
+  eq(out.byId.get('thm-heine-borel').parent.id, 'thm-tychonoff', 'a statement inside a statement');
+  eq(out.byId.get('thm-heine-borel').number, tych.number + '.1', 'numbered within it');
+  // Every statement inside a statement is numbered under it, 1, 2, … in order,
+  // and the others count up without them.
+  const isStatementEntry = (e) => !e.duplicate && e.number && !M.isSectionKind(e.object.kind);
+  const inside = (e) => e.parent && !M.isSectionKind(e.parent.object.kind);
+  const series = new Map();
+  for (const e of out.entries.filter(isStatementEntry)) {
+    const host = inside(e) ? e.parent : null;
+    const key = host ? host.id : 'top:' + (e.parent ? e.parent.id : '');
+    const k = (series.get(key) || 0) + 1;
+    series.set(key, k);
+    if (host) eq(e.number, host.number + '.' + k, `${e.id} is ${host.number}.${k}`);
+  }
+  // Any numbered entry that is not a heading hosts what lies inside it: in the
+  // refines outline the edge heading its own part (3) holds lem-base-case.
+  const b = M.documentOutline(nested, 'refines');
+  eq(b.byId.get('lem-base-case').number, '3.1', 'under a numbered edge');
+  eq(b.byId.get('def-compact').number, '1.1', 'statements under headings as before');
+  eq(b.byId.get('thm-tychonoff').number, '2.3', 'and further on in the chapter');
+  // Without the setting nothing changes.
+  eq(M.documentOutline(model, 'refines').byId.get('lem-base-case').number, '4', 'flat by default');
+});
+
 check('pages of the split document', () => {
   const out = M.documentOutline(model, 'refines');
   // An entry with children is read on its own page, a leaf on its parent's,

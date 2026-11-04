@@ -305,6 +305,12 @@ structure Project where
   `[site] theme` in `blueprint.toml`: the id of one of the website's themes,
   empty for its default.  Handed to the website as `project.theme`. -/
   theme : String := ""
+  /-- `[site] numbering`: how the website numbers a statement that lies inside
+  another statement.  Empty (or `"flat"`) numbers every statement of a chapter
+  in one series, whatever its depth; `"nested"` numbers a statement inside a
+  statement within it, `n.m.k` under `n.m`.  Handed to the website as
+  `project.numbering`. -/
+  numbering : String := ""
   /-- `[site] logo`: a picture the website shows left of the title in its top
   bar, the address of a file the site serves (`assets/…`); empty for the
   website's own mark.  Handed to the website as `project.logo`. -/
