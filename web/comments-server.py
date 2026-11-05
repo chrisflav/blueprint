@@ -5,9 +5,10 @@ make PDFs of it.
 `blueprint serve` runs this in place of a plain static file server.  It
 serves the assembled site exactly as `python3 -m http.server` would, plus
 
-    GET  /api/comments/<id>   -> {"comments": [{"n", "name", "body", "date"}, ...],
+    GET  /api/comments/<id>   -> {"comments": [{"n", "name", "title", "body", "date",
+                                                 "topic" (on Zulip only)}, ...],
                                   "maxBody": n, "zulip": {...} (on Zulip only)}
-    POST /api/comments/<id>   <- {"name": "...", "body": "...",
+    POST /api/comments/<id>   <- {"name": "...", "title": "...", "body": "...",
                                   "visibility": "public" | "private", "page": "<url>"}
                               -> {"comments": [...], "shown": true | false}
 
@@ -24,9 +25,11 @@ or put under version control by hand.  When the site's `comments-config.json`
 names a Zulip (`blueprint site` writes it for `[site.comments]`) and this
 process has a bot in its environment, `BLUEPRINT_ZULIP_EMAIL` and
 `BLUEPRINT_ZULIP_KEY`, every comment is a message of that bot in the
-channel, in the topic of its object, public and private alike, and a GET
-lists the public ones of the topic: the server relays between the page and
-Zulip, so the bot's key never leaves it.  `--allow-origin` lets a site
+channel, public and private alike, in a topic of its own named by the
+comment's title; its first line names the object by its id, and a GET lists
+the public messages of the bot that name the object (and, as they were kept
+before titles, those of the object's own topic): the server relays between
+the page and Zulip, so the bot's key never leaves it.  `--allow-origin` lets a site
 served elsewhere (a static host that cannot keep a secret) use this server
 for its comments, `[site.comments] server` saying where it is.
 
@@ -70,6 +73,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 PREFIX = "/api/comments/"
 MAX_NAME = 100
+MAX_TITLE = 60  # a comment's title, which on Zulip is its topic
 MAX_BODY = 20000
 MAX_REQUEST = 64 * 1024
 MAX_ID = 200
@@ -256,9 +260,14 @@ def public_list(comments):
     for c in comments:
         if c.get("visibility", "public") != "public":
             continue
-        out.append({"n": len(out) + 1, "name": c.get("name", ""), "body": c.get("body", ""),
-                    "date": c.get("date")})
+        out.append({"n": len(out) + 1, "name": c.get("name", ""), "title": c.get("title") or None,
+                    "body": c.get("body", ""), "date": c.get("date")})
     return out
+
+
+def clean_title(title):
+    """A comment's title on one line, its runs of space as one space."""
+    return re.sub(r"\s+", " ", str(title or "")).strip()
 
 
 # ---------------------------------------------------------------- Zulip
@@ -273,30 +282,43 @@ def hash8(s):
 
 
 def topic_of(object_id):
-    """The Zulip topic of an object's comments: its id, cut to fit with a hash."""
+    """The Zulip topic of an object's comments as they were kept before titles,
+    and of a comment posted without one: its id, cut to fit with a hash."""
     t = "document (top page)" if object_id == DOCUMENT_THREAD else object_id
     if len(t) <= MAX_TOPIC:
         return t
     return t[:MAX_TOPIC - 10] + "\u2026 " + hash8(t)
 
 
+def topic_of_title(title):
+    """The Zulip topic of a comment with a title: the title, cut to fit."""
+    t = clean_title(title)
+    return t if len(t) <= MAX_TOPIC else t[:MAX_TOPIC - 1].rstrip() + "\u2026"
+
+
 MARKS = {"public": "\U0001F310 **Public**", "private": "\U0001F512 **Private**"}
-HEAD_RE = re.compile("^(?:\U0001F310|\U0001F512) \\*\\*(Public|Private)\\*\\* comment by \\*\\*([^*\n]*)\\*\\* on [^\n]*\n*")
+# The first line ends with the object's id, as code, when the comment has a
+# topic of its own; the messages of an object's own topic, from before titles,
+# have none.
+HEAD_RE = re.compile("^(?:\U0001F310|\U0001F512) \\*\\*(Public|Private)\\*\\* comment by \\*\\*([^*\n]*)\\*\\* "
+                     "on [^\n]*?(?: \u00b7 `([^`\n]+)`)?[ \t]*(?:\n+|$)")
 
 
-def head_line(visibility, name, title, url):
-    """The first line of a comment's message, which `parse_message` reads back."""
+def head_line(visibility, name, title, url, object_id=None):
+    """The first line of a comment's message, which `parse_message` reads back:
+    with `object_id`, which names the object for a comment in a topic of its own."""
     label = re.sub(r"([\[\]\\])", r"\\\1", title)
     where = f"[{label}]({url})" if url else label
-    return f"{MARKS[visibility]} comment by **{name}** on {where}"
+    tail = f" \u00b7 `{object_id}`" if object_id else ""
+    return f"{MARKS[visibility]} comment by **{name}** on {where}{tail}"
 
 
 def parse_message(content):
-    """(visibility, name, body) of a message posted for a comment, or None."""
+    """(visibility, name, body, object id or None) of a message posted for a comment, or None."""
     m = HEAD_RE.match(content)
     if not m:
         return None
-    return m.group(1).lower(), m.group(2), content[m.end():]
+    return m.group(1).lower(), m.group(2), content[m.end():], m.group(3)
 
 
 class ZulipError(Exception):
@@ -340,7 +362,8 @@ class Zulip:
         return payload
 
     def where(self, topic):
-        """What the page says of where its comments go: no credentials."""
+        """What the page says of where its comments go: no credentials.  `topic`
+        is the object's own topic, of its comments from before titles."""
         if self.stream_id is None:
             try:
                 self.stream_id = self.call("GET", "get_stream_id", {"stream": self.channel}).get("stream_id")
@@ -348,22 +371,36 @@ class Zulip:
                 pass
         return {"site": self.site, "channel": self.channel, "topic": topic, "streamId": self.stream_id}
 
-    def comments(self, topic):
-        """The bot's public comments of a topic, as the local store lists them."""
+    def messages(self, *narrow):
+        """The bot's messages in the channel, narrowed further by `narrow`."""
         data = self.call("GET", "messages", {
             "anchor": "newest", "num_before": "1000", "num_after": "0", "apply_markdown": "false",
             "narrow": json.dumps([{"operator": "channel", "operand": self.channel},
-                                  {"operator": "topic", "operand": topic},
-                                  {"operator": "sender", "operand": self.email}]),
+                                  {"operator": "sender", "operand": self.email}, *narrow]),
         })
-        out = []
-        for m in data.get("messages") or []:
+        return data.get("messages") or []
+
+    def comments(self, object_id):
+        """The bot's public comments of an object, oldest first, as the local
+        store lists them: those of topics of their own that name it, found by a
+        search for its id, and those of its own topic, from before titles."""
+        legacy = topic_of(object_id)
+        found = {}
+        for m in (self.messages({"operator": "search", "operand": object_id})
+                  + self.messages({"operator": "topic", "operand": legacy})):
             c = parse_message(str(m.get("content", "")))
-            if c and c[0] == "public":
-                date = datetime.datetime.fromtimestamp(m.get("timestamp", 0), datetime.timezone.utc)
-                out.append({"n": m.get("id"), "name": c[1], "body": c[2],
-                            "date": date.isoformat(timespec="seconds")})
-        return out
+            if not c or c[0] != "public":
+                continue
+            topic = str(m.get("subject", ""))
+            # The search finds words, not the id: keep the messages that name
+            # it exactly, and of its own topic those that name no other.
+            if c[3] != object_id and not (c[3] is None and topic == legacy):
+                continue
+            date = datetime.datetime.fromtimestamp(m.get("timestamp", 0), datetime.timezone.utc)
+            found[m.get("id")] = {"n": m.get("id"), "name": c[1], "title": topic if c[3] else None,
+                                  "body": c[2], "date": date.isoformat(timespec="seconds"),
+                                  "topic": topic}
+        return [found[k] for k in sorted(found, key=lambda k: (k is None, k or 0))]
 
     def post(self, topic, content):
         self.call("POST", "messages", {"type": "stream", "to": self.channel, "topic": topic,
@@ -510,7 +547,7 @@ class Handler(SimpleHTTPRequestHandler):
         if self.zulip:
             topic = topic_of(object_id)
             try:
-                comments = self.zulip.comments(topic)
+                comments = self.zulip.comments(object_id)
             except ZulipError as e:
                 return self.send_json(502, {"error": f"Zulip: {e}"})
             payload = {"comments": comments, "maxBody": ZULIP_MAX_BODY, "zulip": self.zulip.where(topic)}
@@ -544,6 +581,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not isinstance(data, dict):
             return self.send_json(400, {"error": "the request is not a JSON object"})
         name = str(data.get("name", "")).strip()
+        title = clean_title(data.get("title", ""))
         body = str(data.get("body", "")).strip()
         visibility = data.get("visibility", "public")
         page = data.get("page")
@@ -552,6 +590,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(400, {"error": "a name and a comment are both needed"})
         if len(name) > MAX_NAME or len(body) > limit:
             return self.send_json(400, {"error": f"at most {MAX_NAME} characters of name and {limit} of comment"})
+        if len(title) > MAX_TITLE:
+            return self.send_json(400, {"error": f"at most {MAX_TITLE} characters of title"})
         if visibility not in VISIBILITIES:
             return self.send_json(400, {"error": "visibility must be public or private"})
         # The page it was written on, linked from the message on Zulip: a plain
@@ -562,9 +602,17 @@ class Handler(SimpleHTTPRequestHandler):
         if self.zulip:
             # The name is set in bold on the first line, which `parse_message` reads back.
             who = re.sub(r"[*\r\n]+", " ", name).strip()
-            content = head_line(visibility, who, self.known.title(object_id), page) + "\n\n" + body
+            # A comment with a title is a topic of its own, which its first line
+            # ties to its object; one without (from a page of before titles)
+            # goes to the object's own topic, as before.
+            if title:
+                topic = topic_of_title(title)
+                content = head_line(visibility, who, self.known.title(object_id), page, object_id)
+            else:
+                topic = topic_of(object_id)
+                content = head_line(visibility, who, self.known.title(object_id), page)
             try:
-                self.zulip.post(topic_of(object_id), content)
+                self.zulip.post(topic, content + "\n\n" + body)
             except ZulipError as e:
                 return self.send_json(502, {"error": f"Zulip: {e}"})
             return self.send_comments(201, object_id, shown)
@@ -574,6 +622,7 @@ class Handler(SimpleHTTPRequestHandler):
             comments.append({
                 "n": n,
                 "name": name,
+                **({"title": title} if title else {}),
                 "body": body,
                 "visibility": visibility,
                 "date": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),

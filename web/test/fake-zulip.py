@@ -4,8 +4,9 @@ for test.sh.
 
     python3 fake-zulip.py <port> <email> <key> <channel> <log>
 
-Answers `get_stream_id`, `GET messages` (narrowed to a channel, a topic and a
-sender) and `POST messages`, for the one bot `<email>:<key>`: any other
+Answers `get_stream_id`, `GET messages` (narrowed to a channel, a sender,
+and a topic or a search, which here finds the messages whose content holds
+the words) and `POST messages`, for the one bot `<email>:<key>`: any other
 credentials are refused, as Zulip refuses them.  Every request is appended
 to `<log>` as a line of JSON, its Authorization header included, so that a
 test can say who asked Zulip what.  Standard library only.
@@ -54,15 +55,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {"result": "success", "stream_id": STREAM_ID})
         if url.path == "/api/v1/messages" and method == "POST":
             with lock:
-                messages.append({"id": 100 + len(messages), "topic": params.get("topic"), "sender": EMAIL,
+                messages.append({"id": 100 + len(messages), "subject": params.get("topic"), "sender": EMAIL,
                                  "timestamp": 1793606400 + len(messages), "content": params.get("content", "")})
             return self.reply(200, {"result": "success", "id": 100 + len(messages) - 1})
         if url.path == "/api/v1/messages":
             narrow = {d["operator"]: d["operand"] for d in json.loads(params.get("narrow", "[]"))}
+            words = narrow.get("search", "").replace("-", " ").split()
             with lock:
                 found = [m for m in messages
-                         if m["topic"] == narrow.get("topic") and m["sender"] == narrow.get("sender")
-                         and narrow.get("channel") == CHANNEL]
+                         if m["sender"] == narrow.get("sender") and narrow.get("channel") == CHANNEL
+                         and ("topic" not in narrow or m["subject"] == narrow["topic"])
+                         and ("search" not in narrow or all(w in m["content"] for w in words))]
             return self.reply(200, {"result": "success", "messages": found})
         return self.reply(404, {"result": "error", "msg": "no such endpoint"})
 

@@ -578,7 +578,7 @@ duration = 4                        # seconds, default 3
 
 [site.comments]                     # comments on Zulip, through the comment server
 zulip   = "https://example.zulipchat.com"
-channel = "blueprint comments"      # one topic per object
+channel = "blueprint comments"      # one topic per comment, named by its title
 # server = "https://comments.example.org/"   # the comment server of a site served elsewhere
 
 [kinds.theorem]                     # extends the built-in `theorem`
@@ -733,7 +733,9 @@ follows the style and dark mode; otherwise it keeps its own colours.  They
 reach the snapshot as `project.logo` and `project.logoInk`.
 
 A comment on the website is public, listed below its page, or private, kept
-for the blueprint's authors and never listed: the reader chooses.  The
+for the blueprint's authors and never listed: the reader chooses.  Every
+comment has a short title, at most 60 characters, which the website shows
+above it.  The
 comment server (`web/comments-server.py`, which `blueprint serve` runs)
 keeps both, by default in its comment files (`--comments`, one JSON file per
 object), and answers the page with the public ones alone.
@@ -741,13 +743,18 @@ object), and answers the page with the public ones alone.
 `[site.comments]` keeps them on a Zulip server instead.  `zulip` is the
 address of the server and `channel` the channel the comments go to; both are
 needed.  The page still posts to the comment server, and the comment server
-posts to Zulip as a bot, in the topic of the object: the object's id, or for
-an id longer than Zulip's 60 characters its first 50 and a hash.  The top
-page of the document has the topic `document (top page)`.  The first line of
-the message names the author, the page and whether the comment is public or
-private; the comment server lists the bot's public messages of the topic, so
-a message edited or deleted on Zulip is a comment edited or deleted on the
-website.
+posts to Zulip as a bot, each comment in a topic of its own named by its
+title (a second comment with the same title joins that topic).  The first
+line of the message names the author, the page, whether the comment is
+public or private, and, last, the object's id as code; the comment server
+lists an object's comments by searching the channel for the bot's public
+messages and keeping those whose first line names that id, so a message
+edited or deleted on Zulip is a comment edited or deleted on the website.
+The website links each comment's title to its topic.  Comments kept before
+titles, all of an object in one topic (the object's id, or for an id longer
+than Zulip's 60 characters its first 50 and a hash; `document (top page)`
+for the top page of the document), are still listed, and a comment posted
+without a title, by a page of before titles, still goes there.
 
 The bot is the comment server's alone: it reads `BLUEPRINT_ZULIP_EMAIL` and
 `BLUEPRINT_ZULIP_KEY` (a generic bot subscribed to the channel) from its own

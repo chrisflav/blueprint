@@ -1382,21 +1382,32 @@ if command -v node > /dev/null 2>&1; then
     for _ in $(seq 1 50); do curl -s "http://127.0.0.1:$cport/api/comments/basics" > /dev/null 2>&1 && break; sleep 0.1; done
     rsay () { curl -s -o "$TMP/relay.out" -w '%{http_code}' -H 'Content-Type: application/json' \
       --data "$1" "http://127.0.0.1:$cport/api/comments/basics"; }
-    if [ "$(rsay '{"name":"Ada","body":"Public words.","page":"https://pages.example/#/object/basics"}')" = 201 ] \
-       && [ "$(rsay '{"name":"Bob","body":"Private words.","visibility":"private"}')" = 201 ] \
+    # Each comment with a title is a topic of its own, named by the title, its
+    # first line naming the object; one without (from a page of before titles)
+    # goes to the object's own topic, and is listed all the same.
+    if [ "$(rsay '{"name":"Ada","title":"A remark on basics","body":"Public words.","page":"https://pages.example/#/object/basics"}')" = 201 ] \
+       && [ "$(rsay '{"name":"Bob","title":"For the authors","body":"Private words.","visibility":"private"}')" = 201 ] \
+       && [ "$(rsay '{"name":"Cy","body":"Untitled words."}')" = 201 ] \
+       && [ "$(rsay '{"name":"Di","title":"'"$(printf 'x%.0s' $(seq 61))"'","body":"Too long a title."}')" = 400 ] \
        && curl -s "http://127.0.0.1:$cport/api/comments/basics" > "$TMP/relay.list" \
        && grep -q 'Public words' "$TMP/relay.list" && ! grep -q 'Private words' "$TMP/relay.list" \
+       && grep -q '"title": "A remark on basics"' "$TMP/relay.list" \
+       && grep -q '"topic": "A remark on basics"' "$TMP/relay.list" \
+       && grep -q 'Untitled words' "$TMP/relay.list" \
        && grep -q '"channel": "blueprint comment", "topic": "basics", "streamId": 7' "$TMP/relay.list" \
        && ! grep -qe 'k3y' -e 'bot@zulip.example' "$TMP/relay.list" "$TMP/relay.out" \
        && [ "$(grep -c '"path": "/api/v1/messages", "auth": "Basic Ym90QHp1bGlwLmV4YW1wbGU6azN5"' "$TMP/zulip.log")" -ge 2 ] \
-       && grep -q 'Private\*\* comment by \*\*Bob\*\* on Basics' "$TMP/zulip.log" \
-       && grep -q 'comment by \*\*Ada\*\* on \[Basics\](https://pages.example/#/object/basics)' "$TMP/zulip.log" \
+       && grep -q '"topic": "A remark on basics"' "$TMP/zulip.log" \
+       && grep -q '"topic": "For the authors"' "$TMP/zulip.log" \
+       && grep -q '"topic": "basics", "content": "[^"]* comment by \*\*Cy\*\* on Basics\\n' "$TMP/zulip.log" \
+       && grep -q 'Private\*\* comment by \*\*Bob\*\* on Basics \\u00b7 `basics`' "$TMP/zulip.log" \
+       && grep -q 'comment by \*\*Ada\*\* on \[Basics\](https://pages.example/#/object/basics) \\u00b7 `basics`' "$TMP/zulip.log" \
        && [ ! -e "$TMP/comments.relay" ] \
        && curl -s -D - -o /dev/null -H 'Origin: https://pages.example' "http://127.0.0.1:$cport/api/comments/basics" \
             | grep -qi 'access-control-allow-origin: https://pages.example'; then
-      ok "on Zulip the comment server relays as its own bot, which the page never sees"
+      ok "on Zulip the comment server relays as its own bot, which the page never sees; a comment is a topic of its own"
     else
-      bad "on Zulip the comment server relays as its own bot, which the page never sees"
+      bad "on Zulip the comment server relays as its own bot, which the page never sees; a comment is a topic of its own"
       cat "$TMP/relay.list" "$TMP/relay.log"; head -c 600 "$TMP/zulip.log"
     fi
     kill "$relay" "$fake" 2> /dev/null

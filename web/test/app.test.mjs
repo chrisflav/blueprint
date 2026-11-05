@@ -876,7 +876,7 @@ await check('every page of the document ends with the comments of its entry, the
   }
 });
 
-await check('a comment is public or private, and goes to the comment server alone, which says where it keeps them', async () => {
+await check('a comment has a title, is public or private, and goes to the comment server alone, which says where it keeps them', async () => {
   const comments = await import(path.join(webDir, 'comments.js'));
   const routes = dom.net.routes;
   const posts = [];
@@ -889,7 +889,10 @@ await check('a comment is public or private, and goes to the comment server alon
     if (init && init.method === 'POST') {
       const p = JSON.parse(init.body);
       posts.push(p);
-      if (p.visibility === 'public') listed.push({ n: listed.length + 1, name: p.name, body: p.body, date: '2026-11-02T09:00:00+00:00' });
+      if (p.visibility === 'public') {
+        listed.push({ n: listed.length + 1, name: p.name, title: p.title, body: p.body, date: '2026-11-02T09:00:00+00:00',
+          ...(zulip ? { topic: p.title } : {}) });
+      }
       return reply({ shown: p.visibility === 'public' });
     }
     return reply({});
@@ -898,6 +901,7 @@ await check('a comment is public or private, and goes to the comment server alon
   const submit = async (panel, body, vis) => {
     const [isPublic, isPrivate] = panel.querySelectorAll('input[type=radio]');
     panel.querySelector('input[name=name]').value = 'Ada';
+    panel.querySelector('input[name=title]').value = '  On  ' + body;
     panel.querySelector('textarea').value = body;
     isPublic.checked = vis === 'public'; isPrivate.checked = vis === 'private';
     fire(panel.querySelector('form'), 'submit');
@@ -912,8 +916,17 @@ await check('a comment is public or private, and goes to the comment server alon
     eq(panel.querySelector('.comment-visibility').hidden, false, 'public or private can be chosen');
     ok(panel.querySelector('.comment-visibility').textContent.includes('not shown here'), 'and what private means');
     eq(panel.querySelector('textarea').getAttribute('maxlength'), '20000', 'as long as the server takes');
+    ok(panel.querySelector('input[name=title]'), 'a title is asked for');
+    eq(panel.querySelector('input[name=title]').getAttribute('maxlength'), '60', 'as long as a Zulip topic');
+    panel.querySelector('input[name=name]').value = 'Ada';
+    panel.querySelector('input[name=title]').value = '';
+    panel.querySelector('textarea').value = 'No title.';
+    fire(panel.querySelector('form'), 'submit');
+    await tick(5);
+    eq(posts.length, 0, 'not without a title');
     await submit(panel, 'Only for the authors.', 'private');
     eq(posts.length, 1, 'posted');
+    eq(posts[0].title, 'On Only for the authors.', 'with its title, on one line');
     eq(posts[0].visibility, 'private', 'as private');
     ok(/#\/object\/sec-main$/.test(posts[0].page), 'with the page it was written on');
     eq(panel.querySelector('.comment-note').textContent, 'Posted (private: not shown here).', 'and said so');
@@ -921,6 +934,7 @@ await check('a comment is public or private, and goes to the comment server alon
     await submit(panel, 'A public one.', 'public');
     eq(posts[1].visibility, 'public', 'a public one');
     eq(panel.querySelector('h3').textContent, 'Comments (2)', 'shown');
+    eq(panel.querySelectorAll('.comment-title')[0].textContent, 'On A public one.', 'with its title');
 
     // On Zulip: the server says where, and nothing of the bot reaches the page.
     zulip = { site: 'https://zulip.example', channel: 'blueprint comment', topic: 'sec-main', streamId: 7 };
@@ -932,7 +946,13 @@ await check('a comment is public or private, and goes to the comment server alon
       && /zulip/.test(f.url)).length, 0, 'the page never calls Zulip');
     eq(panel.querySelector('textarea').getAttribute('maxlength'), '9000', 'a comment fits a Zulip message');
     eq(panel.querySelector('form a[target=_blank]').getAttribute('href'),
-      'https://zulip.example/#narrow/channel/7-blueprint.20comment/topic/sec-main', 'a link to the topic');
+      'https://zulip.example/#narrow/channel/7-blueprint.20comment', 'a link to the channel');
+    ok(panel.querySelector('form').textContent.includes('a topic of its own'), 'each comment a topic of its own');
+    await submit(panel, 'Seen on Zulip.', 'public');
+    const titles = panel.querySelectorAll('a.comment-title');
+    eq(titles.length ? titles[titles.length - 1].getAttribute('href') : null,
+      'https://zulip.example/#narrow/channel/7-blueprint.20comment/topic/On.20Seen.20on.20Zulip.2E',
+      'a comment\'s title leads to its own topic');
     ok(panel.querySelector('.comment-visibility').textContent.includes('posted to Zulip only'), 'private means Zulip only');
     await submit(panel, 'A private one.', 'private');
     eq(panel.querySelector('.comment-note').textContent, 'Posted to Zulip (private: not shown here).', 'and said so');

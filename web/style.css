@@ -1729,6 +1729,11 @@ details.proof > summary:hover > :is(h1, h2, h3, h4, h5, h6) { color: var(--accen
 .comment-list { display: flex; flex-direction: column; gap: .8rem; margin-bottom: 1.2rem; }
 .comment { border-left: 2px solid var(--border); padding-left: .8rem; }
 .comment-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem; margin-bottom: .2rem; }
+/* A comment's title, which on Zulip is its topic and leads there. */
+.comment-title-row { margin-bottom: .15rem; }
+.comment-title { font-weight: 650; font-size: 1.02em; }
+a.comment-title { color: inherit; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: .18em; }
+a.comment-title:hover { text-decoration-color: currentColor; }
 .comment-anchor { margin-left: auto; font-family: var(--mono); }
 .comment-form { border-top: 1px solid var(--border); padding-top: .9rem; }
 .comment-form h4 { margin: 0 0 .6rem; }
