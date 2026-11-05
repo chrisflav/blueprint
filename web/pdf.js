@@ -204,7 +204,7 @@ function drawDialog() {
   const scopes = lib.exportScopes(m, state.collapse);
   const named = (id) => {
     const s = scopes.find((x) => x.id === id);
-    return s ? `${s.word} ${s.number} ${s.title}` : id;
+    return s ? [s.word, s.number, s.title].filter((x) => x != null && x !== '').join(' ') : id;
   };
   if (state.choice === 'part' && !scopes.some((s) => s.id === state.contextId)) state.choice = 'whole';
   if (state.choice === 'other' && !scopes.some((s) => s.id === state.otherId && s.id !== null)) {
@@ -247,7 +247,7 @@ function drawDialog() {
       'aria-label': 'Another part to export',
       onchange: (ev) => { state.otherId = ev.target.value; state.choice = 'other'; state.depth = 'all'; drawDialog(); restoreFocus('select.export-other'); },
     }, ...parts.map((s) => el('option', { value: s.id, selected: s.id === (state.otherId || parts[0].id) },
-      ' '.repeat(Math.max(0, s.depth)) + `${s.number} ${s.title}`)));
+      ' '.repeat(Math.max(0, s.depth)) + (s.number == null ? s.title : `${s.number} ${s.title}`))));
     scopeSet.appendChild(radio('other', 'Another part: ', select));
   }
   panel.appendChild(scopeSet);
@@ -321,7 +321,7 @@ function drawDialog() {
 function referenceText(outline, id) {
   const ref = M.referenceOf(outline, id);
   if (ref && ref.cite) return `[${ref.number}]`;
-  return ref ? `${ref.word} ${ref.number}` : id;
+  return ref ? M.referenceText(ref) : id;
 }
 
 function restoreFocus(selector) {

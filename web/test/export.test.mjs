@@ -190,6 +190,26 @@ await check('a section is that section and what is below it, nothing else', () =
   eq(res.fileName, 'paper-2-1-covers', 'its file name');
 });
 
+await check('serial: a chapter with a number of its own, and one with none, in the headings, the contents and the references', async () => {
+  const snap = JSON.parse(paperText);
+  const set = (id, v) => { const o = snap.objects.find((x) => x.id === id); o.attrs = { ...(o.attrs || {}), serial: v }; };
+  set('intro', false);
+  set('spaces', 'A');
+  const m = M.buildModel(snap);
+  const tex = exportLatex(m, {}).tex;
+  ok(!/\bnull\b|undefined/.test(tex), 'a missing number is written as "null" or "undefined"');
+  // The unnumbered chapter: its title alone, in its heading and its contents line.
+  ok(/\\section\*\{\\texorpdfstring\{Introduction\}/.test(tex), 'the unnumbered heading is not its title alone');
+  ok(/\\addcontentsline\{toc\}\{section\}\{\\texorpdfstring\{Introduction\}/.test(tex), 'nor its contents line');
+  // The chapter numbered A, and what is inside it under A.
+  ok(/\\section\*\{\\texorpdfstring\{A\\quad Covers and compact spaces/.test(tex), 'the chapter is not A');
+  ok(/A\.2\\quad Compact spaces/.test(tex), 'its sections are not A.1, A.2');
+  ok(/\{Definition~A\.1\}/.test(tex), 'its statements are not numbered under A');
+  ok(/\\section\*\{\\texorpdfstring\{1\\quad Products/.test(tex), 'the next chapter does not close up to 1');
+  // A reference to what is in it reads its number.
+  ok(/\\hyperref\[bp\d+\]\{Lemma A\.8\}/.test(tex), 'a reference does not read Lemma A.8');
+});
+
 await check('hide_content leaves an entry\'s heading and prose out, and keeps its children and its line in the contents', async () => {
   const snap = JSON.parse(paperText);
   const o = snap.objects.find((x) => x.id === 'spaces');

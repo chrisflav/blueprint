@@ -80,9 +80,24 @@ export function entryTitle(model, outline, entry) {
   if (!t && o.kind === 'proof') {
     const of = M.attachedTo(o);
     const ref = of ? M.referenceOf(outline, of) : null;
-    if (ref) return `Proof of ${ref.word} ${ref.number}`;
+    if (ref) return `Proof of ${M.referenceText(ref)}`;
   }
   return M.titleOf(o);
+}
+
+/** An entry's number and a space, as plain text; nothing when its `serial` leaves it unnumbered. */
+function numPrefix(number) {
+  return number == null ? '' : number + ' ';
+}
+
+/** The same in TeX. */
+function texPrefix(number) {
+  return number == null ? '' : escapeText(number) + ' ';
+}
+
+/** An entry's number in TeX, or empty. */
+function texNumber(number) {
+  return number == null ? '' : escapeText(number);
 }
 
 function projectTitle(model) {
@@ -300,9 +315,10 @@ export function describeRequest(model, req) {
   const outline = M.documentOutline(model, req.collapse);
   const e = req.scope === null ? null : outline.byId.get(req.scope);
   const scope = e
-    ? `${M.kindWord(e.object.kind)} ${e.number} ${entryTitle(model, outline, e)}`
+    ? `${M.kindWord(e.object.kind)} ${numPrefix(e.number)}${entryTitle(model, outline, e)}`
     : 'The whole blueprint';
-  const below = e ? `${M.kindWord(e.object.kind)} ${e.number}` : 'the top level';
+  const below = !e ? 'the top level'
+    : e.number == null ? entryTitle(model, outline, e) : `${M.kindWord(e.object.kind)} ${e.number}`;
   const detail = req.depth === 'all'
     ? 'all levels'
     : req.depth === 1 && !e ? 'the top level only'
@@ -551,7 +567,7 @@ export function exportLatex(model, request, options = {}) {
     const title = o.attrs && typeof o.attrs.title === 'string' && o.attrs.title
       ? titleTex(o.attrs.title) : `\\bpslug{${escapeCode(id)}}`;
     if (!ref) return filedHere.has(id) ? `\\hyperref[${labelOf(id)}]{${title}}` : title;
-    const tag = escapeText(ref.word + ' ' + ref.number);
+    const tag = escapeText(M.referenceText(ref));
     if (writtenHere(id)) return `\\hyperref[${labelOf(id)}]{${title}} (${tag})`;
     outside.set(id, { ref, entry: outline.byId.get(id) });
     return `${title} (\\bpout{${tag}})`;
@@ -593,14 +609,15 @@ export function exportLatex(model, request, options = {}) {
   const top = req.scope === null ? 1 : 0;
   let tocLines = 0;
 
-  const tocLine = (level, number, tex, plain) => {
+  // `number` is TeX already, or empty for an entry its `serial` leaves unnumbered.
+  const tocLine = (level, number, tex, plain, raw) => {
     tocLines += 1;
-    out.push(`\\addcontentsline{toc}{${HEADINGS[Math.min(level, 2)]}}{\\texorpdfstring{${number}\\quad ${tex}}{${escapePdf(number + ' ' + plain)}}}`);
+    out.push(`\\addcontentsline{toc}{${HEADINGS[Math.min(level, 2)]}}{\\texorpdfstring{${number ? number + '\\quad ' : ''}${tex}}{${escapePdf(numPrefix(raw) + plain)}}}`);
   };
 
   const statementHead = (o, word, number) => {
     const t = o.attrs && typeof o.attrs.title === 'string' && o.attrs.title ? ` (${titleTex(o.attrs.title)})` : '';
-    return { lead: `${escapeText(word)}~${escapeText(number)}`, rest: t };
+    return { lead: number == null ? escapeText(word) : `${escapeText(word)}~${escapeText(number)}`, rest: t };
   };
 
   const writeSteps = (id, seen) => {
@@ -635,7 +652,7 @@ export function exportLatex(model, request, options = {}) {
     const p = node.parent;
     if (!p) return 'at the top level of this export';
     const e = p.entry;
-    return `under \\hyperref[${labelOf(e.id)}]{${escapeText(e.number)} ${titleTex(M.titleOf(e.object))}}`;
+    return `under \\hyperref[${labelOf(e.id)}]{${texPrefix(e.number)}${titleTex(M.titleOf(e.object))}}`;
   };
 
   let lastWritten = null; // the entry written last, for a proof right after its statement
@@ -673,7 +690,7 @@ export function exportLatex(model, request, options = {}) {
       comment(`repeated: ${o.id}`);
       current = o.id;
       const word = M.kindWord(o.kind);
-      out.push(`\\begin{bpnote}\\hyperref[${labelOf(o.id)}]{${escapeText(word + ' ' + e.number)}} (${titleTex(M.titleOf(o))}) ` +
+      out.push(`\\begin{bpnote}\\hyperref[${labelOf(o.id)}]{${escapeText(e.number == null ? word : word + ' ' + e.number)}} (${titleTex(M.titleOf(o))}) ` +
         `belongs here too; it is written out ${whereWritten(node.target)}, on page~\\pageref{${labelOf(o.id)}}.\\end{bpnote}`);
       return;
     }
@@ -689,30 +706,30 @@ export function exportLatex(model, request, options = {}) {
       // Its line in the contents and a place for references to land, then
       // its children; nothing of its own.
       out.push(`\\phantomsection\\label{${label}}%`);
-      if (level < 3) tocLine(level, escapeText(number), titleTex(title), plainTitle(title));
+      if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
       for (const c of node.children) writeNode(c);
       if (node.omitted) {
         const n = node.omitted;
-        out.push(`\\bpomitted{${n} ${n === 1 ? 'entry' : 'entries'} below ${escapeText(number)} ${n === 1 ? 'is' : 'are'} left out at this detail level.}`);
+        out.push(`\\bpomitted{${n} ${n === 1 ? 'entry' : 'entries'} below ${number == null ? titleTex(title) : escapeText(number)} ${n === 1 ? 'is' : 'are'} left out at this detail level.}`);
       }
       out.push('');
       return;
     }
     if (isSection) {
       const cmd = HEADINGS[Math.min(level, HEADINGS.length - 1)];
-      out.push(`\\${cmd}*{\\texorpdfstring{${escapeText(number)}\\quad ${titleTex(title)}}{${escapePdf(number + ' ' + plainTitle(title))}}}`);
+      out.push(`\\${cmd}*{\\texorpdfstring{${number == null ? '' : escapeText(number) + '\\quad '}${titleTex(title)}}{${escapePdf(numPrefix(number) + plainTitle(title))}}}`);
       out.push(`\\phantomsection\\label{${label}}%`);
-      if (level < 3) tocLine(level, escapeText(number), titleTex(title), plainTitle(title));
+      if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
     } else {
       out.push(`\\phantomsection\\label{${label}}%`);
-      if (node.children.length && level < 3) tocLine(level, escapeText(number), titleTex(title), plainTitle(title));
+      if (node.children.length && level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
     }
 
     if (node.displaced) {
       const first = e.parent;
       let where = 'at the top level';
       if (first) {
-        const fp = `${escapeText(first.number)} ${titleTex(M.titleOf(first.object))}`;
+        const fp = `${texPrefix(first.number)}${titleTex(M.titleOf(first.object))}`;
         where = `under ${writtenHere(first.id) ? `\\hyperref[${labelOf(first.id)}]{${fp}}` : fp + ', outside this export'}`;
       }
       out.push(`\\begin{bpnote}Written out here; in the full blueprint it is read ${where}.\\end{bpnote}`);
@@ -722,7 +739,7 @@ export function exportLatex(model, request, options = {}) {
     if (isProof) {
       const rest = M.proofLeadRest(o).replace(/\.$/, '');
       const of = M.attachedTo(o);
-      out.push(`\\begin{proof}[{Proof ${escapeText(number)}${titleTex(rest)}}]`);
+      out.push(`\\begin{proof}[{Proof${number == null ? '' : ' ' + escapeText(number)}${titleTex(rest)}}]`);
       if (of && model.byId.has(of) && rest === '') {
         out.push(`{\\small\\color{bpmuted}Of ${objectName(of)}.}\\par`);
       }
@@ -746,7 +763,7 @@ export function exportLatex(model, request, options = {}) {
     for (const c of node.children) writeNode(c);
     if (node.omitted) {
       const n = node.omitted;
-      out.push(`\\bpomitted{${n} ${n === 1 ? 'entry' : 'entries'} below ${escapeText(number)} ${n === 1 ? 'is' : 'are'} left out at this detail level.}`);
+      out.push(`\\bpomitted{${n} ${n === 1 ? 'entry' : 'entries'} below ${number == null ? titleTex(title) : escapeText(number)} ${n === 1 ? 'is' : 'are'} left out at this detail level.}`);
     }
     if (isProof) out.push('\\end{proof}');
     out.push('');
@@ -759,7 +776,7 @@ export function exportLatex(model, request, options = {}) {
   const project = projectTitle(model);
   const described = describeRequest(model, req);
   const scopeTex = scopeEntry
-    ? `${escapeText(M.kindWord(scopeEntry.object.kind))} ${escapeText(scopeEntry.number)}: ${titleTex(entryTitle(model, outline, scopeEntry))}`
+    ? `${escapeText(M.kindWord(scopeEntry.object.kind))}${scopeEntry.number == null ? '' : ' ' + escapeText(scopeEntry.number)}: ${titleTex(entryTitle(model, outline, scopeEntry))}`
     : 'The complete blueprint';
   const detailBits = [escapeText(described.detail.charAt(0).toUpperCase() + described.detail.slice(1))];
   detailBits.push(`read along the \\texttt{${escapeText(req.collapse)}} order`);
@@ -779,8 +796,8 @@ export function exportLatex(model, request, options = {}) {
     const sorted = [...outside.entries()].sort((a, b) => place.get(a[1].entry) - place.get(b[1].entry));
     for (const [id, { ref, entry }] of sorted) {
       const top = entry && topAncestor(entry);
-      const where = top && top !== entry ? `, in ${escapeText(top.number)} ${titleTex(M.titleOf(top.object))}` : '';
-      back.push(`\\item[${escapeText(ref.word + ' ' + ref.number)}] ${titleTex(M.titleOf(model.byId.get(id)))}${where} (\\bpslug{${escapeCode(id)}})`);
+      const where = top && top !== entry ? `, in ${texPrefix(top.number)}${titleTex(M.titleOf(top.object))}` : '';
+      back.push(`\\item[${escapeText(M.referenceText(ref))}] ${titleTex(M.titleOf(model.byId.get(id)))}${where} (\\bpslug{${escapeCode(id)}})`);
     }
     back.push('\\end{description}');
   }
@@ -790,7 +807,7 @@ export function exportLatex(model, request, options = {}) {
   });
 
   const title = titleTex(project);
-  const pdfTitle = escapePdf(plainTitle(project) + (scopeEntry ? ' — ' + scopeEntry.number + ' ' + plainTitle(entryTitle(model, outline, scopeEntry)) : ''));
+  const pdfTitle = escapePdf(plainTitle(project) + (scopeEntry ? ' — ' + numPrefix(scopeEntry.number) + plainTitle(entryTitle(model, outline, scopeEntry)) : ''));
   const frontMatter = [
     '\\begin{document}',
     '\\pagestyle{plain}',

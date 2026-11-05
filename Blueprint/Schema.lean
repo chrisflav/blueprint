@@ -22,8 +22,12 @@ def defaultEdgeAttrs : Array String :=
 /-- Attributes every kind permits, whatever its `attrs` say: they are about
 how the website shows an object, not about what the object is.
 `hide_content` leaves an entry with a page of its own off its parent's page
-of the document (and out of the PDF); `true`, `false`, `"yes"` or `"no"`. -/
-def universalAttrs : Array String := #["hide_content"]
+of the document (and out of the PDF); `true`, `false`, `"yes"` or `"no"`.
+`serial` sets an entry's number in the document: a string or a whole number
+("A", 0) is its number, and what is inside it is numbered under it; `false`
+or `""` leaves it unnumbered, and what is inside it is numbered on its own.
+Either way it takes no place among its siblings' numbers. -/
+def universalAttrs : Array String := #["hide_content", "serial"]
 
 /-- The fields of a bibliography entry, as BibTeX names them, beside the
 attributes every node permits.  `author` and `editor` are a list of names

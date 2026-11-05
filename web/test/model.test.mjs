@@ -929,6 +929,74 @@ check('the outline follows the collapse order it is asked for', () => {
   eq(b.byId.get('thm-heine-borel').number, '6', 'and numbers differently');
 });
 
+/** The refines outline of the sample snapshot, with `serial` set on some objects. */
+function withSerials(serials) {
+  const s = JSON.parse(JSON.stringify(snapshot));
+  for (const o of s.objects) if (o.id in serials) o.attrs = { ...(o.attrs || {}), serial: serials[o.id] };
+  return M.documentOutline(M.buildModel(s), 'refines');
+}
+
+check('serial: a number of its own, heading what is inside it, its siblings closing up', () => {
+  const out = withSerials({ 'sec-foundations': 'A' });
+  const num = (id) => out.byId.get(id).number;
+  eq(num('sec-foundations'), 'A', 'its own number');
+  eq(num('def-compact'), 'A.1', 'what is inside it, numbered under it');
+  eq(num('lem-ultrafilter'), 'A.5', 'counting up as before');
+  eq(num('sec-main'), '1', 'the next chapter closes up: A took no place');
+  eq(num('sec-main-induction'), '1.1', 'and its sections follow it');
+  eq(num('lem-finite-subcover'), '1.1', 'and its statements');
+  eq(num('sec-applications'), '2', 'the chapter after');
+  const ref = M.referenceOf(out, 'def-compact');
+  eq(M.referenceText(ref), 'Definition A.1', 'a reference reads its number');
+});
+
+check('serial = false: no number; what is inside it numbered on its own, the siblings closing up', () => {
+  const out = withSerials({ 'sec-main': false });
+  const num = (id) => out.byId.get(id).number;
+  eq(num('sec-main'), null, 'no number');
+  eq(num('sec-foundations'), '1', 'the chapter before it unchanged');
+  eq(num('sec-main-induction'), '1', 'a section inside it: its own series');
+  eq(num('lem-finite-subcover'), '1', 'a statement inside it: its own series');
+  eq(num('lem-diagonal'), '2', 'counting up');
+  eq(num('thm-tychonoff'), '3', 'whatever sections lie between');
+  eq(num('sec-applications'), '2', 'the next chapter closes up');
+  // A reference to it reads its title.
+  const ref = M.referenceOf(out, 'sec-main');
+  ok(ref && ref.unnumbered, 'referred to as unnumbered');
+  const title = M.titleOf(out.byId.get('sec-main').object);
+  eq(M.referenceText(ref), title, 'by its title');
+  eq(M.referenceLabel(model, ref, 'see '), title, 'in prose too');
+  eq(M.referenceLabel(model, ref, 'by Section '), title, 'whatever word stands before it');
+});
+
+check('serial on a section or a statement inside a chapter heads its own series', () => {
+  const sec = withSerials({ 'sec-main-induction': 'X' });
+  eq(sec.byId.get('sec-main-induction').number, 'X', 'the section');
+  eq(sec.byId.get('lem-finite-subcover').number, 'X.1', 'a statement inside it, under it');
+  eq(sec.byId.get('lem-diagonal').number, 'X.2', 'counting up inside it');
+  eq(sec.byId.get('thm-tychonoff').number, '2.1', 'the chapter\'s own series, without what X took');
+  const stmt = withSerials({ 'thm-tychonoff': 'T', 'lem-diagonal': '' });
+  eq(stmt.byId.get('thm-tychonoff').number, 'T', 'a statement with a number of its own');
+  eq(stmt.byId.get('lem-diagonal').number, null, 'an empty serial is no number');
+  eq(stmt.byId.get('lem-finite-subcover').number, '2.1', 'the others as before');
+  eq(M.referenceText(M.referenceOf(stmt, 'thm-tychonoff')), 'Theorem T', 'a reference reads it');
+  // A repetition carries the number of the first occurrence, whatever it is.
+  const reps = stmt.entries.filter((e) => e.id === 'lem-diagonal');
+  eq(reps.map((e) => e.number).join(','), ',', 'the repetition unnumbered too');
+});
+
+check('serialOf: a string or a whole number, false or empty for none, anything else ignored', () => {
+  const s = (v) => M.serialOf({ attrs: { serial: v } });
+  eq(s('A'), 'A', 'a string');
+  eq(s('  IV '), 'IV', 'trimmed');
+  eq(s(0), '0', 'a whole number');
+  eq(s(false), null, 'false: none');
+  eq(s(''), null, 'empty: none');
+  eq(s(true), undefined, 'true: numbered as usual');
+  eq(s(1.5), undefined, 'not a whole number');
+  eq(M.serialOf({ attrs: {} }), undefined, 'absent');
+});
+
 check('[site] numbering = "nested" numbers a statement inside a statement within it', () => {
   const nested = M.buildModel({ ...JSON.parse(JSON.stringify(snapshot)),
     project: { ...(snapshot.project || {}), numbering: 'nested' } });

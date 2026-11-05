@@ -397,6 +397,16 @@ entries under it has a page to be read on: elsewhere `blueprint check`
 reports the attribute (`hide-content-without-page`) and the site ignores it.
 The PDF export leaves the same heading and prose out (below).
 
+`serial` in an entry's front matter sets its number (`serialOf` in
+`model.js`): `serial = "A"` (or a whole number) numbers it `A` and what is
+inside it under `A` — sections `A.1`, statements `A.1`, …, the nearest
+entry with a `serial` heading the series of what lies in it — and `serial =
+false` leaves it unnumbered, its heading, its contents row, its breadcrumb
+and the pager showing its title alone, and what is inside it numbered `1`,
+`2`, … on its own. It takes no place among its siblings. A reference to an
+unnumbered entry reads its title (`referenceOf`, `referenceText`), here and
+in the PDF.
+
 The table of contents is a page of its own, `#/contents` (`contents.js`), the
 *Contents* tab of the top bar: the headings of the document as a tree, along
 the same order and under the same numbers, a row per chapter, section and

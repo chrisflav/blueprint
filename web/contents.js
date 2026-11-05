@@ -73,7 +73,7 @@ export function render(root, app) {
       ? el('button.contents-toggle', {
           type: 'button',
           'aria-expanded': isOpen ? 'true' : 'false',
-          'aria-label': (isOpen ? 'Fold ' : 'Unfold ') + e.number,
+          'aria-label': (isOpen ? 'Fold ' : 'Unfold ') + (e.number == null ? M.titleOf(e.object) : e.number),
           title: isOpen ? 'Fold its entries' : `Unfold its ${below.length} entr${below.length === 1 ? 'y' : 'ies'}`,
           onclick: () => setOpen(e, !open.has(e.id)),
         })

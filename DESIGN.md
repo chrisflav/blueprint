@@ -329,6 +329,10 @@ children likewise, so a blueprint still reads as a paper. `hide_content =
 true` (or `"yes"`), allowed on every kind, leaves an entry that has a page of
 its own off its parent's page, heading and prose, and out of the PDF; it is
 read on its own page, and keeps its number and its place in the contents.
+`serial`, allowed on every kind too, sets an entry's number: a string or a
+whole number of its own, under which what is inside it is numbered, or
+`false` for none, inside which numbering starts afresh; either way its
+siblings are numbered as if it were not there.
 
 Verso was considered as the text language. It is deferred: it would let prose
 reference Lean names with checking, but raises the barrier for contributors

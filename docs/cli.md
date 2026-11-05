@@ -653,6 +653,16 @@ chapter's statements keep the numbers they have without their details.
 Headings and statements directly under headings are numbered as before.
 `blueprint build` copies it into the snapshot as `project.numbering`.
 
+An entry's own number is set by `serial` in its front matter, an attribute
+every kind accepts.  A string or a whole number is its number (`serial =
+"A"`, `serial = 0`), and what is inside it is numbered under it: an appendix
+`A` has sections `A.1`, `A.2` and statements `A.1`, `A.2`, ….  `serial =
+false` (or `""`) leaves it unnumbered, like LaTeX's `\section*`; what is
+inside it is then numbered on its own, `1`, `2`, …, and a reference to it
+reads its title.  Either way it takes no place among its siblings, so they
+are numbered as if it were not there: with an unnumbered introduction the
+next chapter is `1`.  `check` reports `bad-attr` for any other value.
+
 `[site.intro]` is what the website shows in the middle of the screen when
 it is opened at its landing page, drawn as a single graph node, before it
 fades and leaves the graph laid out underneath.  `file` names a Markdown file,

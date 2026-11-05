@@ -339,6 +339,8 @@ function lineOf(app, doc, n) {
   if (e && e.text) return [link('Text')];
   if (e) {
     const t = ownTitle(o);
+    // Unnumbered by its `serial`: the kind word is the link.
+    if (e.number == null) return [link(M.kindWord(o.kind)), t ? [': ', t] : null];
     return [M.kindWord(o.kind), ' ', link(e.number), t ? [': ', t] : null];
   }
   if (o.kind === 'proof') return [link('Proof'), ownTitle(o) ? ' (' + ownTitle(o) + ')' : null];
@@ -352,7 +354,7 @@ function fillPreview(app, doc, n, target) {
   const e = n.entry;
   const link = (text) => el('a.environment-identifier', { href: resultHref(app, doc, o) }, text);
   const t = ownTitle(o);
-  const word = e ? [M.kindWord(o.kind), ' ', e.number] : o.kind === 'proof' ? 'Proof' : M.kindWord(o.kind);
+  const word = e && e.number != null ? [M.kindWord(o.kind), ' ', e.number] : o.kind === 'proof' ? 'Proof' : M.kindWord(o.kind);
   const lead = e && e.text ? null : el('strong', link(word), t ? [' (', t, ')'] : null, '. ');
   const body = target.appendChild(el('div.prose.body-prose'));
   app.renderBody(body, M.displayBody(o), app.knownIds());

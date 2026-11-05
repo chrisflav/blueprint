@@ -992,6 +992,34 @@ await check('hide_content takes an entry off its parent\'s page, and leads every
   }
 });
 
+await check('serial: a chapter with no number reads by its title, and the next one closes up', async () => {
+  const o = app.model.byId.get('sec-main');
+  const before = o.attrs;
+  o.attrs = { ...(o.attrs || {}), serial: false };
+  app.model._outlines.clear(); // numbers are memoised with the outline
+  try {
+    await go('#/document');
+    const head = root.querySelector('#doc-sec-main .head a.doc-title');
+    eq(head.querySelectorAll('.num').length, 0, 'no number, not even an empty one, in its heading');
+    eq(head.textContent.trim(), modelMod.titleOf(o), 'its heading is its title');
+    ok(/Show details\s+\S/.test(root.querySelector('#doc-sec-main a.doc-open').textContent), 'the link on names it');
+    eq(root.querySelector('#doc-sec-applications .head .num').textContent, '2', 'the next chapter closes up');
+    // Inside it: its own series.
+    await go('#/document/sec-main');
+    eq(root.querySelector('#doc-sec-main-induction .head .num').textContent, '1', 'a section inside it');
+    eq(root.querySelector('#doc-thm-tychonoff .head .num').textContent, '3', 'a statement inside it');
+    const crumb = root.querySelector('.doc-crumbs .here').textContent;
+    eq(crumb, modelMod.titleOf(o), 'its breadcrumb is its title, with no number before it');
+    await go('#/contents?collapse=refines');
+    const link = root.querySelectorAll('a.contents-link').find((a) => a.getAttribute('href') === '#/document/sec-main?collapse=refines');
+    eq(link.querySelector('.num').textContent, '', 'its contents row has no number');
+  } finally {
+    o.attrs = before;
+    app.model._outlines.clear();
+    await go('#/document');
+  }
+});
+
 await check('depth=2 inlines a second level', async () => {
   await go('#/document?depth=2');
   ok(entryIds().includes('doc-sec-main-induction'), 'sections are written out');

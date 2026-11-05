@@ -223,6 +223,14 @@ def structuralChecks (b : Blueprint) : Array Check := Id.run do
           cs := cs.push <| Check.error "hide-content-without-page"
             s!"{o.source.file}: '{o.id}' hides its content, but nothing is under it, so it has no page of its own to be read on"
             #[o.id]
+  -- `serial`: a number of its own (a string or a whole number), or `false`
+  -- for none
+  for o in b.objects do
+    match o.attr? "serial" with
+    | none | some (.str _) | some (.int _) | some (.bool false) => pure ()
+    | some v =>
+      cs := cs.push <| Check.error "bad-attr"
+        s!"{o.source.file}: '{o.id}' has serial = {v}; it takes a string or a whole number (its number), or false (no number)" #[o.id]
   -- links in prose
   for o in b.objects do
     for l in sortDedup (extractLinks o.body) do

@@ -1774,6 +1774,12 @@ export function topLevel(model, kind) {
  * has exactly one number and a cross reference to it means one place.  A piece
  * of text (`TEXT_KIND`) is read where it stands and numbered not at all.
  *
+ * An object's `serial` attribute (`serialOf`) overrides its number: a number
+ * of its own ("A"), or none.  It takes no place among its siblings, so they
+ * are numbered as if it were not there, and it heads a series of its own:
+ * what is inside it is numbered under its number ("A.1", "A.2"), or, when it
+ * has none, by its place in it alone ("1", "2").
+ *
  * Returns
  *   { kind,
  *     entries,  // the flow, in reading order: {id, object, depth, number,
@@ -1845,7 +1851,7 @@ export function documentOutline(model, kind) {
   const nextNumber = (counts, key) => {
     const k = (counts.get(key) || 0) + 1;
     counts.set(key, k);
-    return key ? key.number + '.' + k : String(k);
+    return key && key.number ? key.number + '.' + k : String(k);
   };
   const stack = []; // the chain of open entries, with their walk depths
   for (const e of readingOrder(model, kind)) {
@@ -1875,6 +1881,11 @@ export function documentOutline(model, kind) {
       if (!first) byId.set(e.id, entry);
     } else if (first) {
       entry.number = first.number;
+    } else if (serialOf(e.object) !== undefined) {
+      // A number of its own, or none, taking no place among its siblings.
+      entry.number = serialOf(e.object);
+      entry.serial = true;
+      byId.set(e.id, entry);
     } else {
       // The headings above it, nearest first.
       const headings = [];
@@ -1882,9 +1893,16 @@ export function documentOutline(model, kind) {
       // Under `[site] numbering = "nested"`, inside a statement: numbered within it.
       const host = nested && !isSectionKind(e.object.kind) && parent && !isSectionKind(parent.object.kind)
         ? parent : null;
+      // The nearest entry above with a `serial` of its own heads the series
+      // of what is inside it, a statement as well as a heading.
+      let scope = null;
+      for (let a = parent; a && !scope; a = a.parent) if (a.serial) scope = a;
+      const within = (a) => { for (let p = a; p; p = p.parent) if (p === scope) return true; return false; };
+      const heading = headings[0] || null;
+      const chapter = headings[headings.length - 1] || null;
       entry.number = isSectionKind(e.object.kind)
-        ? nextNumber(headingCounts, headings[0] || null)
-        : nextNumber(statementCounts, host || headings[headings.length - 1] || null);
+        ? nextNumber(headingCounts, scope && !within(heading) ? scope : heading)
+        : nextNumber(statementCounts, host || (scope && !within(chapter) ? scope : chapter));
       byId.set(e.id, entry);
     }
     (parent ? parent.children : roots).push(entry);
@@ -1918,7 +1936,27 @@ export function referenceOf(outline, id) {
   const entry = outline.byId.get(id);
   if (entry && entry.reference) return { word: '', number: entry.label, cite: true };
   if (!entry || entry.text || entry.proof) return null;
+  // Unnumbered by its `serial`: read by its title, "see Introduction".
+  if (entry.number == null) return { word: '', number: titleOf(entry.object), unnumbered: true };
   return { word: kindWord(entry.object.kind), number: entry.number };
+}
+
+/** "Lemma 2.3" for what `referenceOf` returns; the title alone for an unnumbered entry. */
+export function referenceText(ref) {
+  return ref.word ? ref.word + ' ' + ref.number : String(ref.number);
+}
+
+/**
+ * An object's `serial` attribute: its own number, a string or a whole number
+ * ("A", 0); `null` for none (`false`, or an empty string); `undefined` when it
+ * says neither, and the document numbers it.
+ */
+export function serialOf(o) {
+  const v = o && o.attrs ? o.attrs.serial : undefined;
+  if (v === false) return null;
+  if (typeof v === 'number' && Number.isInteger(v)) return String(v);
+  if (typeof v === 'string') return v.trim() || null;
+  return undefined;
 }
 
 // The words prose names a reference with, besides the schema's own kind words:
@@ -1949,6 +1987,7 @@ function escapeRegExp(s) {
 export function referenceLabel(model, ref, before) {
   const text = String(before || '');
   const said = new RegExp('(?:^|[^\\p{L}])' + escapeRegExp(ref.word) + '\\s+$', 'iu');
+  if (!ref.word) return String(ref.number);
   return said.test(text) || namesReference(model, text) ? ref.number : ref.word + ' ' + ref.number;
 }
 
