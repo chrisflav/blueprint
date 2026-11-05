@@ -428,7 +428,8 @@ leads there (`isHiddenEntry` and `documentLevelOf` in `model.js`). Its number
 and its place in the contents and the sidebar stay. Only an entry with
 entries under it has a page to be read on: elsewhere `blueprint check`
 reports the attribute (`hide-content-without-page`) and the site ignores it.
-The PDF export leaves the same heading and prose out (below).
+The PDF export leaves the same prose out (below), but keeps the heading line
+of a heading, which a PDF read straight through needs.
 
 `serial` in an entry's front matter sets its number (`serialOf` in
 `model.js`): `serial = "A"` (or a whole number) numbers it `A` and what is

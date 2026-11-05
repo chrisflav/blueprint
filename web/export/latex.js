@@ -764,12 +764,31 @@ export function exportLatex(model, request, options = {}) {
       tocLines += 1;
       out.push(`\\addcontentsline{toc}{part}{\\texorpdfstring{${partLead}${titleTex(title)}}{${partPlain}}}`);
     };
-    if (node.hidden) {
-      // Its line in the contents and a place for references to land, then
-      // its children; nothing of its own.
+    // A heading: its number and title, a place for references to land, its line in the contents.
+    const heading = () => {
+      if (isPart) {
+        // "Part I  The six operations".
+        out.push(`\\part*{\\texorpdfstring{${partLead}${titleTex(title)}}{${partPlain}}}`);
+        out.push(`\\phantomsection\\label{${label}}%`);
+        partLine();
+        return;
+      }
+      const cmd = HEADINGS[Math.min(level, HEADINGS.length - 1)];
+      out.push(`\\${cmd}*{\\texorpdfstring{${number == null ? '' : escapeText(number) + '\\quad '}${titleTex(title)}}{${escapePdf(numPrefix(number) + plainTitle(title))}}}`);
       out.push(`\\phantomsection\\label{${label}}%`);
-      if (isPart) partLine();
-      else if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
+      if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
+    };
+    if (node.hidden) {
+      // Its children, and of its own only what places them: a heading (a part,
+      // a chapter, a section, ...) keeps its heading line, anything else its
+      // line in the contents and a place for references to land.  Its prose,
+      // proofs and steps are left out.
+      if (isPart || isSection) {
+        heading();
+      } else {
+        out.push(`\\phantomsection\\label{${label}}%`);
+        if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
+      }
       if (isPart) partsOpen += 1;
       for (const c of node.children) writeNode(c);
       if (isPart) partsOpen -= 1;
@@ -780,16 +799,8 @@ export function exportLatex(model, request, options = {}) {
       out.push('');
       return;
     }
-    if (isPart) {
-      // "Part I  The six operations".
-      out.push(`\\part*{\\texorpdfstring{${partLead}${titleTex(title)}}{${partPlain}}}`);
-      out.push(`\\phantomsection\\label{${label}}%`);
-      partLine();
-    } else if (isSection) {
-      const cmd = HEADINGS[Math.min(level, HEADINGS.length - 1)];
-      out.push(`\\${cmd}*{\\texorpdfstring{${number == null ? '' : escapeText(number) + '\\quad '}${titleTex(title)}}{${escapePdf(numPrefix(number) + plainTitle(title))}}}`);
-      out.push(`\\phantomsection\\label{${label}}%`);
-      if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
+    if (isPart || isSection) {
+      heading();
     } else {
       out.push(`\\phantomsection\\label{${label}}%`);
       if (node.children.length && level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
