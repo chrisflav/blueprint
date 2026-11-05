@@ -319,6 +319,12 @@ structure Project where
   a reference to one reads as one to the statement it lies in.  Handed to the
   website as `project.pdfDetails`, only when `false`. -/
   pdfDetails : Bool := true
+  /-- `[site] pdfScopes`: the kinds whose entries a PDF may be made of, besides
+  the whole blueprint, say `["part", "chapter", "appendix"]`; the export dialog
+  offers no other part, `blueprint site --pdf` prepares none, and a request
+  for one is refused.  Empty for every entry with entries below it.  Handed to
+  the website as `project.pdfScopes`, only when not empty. -/
+  pdfScopes : Array String := #[]
   /-- `[site] logo`: a picture the website shows left of the title in its top
   bar, the address of a file the site serves (`assets/…`); empty for the
   website's own mark.  Handed to the website as `project.logo`. -/

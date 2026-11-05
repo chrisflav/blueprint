@@ -19,7 +19,9 @@ outline, along the collapse order chosen, and only chooses a part of it:
   entry with entries below it (`exportScopes`).  The command line takes any
   entry.  A proof or a step is read with its statement, and a piece of text
   (`hidden`) in its section, so those are refused as scopes with that
-  reason.
+  reason.  `[site] pdfScopes` narrows the parts to entries of the kinds it
+  names, `["part", "chapter"]` say: no other part is offered or prepared,
+  and a request for one is refused, naming the part or chapter it is in.
 * **Detail.**  `all` levels (the default), or *n* levels below the scope,
   counted as the document's pages count them (`documentPageEntries`): a
   section's statements are one level below it.  A proof and a step belong to

@@ -403,6 +403,28 @@ await check('without details, a reference, step or boundary naming one names the
   ok(tex.includes('{Definition~1.2}'), 'numbered nested, the details take no number from the statements');
 });
 
+await check('with pdfScopes a PDF is of the whole blueprint or an entry of those kinds, and nothing else', () => {
+  const objects = [
+    node('p1', 'part', 'Opening of the part.', { title: 'The part', order: 1 }),
+    node('c1', 'chapter', 'Opening of the chapter.', { title: 'The chapter', order: 1 }),
+    node('s1', 'section', 'Opening of the section.', { title: 'The section', order: 1 }),
+    node('t1', 'theorem', 'Main.', { title: 'Main', order: 1 }),
+    node('l1', 'lemma', 'A step.', { title: 'Step', order: 1 }),
+    edge('refines', 'c1', 'p1'), edge('refines', 's1', 'c1'), edge('refines', 't1', 's1'), edge('refines', 'l1', 't1'),
+  ];
+  const kinds = { part: { boundary: {} }, chapter: { boundary: {} } };
+  const m = M.buildModel(snapshot(objects, kinds, { pdfScopes: ['part', 'chapter'] }));
+  same(exportScopes(m).map((x) => x.id), [null, 'p1', 'c1'], 'the whole blueprint, the part and the chapter');
+  throwsExport(() => resolveRequest(m, { scope: 's1' }), /'s1' is a section, and this blueprint's PDFs are of the whole blueprint or a part, chapter \(\[site\] pdfScopes\); export 'c1' instead/, 'a section is refused');
+  throwsExport(() => resolveRequest(m, { scope: 't1' }), /export 'c1' instead/, 'and a refined statement');
+  ok(exportLatex(m, { scope: 'c1' }).tex.includes('Opening of the section.'), 'the chapter has its sections in it');
+  const prepared = allRequests(m).map((r) => r.scope);
+  same([...new Set(prepared)], [null, 'p1', 'c1'], 'site --pdf prepares those alone');
+  // Without the setting every entry with entries below it is a part, as before.
+  const open = M.buildModel(snapshot(objects, kinds));
+  same(exportScopes(open).map((x) => x.id), [null, 'p1', 'c1', 's1', 't1'], 'by default');
+});
+
 await check('a proof with details of its own is read right after its statement, on the website too', () => {
   const m = paper();
   const outline = M.documentOutline(m, 'refines');

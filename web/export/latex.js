@@ -60,7 +60,8 @@ function isAppendix(model, o) {
  * reading order, as {id, number, title, word, depth, appendix}.  These are the
  * document's pages, so a section, a subsection and a refined statement or
  * relation are all parts.  Without details (`M.exportsDetails`) a detail is no
- * part, and a statement whose entries below are all details has none.
+ * part, and a statement whose entries below are all details has none.  With
+ * `[site] pdfScopes` only entries of those kinds are (`M.isPdfScope`).
  */
 export function exportScopes(model, collapse) {
   const kind = pickCollapse(model, collapse);
@@ -70,6 +71,7 @@ export function exportScopes(model, collapse) {
   for (const e of outline.entries) {
     if (e.duplicate || e.text || !e.children.length) continue;
     if (!details && (M.isDetailEntry(e) || e.children.every(M.isDetailEntry))) continue;
+    if (!M.isPdfScope(model, e)) continue;
     out.push({ id: e.id, number: e.number, title: entryTitle(model, outline, e), word: M.kindWord(e.object.kind),
       depth: e.depth, appendix: isAppendix(model, e.object) });
   }
@@ -165,6 +167,12 @@ export function resolveRequest(model, raw = {}) {
     if (!M.exportsDetails(model) && M.isDetailEntry(entry)) {
       const host = M.detailHost(entry);
       throw new ExportError('invalid', `'${scope}' is a detail of '${host.id}', and this blueprint's PDFs leave details out ([site] pdfDetails = false); export '${host.id}' instead`);
+    }
+    if (!M.isPdfScope(model, entry)) {
+      const up = M.pdfScopeOf(model, entry);
+      const kinds = M.pdfScopeKinds(model).map((k) => M.kindWord(k).toLowerCase()).join(', ');
+      throw new ExportError('invalid', `'${scope}' is a ${M.kindWord(entry.object.kind).toLowerCase()}, and this blueprint's PDFs are of the whole blueprint or a ${kinds} ([site] pdfScopes); ` +
+        (up ? `export '${up.id}' instead` : 'export the whole blueprint instead'));
     }
   }
   const wanted = parseDepth(raw.depth);

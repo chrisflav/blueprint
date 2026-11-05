@@ -2117,6 +2117,28 @@ export function exportsDetails(model) {
 }
 
 /**
+ * The kinds whose entries a PDF may be made of, besides the whole blueprint:
+ * `[site] pdfScopes` in `blueprint.toml`, `project.pdfScopes`.  `null` when
+ * the project names none, and any entry with entries below it may be.
+ */
+export function pdfScopeKinds(model) {
+  const k = model.project && model.project.pdfScopes;
+  return Array.isArray(k) && k.length ? k : null;
+}
+
+/** Whether a PDF may be made of this entry (`pdfScopeKinds`). */
+export function isPdfScope(model, entry) {
+  const kinds = pdfScopeKinds(model);
+  return !kinds || kinds.includes(entry.object.kind);
+}
+
+/** The nearest entry at or above this one a PDF may be made of; `null` for the whole blueprint. */
+export function pdfScopeOf(model, entry) {
+  for (let e = entry; e; e = e.parent) if (isPdfScope(model, e)) return e;
+  return null;
+}
+
+/**
  * The page of the split document an object is read on: its own page if it has
  * entries under it, otherwise its parent's, which shows it among its siblings.
  * The top of the document is its contents, so a top-level entry with nothing
