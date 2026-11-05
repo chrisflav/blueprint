@@ -32,6 +32,16 @@ outline, along the collapse order chosen, and only chooses a part of it:
   and can be left out.  Exporting an appendix itself always includes it.
 * **Hierarchy.**  Any collapse kind; the default is the snapshot's
   `defaultCollapse`.
+* **Details.**  With `[site] pdfDetails = false` (`project.pdfDetails`) a
+  project's PDFs leave out every detail (`isDetailEntry`): a statement
+  inside a statement, text inside one, and what is below them, with their
+  proofs and steps.  Nothing of a detail is written, counted as left out by
+  a depth, offered as a part or listed as outside the export; a part whose
+  entries below are all details has none, and a reference to a detail, its
+  proof or its step reads as one to the statement it lies in ("Theorem
+  2.4", or "Lemma (in Theorem 2.4)" where the prose says "Lemma [x]").  A
+  statement's own proof stays, without the details below it.  Asked for a
+  detail as the part, the export refuses and names that statement.
 
 Within the chosen part:
 

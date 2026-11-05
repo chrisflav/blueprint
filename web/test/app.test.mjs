@@ -3147,6 +3147,18 @@ if (ELK_PATH && fs.existsSync(ELK_PATH) && fs.existsSync(ELK_WORKER_PATH)) {
     pdf.closeExport();
   });
 
+  await check('without details in the PDFs, a detail\'s page offers the part its statement is in', () => {
+    const snap = JSON.parse(fs.readFileSync(path.join(webDir, 'sample', 'paper', 'blueprint.json'), 'utf8'));
+    snap.project.pdfDetails = false;
+    const m = modelMod.buildModel(snap);
+    const at = (view, id) => pdf.contextPart(m, 'refines', { view, id, params: new URLSearchParams() });
+    eq(at('object', 'lem-complements').id, 'thm-fip', 'a lemma of the proof: the theorem it details');
+    eq(at('document', 'proof/thm-fip').id, 'thm-fip', 'the proof, whose entries below are all details: its theorem');
+    eq(at('object', 'thm-fip').id, 'thm-fip', 'the theorem keeps its proof, so it is a part');
+    eq(pdf.contextPart(modelMod.buildModel(JSON.parse(JSON.stringify({ ...snap, project: { ...snap.project, pdfDetails: undefined } }))),
+      'refines', { view: 'object', id: 'lem-complements', params: new URLSearchParams() }).id, 'proof/thm-fip', 'by default the lemma is read on its proof\'s page');
+  });
+
   const pdfBytes = new TextEncoder().encode('%PDF-1.5\nfake but shaped like one\n%%EOF\n');
   const entry = (extra = {}) => ({ collapse: 'refines', scope: 'sec-main', depth: 'all', appendices: true, status: 'ok',
     pdf: 'aaaa.pdf', tex: 'aaaa.tex', fileName: 'compact-2-main', pages: 3, warnings: [], ...extra });
