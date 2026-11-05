@@ -135,7 +135,7 @@ def Project.introJson (p : Project) : Json :=
 def Snapshot.toJson (s : Snapshot) : Json :=
   Json.mkObj [
     ("version", Json.num (JsonNumber.fromInt s.version)),
-    -- `katexMacros`, `theme`, `numbering`, `logo` and `intro` are left out when the project
+    -- `katexMacros`, `numbering`, `logo` and `intro` are left out when the project
     -- declares none, `pdfDetails` unless it is `false`, `pdfScopes` unless it
     -- names a kind or an object and `pdfReferences` unless it is set, so that a blueprint
     -- without them has exactly the `project` it had before the fields existed.
@@ -145,8 +145,6 @@ def Snapshot.toJson (s : Snapshot) : Json :=
       (if s.project.katexMacros.isEmpty then [] else
         [("katexMacros",
           objOf (s.project.katexMacros.map fun (n, d) => (n, Json.str d)))]) ++
-      (if s.project.theme.isEmpty then [] else
-        [("theme", Json.str s.project.theme)]) ++
       (if s.project.numbering.isEmpty then [] else
         [("numbering", Json.str s.project.numbering)]) ++
       (if s.project.pdfDetails then [] else [("pdfDetails", Json.bool false)]) ++
@@ -317,7 +315,6 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
       title := fieldStrD p "title" ""
       dir := fieldStrD p "dir" "blueprint"
       katexMacros
-      theme := fieldStrD p "theme" ""
       numbering := fieldStrD p "numbering" ""
       pdfDetails := fieldBoolD p "pdfDetails" true
       pdfScopes := fieldStrs p "pdfScopes"

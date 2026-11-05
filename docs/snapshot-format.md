@@ -19,7 +19,6 @@ by editing this file first. Version 1.
       "\\Spec": "\\operatorname{Spec}",
       "\\poly": "#1[T]"
     },
-    "theme": "outline",                          // optional, see below
     "numbering": "nested",                       // optional, see below
     "pdfDetails": false,                         // optional, see below
     "pdfScopes": ["part", "chapter"],            // optional, see below
@@ -115,10 +114,6 @@ Notes
   `blueprint import-latex` fills the table from the `\newcommand`s,
   `\renewcommand`s, `\providecommand`s and `\DeclareMathOperator`s of a
   LaTeX blueprint.
-- `project.theme` is `[site] theme` of `blueprint.toml`: the id of the style
-  the website opens in for a reader who has not picked one.  It is left out
-  when the project names none; a reader defaults it to the website's default
-  style, and so treats an id it does not know.
 - `project.numbering` is `[site] numbering` of `blueprint.toml`: `"nested"`
   numbers a statement inside a statement within it (`n.m.k` under `n.m`);
   left out, or `"flat"`, every statement of a chapter is numbered in one

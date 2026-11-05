@@ -134,7 +134,7 @@ export function render(root, app) {
   const page = el('div.page.wide');
   const body = el('div');
   const flow = el('div.doc-flow');
-  const toc = el('nav.toc');
+  const toc = el('nav.toc.toc-outline');
   page.appendChild(el('div.doc-layout', toc, body));
   root.appendChild(page);
 
@@ -320,9 +320,6 @@ export function render(root, app) {
   let tocShown = false;
   const showToc = () => {
     if (tocShown) return;
-    // The contents one level at a time, in every style; the Outline style
-    // sets it its own way.
-    if (sidebarMode() === 'outline') toc.classList.add('toc-outline');
     tocShown = true;
     levelSidebar(app, outline, pageEntry, focus, pageHref, toc);
   };
@@ -558,22 +555,15 @@ function proofBlock(app, o, outline, known, refs, rest = M.proofLeadRest(o)) {
 }
 
 /**
- * The sidebar, the contents one level at a time, kept with the page: the page
- * writes out a level (an entry's entries, or the top level), and the sidebar
- * lists that level under the chain down to it, as headings, with the entry
- * the reader went to (`?focus=`) opened on its own entries.  So after a click
- * on chapter 1 the page is the chapters, 1, 2, 3, …, and the sidebar 1 with
- * 1.1, 1.2, … under it, then 2, 3, …; after a click on 1.1 the page is 1.1,
- * 1.2, …, and the sidebar 1 as a heading over 1.1, with 1.1.1, 1.1.2, … under
- * it, then 1.2, ….
+ * The sidebar, the contents as an outline (`toc-outline`), kept with the
+ * page: the page writes out a level (an entry's entries, or the top level),
+ * and the sidebar has the contents unfolded down to it, every level along the
+ * chain to it listed whole, with the entry the reader went to (`?focus=`)
+ * opened on its own entries.  So on the page of 2.1 the sidebar is 1, 2, 3, …
+ * with 2 unfolded on 2.1, 2.2, …, and 2.1 on 2.1.1, 2.1.2, ….  A click on the
+ * page's own entry folds its entries away, and another unfolds them again.
  *
- * The Outline style (`toc-outline`) has the contents unfolded down to the
- * level instead: every level along the chain listed whole, so on the page of
- * 2.1 the sidebar is 1, 2, 3, … with 2 unfolded on 2.1, 2.2, …, and 2.1 on
- * 2.1.1, 2.1.2, ….  There a click on the page's own entry folds its entries
- * away, and another unfolds them again.
- *
- * Either way it lists only the headings, chapters, sections and subsections,
+ * It lists only the headings, chapters, sections and subsections,
  * as the contents page does; a statement is read on the page its heading
  * leads to, and a focus on one opens that heading.
  *
@@ -586,9 +576,7 @@ function proofBlock(app, o, outline, known, refs, rest = M.proofLeadRest(o)) {
 function levelSidebar(app, outline, pageEntry, focus, pageHref, toc) {
   const { el, clear } = app;
   const pageId = pageEntry ? pageEntry.id : null;
-  // The contents unfolded, every level whole (the Outline style), and whether
-  // the reader has folded the page's own entries away there.
-  const whole = toc.classList.contains('toc-outline');
+  // Whether the reader has folded the page's own entries away.
   let shut = false;
   // Only the headings have rows, as on the contents page (`M.isContentsEntry`):
   // the statements are read on the pages they lead to.
@@ -631,7 +619,7 @@ function levelSidebar(app, outline, pageEntry, focus, pageHref, toc) {
     ev.preventDefault();
     t.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (e === pageEntry) {
-      if (whole && kids(e).length) {
+      if (kids(e).length) {
         shut = !shut;
         draw();
         const a = toc.querySelector('a[data-id="' + e.id + '"]');
@@ -652,7 +640,7 @@ function levelSidebar(app, outline, pageEntry, focus, pageHref, toc) {
   // The contents unfolded down to the level: the chain, `toc-up`, unfolded
   // where it stands among its siblings, and the opened entry; the page's own
   // entry stays folded while the reader keeps it so.
-  const drawWhole = () => {
+  const levels = () => {
     const chain = new Set();
     for (let e = level; e; e = e.parent) chain.add(e);
     const list = (parent, ul) => {
@@ -669,42 +657,11 @@ function levelSidebar(app, outline, pageEntry, focus, pageHref, toc) {
   const draw = () => {
     clear(toc);
     toc.appendChild(el('h3', { class: 'toc-head' }, 'Contents'));
-    if (whole) {
-      const top = drawWhole();
-      app.renderMath(top); // titles carry maths
-      toc.appendChild(top);
-      return;
-    }
-    const top = el('ul.toc-levels');
-    let into = top;
-    const chain = [];
-    for (let e = level; e; e = e.parent) chain.unshift(e);
-    for (const e of chain) {
-      const li = into.appendChild(item(e, 'toc-up'));
-      into = li.appendChild(el('ul'));
-    }
-    for (const e of kids(level)) {
-      const li = into.appendChild(item(e, 'toc-entry'));
-      if (e === opened && kids(e).length) {
-        const sub = li.appendChild(el('ul'));
-        for (const c of kids(e)) sub.appendChild(item(c, 'toc-entry'));
-      }
-    }
+    const top = levels();
     app.renderMath(top); // titles carry maths
     toc.appendChild(top);
   };
   draw();
-}
-
-/** Which sidebar the site asks for: `outline` when its page says
- *  `<html data-sidebar="outline">`, else the default. */
-function sidebarMode() {
-  try {
-    const root = document.documentElement;
-    return (root && typeof root.getAttribute === 'function' && root.getAttribute('data-sidebar')) || '';
-  } catch (e) {
-    return '';
-  }
 }
 
 function pickKind(app) {

@@ -1764,12 +1764,15 @@ async function pageChecks(d, f) {
     const s = await d.js(PAGE_STATE);
     const side = await d.js(SIDEBAR);
     const want = M.documentPageEntries(out, child.id, 1).length;
+    // Another chapter is listed, folded: none of its own entries are.
+    const sibling = out.roots.find((e) => e !== entry && M.isContentsEntry(e) && !e.duplicate);
+    const other = sibling ? sibling.children.filter((c) => !c.duplicate && M.isContentsEntry(c)) : [];
     await route(d, docPath(f.chapter) + new URLSearchParams({ collapse: f.kind }).toString());
     await waitFor(d, `return !!document.querySelector('.doc-entry.page-head')`, { timeout: 30000, label: 'back to the chapter' });
     return {
       ok: s.ids[0] === anchorOf(child.id) && s.entries === want && s.crumbs >= 2 && s.pagers >= 1
         && side.ups.join() === [f.chapter, child.id].join()
-        && !side.links.includes(out.roots.find((e) => e !== entry && M.isContentsEntry(e) && !e.duplicate).id),
+        && !other.some((e) => side.links.includes(e.id)),
       evidence: `clicked ${j(box.text)}: hash=${j(s.hash)}, first entry #${s.ids[0]}, ${s.entries} entries (want ${want}), ${s.crumbs} breadcrumb links, `
         + `${s.pagers} pagers; sidebar chain ${j(side.ups)}`,
     };

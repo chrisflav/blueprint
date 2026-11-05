@@ -658,25 +658,17 @@ else
   bad "build of the imported blueprint"
 fi
 
-# `[site] theme` reaches the snapshot as `project.theme`, and is left out
-# when the project names none
+# The website has one style: a `[site] theme` left from its style menu is
+# ignored, and never reaches the snapshot
 cp -r examples/minimal "$TMP/themed"
 printf '\n[site]\ntheme = "outline"\n' >> "$TMP/themed/blueprint.toml"
 if "$BP" build --root "$TMP/themed" -o "$TMP/themed.json" > /dev/null 2>&1 \
-   && grep -q '"theme": "outline"' "$TMP/themed.json" \
+   && ! grep -q '"theme"' "$TMP/themed.json" \
    && "$BP" build --root examples/minimal -o "$TMP/unthemed.json" > /dev/null 2>&1 \
    && ! grep -q '"theme"' "$TMP/unthemed.json"; then
-  ok "[site] theme reaches the snapshot, and only when given"
+  ok "an old [site] theme is ignored"
 else
-  bad "[site] theme reaches the snapshot, and only when given"
-fi
-cp -r examples/minimal "$TMP/badtheme"
-printf '\n[site]\ntheme = 3\n' >> "$TMP/badtheme/blueprint.toml"
-if ! "$BP" build --root "$TMP/badtheme" -o "$TMP/badtheme.json" > "$TMP/badtheme.out" 2>&1 \
-   && grep -q "'\[site\] theme' must be a string" "$TMP/badtheme.out"; then
-  ok "a [site] theme that is not a string is refused"
-else
-  bad "a [site] theme that is not a string is refused"; cat "$TMP/badtheme.out"
+  bad "an old [site] theme is ignored"
 fi
 
 # `[site] logo` and `logoInk` reach the snapshot as `project.logo` and

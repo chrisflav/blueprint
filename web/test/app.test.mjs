@@ -80,7 +80,7 @@ await tick(20);
 await app.rendered;
 
 const root = dom.document.getElementById('app');
-const { shieldMath, THEMES, applyTheme, currentTheme, currentShowProgress } = await import(path.join(webDir, 'app.js'));
+const { shieldMath, currentShowProgress } = await import(path.join(webDir, 'app.js'));
 
 await check('math shielding preserves wrapped formulas and numeric starts', () => {
   for (const formula of [
@@ -248,45 +248,13 @@ await check('a proof moved to another section is read there, named by what it pr
   }
 });
 
-await check('every theme has its stylesheet, and picking one loads it', async () => {
-  for (const t of THEMES) {
-    if (t.id) ok(fs.existsSync(path.join(webDir, 'themes', t.id + '.css')), `themes/${t.id}.css is missing`);
-  }
-  applyTheme('outline');
-  eq(dom.document.getElementById('theme-css').getAttribute('href'), 'themes/outline.css', 'the theme is loaded');
-  eq(dom.document.documentElement.getAttribute('data-sidebar'), 'outline', 'and asks for its sidebar');
+await check('the site has one style: no style sheet to pick, the sidebar an outline', async () => {
+  ok(!fs.existsSync(path.join(webDir, 'themes')), 'no themes/ beside style.css');
+  ok(!/@import\s+["']/.test(fs.readFileSync(path.join(webDir, 'style.css'), 'utf8')), 'style.css imports no other sheet');
   await go('#/document/sec-applications');
-  ok(root.querySelector('nav.toc.toc-outline'), 'the document marks its sidebar for the outline style');
-  ok(root.querySelector('nav.toc-outline ul.toc-levels'), 'the contents one level at a time, as in every style');
+  eq(dom.document.getElementById('theme-css'), null, 'no theme sheet loaded');
+  ok(root.querySelector('nav.toc.toc-outline ul.toc-levels'), 'the document marks its sidebar as the outline');
   ok(root.querySelector('nav.toc-outline li.current'), 'with this page marked');
-  applyTheme('article');
-  eq(dom.document.documentElement.getAttribute('data-sidebar'), null, 'another theme drops the sidebar');
-  applyTheme('');
-  eq(dom.document.getElementById('theme-css'), null, 'the default loads no theme');
-  applyTheme('no-such-theme');
-  eq(dom.document.getElementById('theme-css'), null, 'an unknown theme is the default');
-});
-
-await check('the project names the style a reader without a pick sees', () => {
-  const store = new Map();
-  global.localStorage = {
-    getItem: (k) => (store.has(k) ? store.get(k) : null),
-    setItem: (k, v) => { store.set(k, String(v)); },
-  };
-  try {
-    eq(currentTheme(), '', 'no project, no pick: the default');
-    eq(currentTheme({ theme: 'outline' }), 'outline', 'the project chooses the style');
-    eq(currentTheme({ theme: 'no-such-theme' }), '', 'an unknown project style is the default');
-    store.set('blueprint.theme', 'article');
-    eq(currentTheme({ theme: 'outline' }), 'article', 'the reader\'s pick wins');
-    store.set('blueprint.theme', '');
-    eq(currentTheme({ theme: 'outline' }), '', 'also when the reader picked the default');
-    global.location.search = '?theme=pretext';
-    eq(currentTheme({ theme: 'outline' }), 'pretext', 'and ?theme= wins over both');
-  } finally {
-    delete global.localStorage;
-    global.location.search = '';
-  }
 });
 
 await check('the same options reach the graph side panel', async () => {
@@ -1139,7 +1107,7 @@ await check('a click on any title stays on the page, scrolled to it', async () =
     'a ctrl-click is the browser\'s');
 });
 
-await check('the sidebar lists the headings of the level the page writes out, the entry gone to opened', async () => {
+await check('the sidebar lists the headings down to the level the page writes out, the entry gone to opened', async () => {
   const own = (li) => li.querySelector('a');
   const id = (li) => own(li).getAttribute('data-id');
   const ups = () => root.querySelectorAll('nav.toc li.toc-up').map(id);
@@ -1171,7 +1139,8 @@ await check('the sidebar lists the headings of the level the page writes out, th
   // entry scrolls to the top.
   await go('#/document/sec-main');
   eq(ups().join(' '), 'sec-main', 'the chapter as a heading');
-  eq(entries().map(id).join(' '), 'sec-main-induction', 'over its one section');
+  eq(link('sec-main').parentNode.querySelector('ul').children.map(id).join(' '), 'sec-main-induction',
+    'over its one section');
   ev = fire(link('sec-main'), 'click');
   ok(ev.defaultPrevented, 'the page\'s own entry scrolls, it does not route');
   // A statement gone to opens nothing of its own: the heading it is under.
@@ -1184,7 +1153,8 @@ await check('the sidebar lists the headings of the level the page writes out, th
   eq(ups().join(' '), 'sec-main', 'the sidebar: the chapter as a heading');
   eq(opened().join(' '), 'sec-main-induction', 'over the section gone to, opened');
   eq(link('lem-finite-subcover'), undefined, 'its statements not listed');
-  eq(link('sec-foundations'), undefined, 'the other chapters gone');
+  ok(link('sec-foundations'), 'the other chapters listed');
+  eq(link('sec-foundations').parentNode.querySelector('ul'), null, 'and folded');
   // The chain leads to the pages its entries head.
   eq(link('sec-main').getAttribute('href'), '#/document/sec-main?collapse=refines', 'the heading leads to its page');
   // A section with only statements under it is read among its siblings.
@@ -1194,44 +1164,39 @@ await check('the sidebar lists the headings of the level the page writes out, th
   eq(link('lem-finite-subcover'), undefined, 'and no statement listed');
 });
 
-await check('in the Outline style the sidebar is the contents unfolded down to the page, the page\'s own entry folding', async () => {
-  applyTheme('outline');
-  try {
-    const id = (li) => li.querySelector('a').getAttribute('data-id');
-    const link = (x) => root.querySelector('nav.toc a[data-id="' + x + '"]');
-    const top = () => root.querySelector('nav.toc ul.toc-levels').children.map(id).join(' ');
-    const out = modelMod.documentOutline(app.model, 'refines');
-    const listed = (es) => es.filter((e) => modelMod.isContentsEntry(e) && !e.duplicate).map((e) => e.id).join(' ');
-    const under = (x) => listed(out.byId.get(x).children);
-    const listedUnder = (x) => {
-      const ul = link(x).parentNode.querySelector('ul');
-      return ul ? ul.children.map(id).join(' ') : '';
-    };
-    await go('#/document/sec-main-induction');
-    ok(root.querySelector('nav.toc.toc-outline'), 'the outline sidebar');
-    eq(top(), listed(out.roots), 'every chapter listed, and nothing else of the top level');
-    eq(listedUnder('sec-main'), under('sec-main'), 'the chapter unfolded on every one of its sections');
-    eq(listedUnder('sec-main-induction'), '', 'the section, with only statements under it, has nothing to unfold');
-    eq(listedUnder('sec-foundations'), '', 'another chapter left folded');
-    eq(root.querySelectorAll('nav.toc a[data-id="lem-finite-subcover"], nav.toc a[data-id="thm-tychonoff"]').length, 0,
-      'no statement listed');
-    // A click on the page's own entry folds its sections away, another
-    // unfolds them; it stays on the page.
-    await go('#/document/sec-main');
-    eq(listedUnder('sec-main'), under('sec-main'), 'the chapter\'s page: the chapter unfolded');
-    let ev = fire(link('sec-main'), 'click');
-    ok(ev.defaultPrevented, 'the page\'s own entry does not route');
-    eq(listedUnder('sec-main'), '', 'folded by a click');
-    ok(link('sec-main').parentNode.classList.contains('shut'), 'and marked so');
-    eq(top(), listed(out.roots), 'the rest stays as it was');
-    fire(link('sec-main'), 'click');
-    eq(listedUnder('sec-main'), under('sec-main'), 'unfolded by another');
-    // Another chapter leads to its page, as before.
-    ev = fire(link('sec-foundations'), 'click');
-    ok(!ev.defaultPrevented, 'another chapter is another page: followed');
-  } finally {
-    applyTheme('');
-  }
+await check('the sidebar is the contents unfolded down to the page, the page\'s own entry folding', async () => {
+  const id = (li) => li.querySelector('a').getAttribute('data-id');
+  const link = (x) => root.querySelector('nav.toc a[data-id="' + x + '"]');
+  const top = () => root.querySelector('nav.toc ul.toc-levels').children.map(id).join(' ');
+  const out = modelMod.documentOutline(app.model, 'refines');
+  const listed = (es) => es.filter((e) => modelMod.isContentsEntry(e) && !e.duplicate).map((e) => e.id).join(' ');
+  const under = (x) => listed(out.byId.get(x).children);
+  const listedUnder = (x) => {
+    const ul = link(x).parentNode.querySelector('ul');
+    return ul ? ul.children.map(id).join(' ') : '';
+  };
+  await go('#/document/sec-main-induction');
+  ok(root.querySelector('nav.toc.toc-outline'), 'the outline sidebar');
+  eq(top(), listed(out.roots), 'every chapter listed, and nothing else of the top level');
+  eq(listedUnder('sec-main'), under('sec-main'), 'the chapter unfolded on every one of its sections');
+  eq(listedUnder('sec-main-induction'), '', 'the section, with only statements under it, has nothing to unfold');
+  eq(listedUnder('sec-foundations'), '', 'another chapter left folded');
+  eq(root.querySelectorAll('nav.toc a[data-id="lem-finite-subcover"], nav.toc a[data-id="thm-tychonoff"]').length, 0,
+    'no statement listed');
+  // A click on the page's own entry folds its sections away, another
+  // unfolds them; it stays on the page.
+  await go('#/document/sec-main');
+  eq(listedUnder('sec-main'), under('sec-main'), 'the chapter\'s page: the chapter unfolded');
+  let ev = fire(link('sec-main'), 'click');
+  ok(ev.defaultPrevented, 'the page\'s own entry does not route');
+  eq(listedUnder('sec-main'), '', 'folded by a click');
+  ok(link('sec-main').parentNode.classList.contains('shut'), 'and marked so');
+  eq(top(), listed(out.roots), 'the rest stays as it was');
+  fire(link('sec-main'), 'click');
+  eq(listedUnder('sec-main'), under('sec-main'), 'unfolded by another');
+  // Another chapter leads to its page, as before.
+  ev = fire(link('sec-foundations'), 'click');
+  ok(!ev.defaultPrevented, 'another chapter is another page: followed');
 });
 
 await check('a nested page has the whole chain in its breadcrumbs', async () => {
@@ -2015,8 +1980,8 @@ await check('the top bar: the style menu and Show progress on the first row; the
   await go('#/checks');
   eq(view(), 'graph', 'an old link the graph answers');
   const aside = dom.document.getElementById('topbar-aside');
-  ok(aside.querySelector('select.theme-select') && aside.querySelector('button.progress-toggle'),
-    'the style menu and Show progress are in the aside');
+  ok(aside.querySelector('button.progress-toggle'), 'Show progress is in the aside');
+  eq(aside.querySelector('select'), null, 'and no style menu');
 });
 
 await check('the top bar\'s icon replays the intro, and the toolbar has no Replay intro', async () => {
@@ -3418,7 +3383,7 @@ await check('the intro is shown on the landing page only, and ?intro=0 leaves it
   ok(!intro.wantsIntro(p, at('/object/def-compact'), ''), 'a link to an object opens on it');
   ok(!intro.wantsIntro(p, at('/document'), ''), 'and so does one to the document');
   ok(!intro.wantsIntro(p, at('/graph'), '?intro=0'), '?intro=0');
-  ok(intro.wantsIntro(p, at('/graph'), '?theme=outline'), 'another parameter keeps it');
+  ok(intro.wantsIntro(p, at('/graph'), '?data=other.json'), 'another parameter keeps it');
   ok(!intro.wantsIntro({}, at('/graph'), ''), 'a project without one');
 });
 

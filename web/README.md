@@ -227,7 +227,7 @@ sections open side by side there is no one level to be in and nothing is
 faded.
 
 The top bar has two rows. The first is the title, the tabs and, at its
-right, the *Style* menu and *Show progress*, which wrap under the tabs as a
+right, *Show progress* and the progress bar, which wrap under the tabs as a
 whole when the row is short of room rather than crowd the title. The second
 is the search box and *Export PDF*, at its right, on every page but the
 graph; on the graph
@@ -365,7 +365,7 @@ A project with `[site] blog` in `blueprint.toml` has a *Blog* tab after
 each field but `id` and `title` left out when the post has none, and copies
 the directory into the site as `blog/`. The page is set as the document's:
 the posts in the sidebar on the left (`.doc-layout`, `nav.toc` and
-`ul.toc-levels`, so every style sets it as it sets the document's), one row
+`ul.toc-levels`, set as the document's), one row
 each, the one open marked `current`. `#/blog` lists them with their dates
 and a *PDF* tag on those that hold one. `#/blog/<id>` is the post: its title
 and date, its words rendered as an object's prose is (`renderBody`), every
@@ -469,19 +469,18 @@ its *level* (`documentLevelOf` in `model.js`): the page of its parent, which
 writes out the entry and its siblings, scrolled to it (`?focus=`) — for a
 chapter, the top of the document (`#/document?focus=<id>`); a reference whose
 level is the page open only scrolls. The sidebar (`levelSidebar` in
-`document.js`) lists, as the contents page does, only the headings:
-the sections of the level the page writes out, under the chain down to it;
-reached by such a link, it shows the entry gone to opened on its own
-sections, and a statement gone to opens the section it is under. So on
-chapter 2's page the sidebar is the heading 2 over 2.1, 2.2, …; a click on
-2.1 opens 2.1's page, with what is in it written out and the sidebar the
-headings 2 and 2.1 over the sections among them. A section of the page on
-screen is only scrolled to and opened, and the link updated, without
-rebuilding the page; the page's own entry scrolls to the top. A page reached
-otherwise — by a *Read* line, the breadcrumbs, a number — lists its own
-sections under its chain, and a section with no section under it is shown
-opened among its siblings. Every style has this sidebar; the Outline
-style unfolds it and draws it as an outline (see below). Query parameters, which a link may
+`document.js`) lists, as the contents page does, only the headings, as an
+outline (`nav.toc.toc-outline`): the contents unfolded down to the level the
+page writes out, every level along the chain to it listed whole. So on
+2.1's page the sidebar is 1, 2, 3, … with 2 unfolded on 2.1, 2.2, …, and 2.1
+on 2.1.1, 2.1.2, …. Reached by such a link, it shows the entry gone to
+opened on its own sections, and a statement gone to opens the section it is
+under. A section of the page on screen is only scrolled to and opened, and
+the link updated, without rebuilding the page; the page's own entry scrolls
+to the top, and folds its entries away (another click unfolds them). A page
+reached otherwise — by a *Read* line, the breadcrumbs, a number — has its
+own sections unfolded under its chain, and a section with no section under
+it is shown opened among its siblings. Query parameters, which a link may
 carry (the page itself has no controls for them):
 
 * `collapse=<kind>`: the collapse order to read along (default: the
@@ -553,29 +552,19 @@ the `uses` written on it are arcs of the statement — declared while the
 statement is visible, derived for whatever it is collapsed into otherwise —
 and it is listed under the statement's "Hidden inside".
 
-### Themes (experimental)
+### The look
 
-A *Style* menu in the top bar switches between the candidate styles of the
-site, so they can be compared on the real thing before one is chosen:
-Default (`style.css` alone), Drafting, Article, Textbook, PreTeXt and Outline.
-Each other style is a sheet in `themes/`, loaded after `style.css`. A sheet
-lists only the rules it changes; Article and Textbook `@import` Drafting,
-Outline imports PreTeXt, and the themes that use web fonts import them
-themselves, so the default fetches none. A theme may also ask for a sidebar:
-Outline sets `data-sidebar="outline"` on `<html>`, and the document marks its
-sidebar `toc-outline`, which `themes/outline.css` draws as an outline: the
-contents unfolded down to the level the page writes out, every level along
-the chain to it listed whole (on 2.1's page: 1, 2, 3, … with 2 unfolded on
-2.1, 2.2, …, and 2.1 on 2.1.1, 2.1.2, …), each entry under a hairline, a
-blue bar beside the chain and the entry opened. A click on the page's own
-entry there folds its entries away, and another unfolds them; it scrolls to
-the top as in every style. Its page keeps the default's margins
-(the sidebar at the left, the text across the rest), not PreTeXt's narrow
-column in the middle. `?theme=<id>` in the page's URL picks a
-style for a shared link; otherwise the reader's last pick is kept in
-`localStorage` (`blueprint.theme`), and a reader who has not picked one sees
-the project's style, `project.theme` (`[site] theme` in `blueprint.toml`), or
-else the default. The registry is `THEMES` in `app.js`.
+The site has one style, `style.css`. Its last section, *the look*, sets it
+after Kiran Kedlaya's notes on prismatic cohomology, a PreTeXt book: Open
+Sans and Roboto Serif (from Google Fonts, `@import`ed at the top of the
+sheet), one deep blue, square corners. It overrides the rules above it where
+the two differ, and was once the *Outline* entry of a *Style* menu that also
+offered a default, Drafting, Article, Textbook and PreTeXt; the menu, those
+styles, `?theme=` and `[site] theme` are gone. The document's sidebar
+(`toc-outline`) is drawn as an outline: each entry under a hairline, each
+level indented, a blue bar beside the chain and the entry opened, this page
+shaded. The page keeps the wide margins (the sidebar at the left, the text
+across the rest), not PreTeXt's narrow column in the middle.
 
 ### Hiding the progress
 
