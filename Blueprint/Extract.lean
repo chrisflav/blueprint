@@ -117,10 +117,13 @@ Everything below walks the graph iteratively and memoises, so a project with
 thousands of constants costs one pass over the reachable part.
 -/
 
-/-- The module a constant was declared in. -/
+/-- The module a constant was declared in.  Read from `header.modules` and not
+`header.moduleNames`, which is not a field but a function that maps over every
+imported module: called once per constant of the walk, that copy was most of
+the time `extract` took on a project of tens of thousands of modules. -/
 def moduleOf? (env : Environment) (n : Name) : Option Name := do
   let idx ← env.getModuleIdxFor? n
-  env.header.moduleNames[idx.toNat]?
+  return (← env.header.modules[idx.toNat]?).module
 
 /-- Sort names and drop duplicates.  The duplicates go first: `Array.qsort`
 partitions Lomuto style and is quadratic in a run of equal elements, and the
