@@ -411,6 +411,7 @@ const PREAMBLE = String.raw`\usepackage[T1]{fontenc}
 \usepackage{textcomp}
 \usepackage[a4paper,margin=2.5cm,headheight=14pt]{geometry}
 \usepackage{amsmath,amssymb,amsthm}
+\usepackage{amscd}  % KaTeX's CD diagrams; part of amsmath, so always there
 \usepackage{mathtools}
 \usepackage{bm}
 \usepackage{graphicx}

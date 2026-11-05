@@ -138,6 +138,13 @@ try {
     ok(fs.existsSync(path.join(out, 'tiny-whole.log')) && fs.existsSync(path.join(out, 'tiny-whole.tex')), 'the log and the TeX are kept');
   });
 
+  await check('a commutative diagram (CD), which KaTeX draws, compiles', () => {
+    const snap = path.join(out, 'cd.json');
+    fs.writeFileSync(snap, tinySnapshot('The square\n\n$$\\begin{CD} A @>f>> B \\\\ @VVV @VVgV \\\\ C @>>> D \\end{CD}$$\n\ncommutes.'));
+    const r = run('--snapshot', snap, '--name', 'cd');
+    eq(r.status, 0, 'compiles: ' + (r.json && r.json.error));
+  });
+
   await check('a formula that would read a file is set as its source, not run', () => {
     const snap = path.join(out, 'read.json');
     fs.writeFileSync(snap, tinySnapshot('Leak $\\input{/etc/hostname}$ here.'));

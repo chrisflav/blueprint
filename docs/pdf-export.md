@@ -235,9 +235,10 @@ snapshot's download adds its revision.
 * **node** 18 or later, for the export itself (the website's tests use it
   already);
 * **TeX Live** with pdfLaTeX for the PDF: the preamble needs only
-  `amsmath`, `amssymb`, `amsthm`, `mathtools`, `bm`, `graphicx`, `xcolor`,
-  `booktabs`, `tabularx`, `fancyvrb`, `ulem`, `microtype`, `lmodern`,
-  `hyperref` and `bookmark` — a TeX Live `scheme-small` is enough, and
+  `amsmath` (with its `amscd`, for `CD` diagrams), `amssymb`, `amsthm`,
+  `mathtools`, `bm`, `graphicx`, `xcolor`, `booktabs`, `tabularx`,
+  `fancyvrb`, `ulem`, `microtype`, `lmodern`, `hyperref` and `bookmark` —
+  a TeX Live `scheme-small` is enough, and
   `mathrsfs`, `stmaryrd` and `cancel` are used when they are installed.
   `latexmk` is used when it is there.  On Debian and Ubuntu:
   `apt-get install latexmk texlive-latex-recommended texlive-latex-extra
