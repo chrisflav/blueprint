@@ -1494,8 +1494,12 @@ await check('the side panel heads with the title, a link into the document, and 
   eq(a.textContent, modelMod.titleOf(o), 'the title');
   eq(a.getAttribute('href'), '#/document?collapse=refines&focus=sec-foundations',
     'a chapter: the top level of the document, scrolled to it');
-  eq(root.querySelectorAll('aside.side a').filter((x) => /Open in document/.test(x.textContent)).length, 0,
-    'the old "Open in document" link is still there');
+  const open = root.querySelector('aside.side .side-open a');
+  ok(open, 'no link under the title');
+  eq(open.textContent, 'Open in document', 'the link under the title');
+  eq(open.getAttribute('href'), a.getAttribute('href'), 'the link under the title leads elsewhere than the title');
+  const kids = [...head.parentNode.children];
+  eq(kids.indexOf(open.parentNode) - kids.indexOf(head), 1, 'the link is not right under the title');
   const kind = head.querySelector('.badge.kind');
   ok(kind, 'no kind beside the title');
   eq(kind.textContent, app.kindBadge(o.kind).textContent, 'the kind');
@@ -2098,8 +2102,9 @@ await check('the graph opens with its toolbar folded, no sidebar and no statisti
     ok(folded.querySelectorAll('label.chk').length > 0, 'the filters are behind Filters');
     ok(!bar().classList.contains('open'), 'the filters start unfolded');
     eq(button('.tb-toggle').getAttribute('aria-expanded'), 'false', 'Filters says it is shut');
-    ok(page().classList.contains('side-hidden'), 'the sidebar starts shown');
-    eq(button('.tb-side').textContent, 'Show sidebar', 'the toolbar offers the sidebar');
+    ok(!page().classList.contains('side-hidden'), 'the sidebar starts hidden');
+    eq(button('.tb-side').textContent, 'Hide sidebar', 'the toolbar offers to hide the sidebar');
+    eq(button('.tb-side').getAttribute('aria-expanded'), 'true', 'and says it is shown');
     ok(stage().classList.contains('stats-hidden'), 'the statistics start shown');
     ok(root.querySelector('#graph-status').textContent.length > 0, 'and are not kept up to date meanwhile');
     eq(button('.tb-stats').textContent, 'Show statistics', 'the toolbar offers the statistics');
@@ -2117,17 +2122,17 @@ await check('the graph opens with its toolbar folded, no sidebar and no statisti
     eq(button('.tb-stats').getAttribute('aria-pressed'), 'true', 'and says they are shown');
     eq(store.get('blueprint.graph.stats'), 'shown', 'the shown statistics are not remembered');
     ok(bar().classList.contains('open'), 'Filters did not unfold');
-    ok(!page().classList.contains('side-hidden'), 'Show sidebar did not show it');
-    eq(button('.tb-side').textContent, 'Hide sidebar', 'the button offers to hide it again');
+    ok(page().classList.contains('side-hidden'), 'Hide sidebar did not hide it');
+    eq(button('.tb-side').textContent, 'Show sidebar', 'the button offers to show it again');
     eq(store.get('blueprint.graph.tools'), 'shown', 'the unfolded filters are not remembered');
-    eq(store.get('blueprint.graph.side'), 'shown', 'the shown sidebar is not remembered');
+    eq(store.get('blueprint.graph.side'), 'hidden', 'the hidden sidebar is not remembered');
 
     // A redraw and a fresh graph page keep the reader's choice.
     await go('#/graph?collapse=refines&reduce=0');
-    ok(bar().classList.contains('open') && !page().classList.contains('side-hidden'), 'lost on a redraw');
+    ok(bar().classList.contains('open') && page().classList.contains('side-hidden'), 'lost on a redraw');
     ok(!stage().classList.contains('stats-hidden'), 'the statistics lost on a redraw');
     await mountGraph();
-    ok(bar().classList.contains('open') && !page().classList.contains('side-hidden'), 'lost on a fresh page');
+    ok(bar().classList.contains('open') && page().classList.contains('side-hidden'), 'lost on a fresh page');
     ok(!stage().classList.contains('stats-hidden'), 'the statistics lost on a fresh page');
 
     fire(button('.tb-toggle'), 'click');
@@ -2136,8 +2141,8 @@ await check('the graph opens with its toolbar folded, no sidebar and no statisti
     eq(store.get('blueprint.graph.stats'), 'hidden', 'hiding the statistics is not remembered');
     ok(stage().classList.contains('stats-hidden'), 'the statistics did not hide again');
     eq(store.get('blueprint.graph.tools'), 'hidden', 'folding the filters is not remembered');
-    eq(store.get('blueprint.graph.side'), 'hidden', 'hiding the sidebar is not remembered');
-    ok(!bar().classList.contains('open') && page().classList.contains('side-hidden'), 'did not hide again');
+    eq(store.get('blueprint.graph.side'), 'shown', 'showing the sidebar is not remembered');
+    ok(!bar().classList.contains('open') && !page().classList.contains('side-hidden'), 'did not change back');
   } finally {
     delete global.localStorage;
     await mountGraph();
