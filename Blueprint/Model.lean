@@ -480,7 +480,7 @@ namespace Blueprint
 
 /-! ## String helpers
 
-The 4.34 toolchain returns slices from the `trim` family; these wrappers keep
+The toolchain returns slices from the `trim` family; these wrappers keep
 the rest of the code in terms of `String`.
 -/
 
