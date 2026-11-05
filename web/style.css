@@ -256,6 +256,8 @@ label.chk input { margin: 0; }
 }
 .tabs a:hover { background: var(--panel-2); text-decoration: none; }
 .tabs a.active { color: var(--fg); background: var(--accent-soft); font-weight: 560; }
+/* The Blog tab, until blog.json says the site has posts (app.js, `loadBlog`). */
+.tabs a[hidden] { display: none; }
 
 /* The experimental style menu (app.js, THEMES). */
 .topbar-aside .theme-select { font-size: .8rem; padding: .15em .3em; max-width: 7.5rem; }
@@ -1153,6 +1155,31 @@ ul.objlist .role {
 .toc-levels li.on-path > a { font-weight: 600; }
 .toc-levels li.current > a { color: var(--fg); }
 .doc-layout { display: grid; grid-template-columns: 15rem 1fr; gap: 2rem; align-items: start; }
+
+/* The blog (blog.js): the posts in the document's sidebar, a post's words,
+   then its PDF read in the page. */
+.blog-toc .toc-head a { color: inherit; }
+.blog-list { list-style: none; margin: 0; padding: 0; }
+.blog-list li {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .7rem;
+  padding: .55rem 0; border-bottom: 1px solid var(--border);
+}
+.blog-list .blog-title { font-weight: 560; }
+.blog-date { color: var(--muted); font-size: .86rem; font-variant-numeric: tabular-nums; }
+.blog-head { margin-bottom: 1.2rem; }
+.blog-head h1 { margin: 0; }
+.blog-head .blog-date { margin: .3rem 0 0; }
+.blog-tag {
+  font-size: .72rem; color: var(--muted); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 0 .4em;
+}
+.blog-pdf { margin: 1.4rem 0; }
+.blog-pdf-links { font-size: .88rem; margin: 0 0 .5rem; }
+.blog-pdf iframe {
+  display: block; width: 100%; height: calc(100vh - var(--topbar-h) - 6rem); min-height: 24rem;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel);
+}
+.blog-pager { margin-top: 2rem; }
 
 /* The split document: where a page sits, and its neighbours. */
 .doc-crumbs { font-size: .86rem; color: var(--muted); margin: 0 0 .6rem; }

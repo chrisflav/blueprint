@@ -389,6 +389,10 @@ Assembles the static website:
   `data/index.json` lists the snapshot that was just built — as
   `data/<sha>.json` when `history add` already filed it, and otherwise as an
   entry pointing at `blueprint.json` itself;
+* with `[site] blog` in `blueprint.toml`, copies that directory to
+  `<dir>/blog/` and lists its posts in `<dir>/blog.json`, which the website's
+  *Blog* page reads (see `[site] blog` below); otherwise removes
+  `blog.json`;
 * with `[site.comments]` in `blueprint.toml`, writes
   `<dir>/comments-config.json`, which says where the website's comments go:
   the Zulip and channel the comment server posts them to, and the comment
@@ -556,6 +560,7 @@ descend = ["MyProject", "MyLib"]    # optional: where the dependency walk goes
 theme   = "outline"                 # the style the website opens in
 numbering = "nested"                # statements inside statements: n.m.k, default "flat"
 assets  = "site-assets"             # copied into the site as assets/
+blog    = "blog"                    # posts, Markdown and PDFs, on the Blog page
 logo    = "assets/logo.svg"         # left of the title in the top bar
 logoInk = true                      # drawn in the title's colour, default false
 
@@ -673,6 +678,23 @@ inside it is then numbered on its own, `1`, `2`, …, and a reference to it
 reads its title.  Either way it takes no place among its siblings, so they
 are numbered as if it were not there: with an unnumbered introduction the
 next chapter is `1`.  `check` reports `bad-attr` for any other value.
+
+`[site] blog` names a directory, relative to the root, of posts the website
+shows on a *Blog* page, a tab after *Progress*. Each `*.md` at its top is a
+post: Markdown, rendered as an object's prose is (maths, `[slug]`
+references, pictures, HTML), with optional TOML front matter between `+++`
+lines, `title` and `date` (a string or a TOML date, shown as written). Without
+a `title` its first line is the title when it is a `# ` heading, and its file
+name otherwise. Each `*.pdf` at its top is a post too, read in the page
+under its file name; a post and a PDF of the same name, `paper.md` and
+`paper.pdf`, are one post, its words above the PDF. The posts are listed in
+the order of their file names, so `01-…`, `02-…` or dates put them in order.
+`blueprint site` copies the whole directory into the site as `blog/`, so a
+post refers to its pictures and other files by their place in the directory
+(`![](fig/a.png)`, `[slides](talks/slides.pdf)`), and only the top level
+makes posts. It is not part of the snapshot, so `blueprint build` ignores it;
+keep it outside `dir`, whose Markdown files are the blueprint's objects. A
+site without it has no Blog tab.
 
 `[site.intro]` is what the website shows in the middle of the screen when
 it is opened at its landing page, drawn as a single graph node, before it

@@ -203,7 +203,8 @@ const URL_ATTRS = [
   ['object', 'data'], ['a', 'href'],
 ];
 
-function resolveUrls(root, base) {
+/** Every address in `root` resolved against `base` (`resolveUrl`). */
+export function resolveUrls(root, base) {
   for (const [tag, attr] of URL_ATTRS) {
     for (const node of root.querySelectorAll(tag)) {
       const v = node.getAttribute(attr);

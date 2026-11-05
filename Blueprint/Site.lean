@@ -1,5 +1,6 @@
 import Std.Time
 import Blueprint.Diff
+import Blueprint.Parse
 
 /-!
 # Assembling the static site and the history index
@@ -102,6 +103,97 @@ def copyDir (src dst : System.FilePath) (exclude : Array String := #[]) : IO Nat
 but its own fixtures and tests are not part of it, and neither is the comment
 server, which `blueprint serve` runs from `web/` itself. -/
 def siteExcludes : Array String := #["sample", "test", "README.md", commentServerScript]
+
+/-! ## The blog
+
+`[site] blog` names a directory of posts, which the website shows on its
+*Blog* page.  Each `*.md` at its top is a post, Markdown with optional TOML
+front matter between `+++` lines (`title`, `date`), and each `*.pdf` there is
+one too, read in the page; a post and a PDF of the same name are one post,
+its words above the PDF.  The posts are listed in the order of their file
+names.  `blueprint site` copies the directory into the site as `blog/`, so a
+post refers to its pictures and PDFs by their place in it, and writes the
+list to `blog.json` beside the snapshot (`web/README.md`). -/
+
+/-- One post of the blog. -/
+structure BlogPost where
+  /-- Its file name without the extension: its address on the Blog page. -/
+  id : String
+  /-- `title` in its front matter, else its first line when that is a `# `
+  heading, else its id. -/
+  title : String
+  /-- `date` in its front matter, as written; empty for none. -/
+  date : String := ""
+  /-- Its Markdown, without the front matter or the heading taken as its
+  title. -/
+  body : String := ""
+  /-- The file name of its PDF in the blog directory; empty for none. -/
+  pdf : String := ""
+  deriving Inhabited
+
+/-- A post as JSON, what it does not have left out. -/
+def BlogPost.toJson (p : BlogPost) : Json :=
+  Json.mkObj ([("id", Json.str p.id), ("title", Json.str p.title)] ++
+    (if p.date.isEmpty then [] else [("date", Json.str p.date)]) ++
+    (if p.body.isEmpty then [] else [("body", Json.str p.body)]) ++
+    (if p.pdf.isEmpty then [] else [("pdf", Json.str p.pdf)]))
+
+/-- The post written in the Markdown file `path`. -/
+def readBlogPost (path : System.FilePath) (id : String) : IO BlogPost := do
+  let text ← IO.FS.readFile path
+  let fenced := match (splitLines text)[0]? with
+    | some l => trim l == "+++"
+    | none => false
+  let mut entries : Array (String × TValue) := #[]
+  let mut body := trim text
+  if fenced then
+    match splitFrontMatter text with
+    | .error e => throw <| IO.userError s!"{path}: {e}"
+    | .ok (front, b) =>
+      match ← parseToml front path.toString with
+      | .error e => throw <| IO.userError s!"{path}: front matter: {e}"
+      | .ok t =>
+        entries := t.entries
+        body := b
+  let field (k : String) : IO String := match entries.find? (·.1 == k) with
+    | none => pure ""
+    | some (_, .str s) => pure s
+    | some (_, .dateTime s) => pure s
+    | some (_, v) => throw <| IO.userError s!"{path}: '{k}' must be a string, got a {v.typeName}"
+  let title ← field "title"
+  let date ← field "date"
+  if !title.isEmpty then return { id, title, date, body }
+  -- No title: its first line, when that is a heading, or else its name.
+  let lines := splitLines body
+  match lines[0]? with
+  | some l =>
+    if l.startsWith "# " then
+      return { id, title := trim (l.drop 2).copy, date,
+               body := trim (String.intercalate "\n" (lines.toList.drop 1)) }
+    else return { id, title := id, date, body }
+  | none => return { id, title := id, date, body }
+
+/-- The posts of the blog directory `dir`, in the order of their names. -/
+def readBlog (dir : System.FilePath) : IO (Array BlogPost) := do
+  let files ← (← dir.readDir).filterM fun e => do return !(← e.path.isDir)
+  let ext (e : IO.FS.DirEntry) : String := (e.path.extension.getD "").toLower
+  let stem (e : IO.FS.DirEntry) : String := e.path.fileStem.getD e.fileName
+  let mut ids : Array String := #[]
+  for e in files do
+    if (ext e == "md" || ext e == "pdf") && !ids.contains (stem e) then ids := ids.push (stem e)
+  let mut posts := #[]
+  for id in ids.qsort (· < ·) do
+    let md := files.find? fun e => stem e == id && ext e == "md"
+    let pdf := files.find? fun e => stem e == id && ext e == "pdf"
+    let post ← match md with
+      | some e => readBlogPost e.path id
+      | none => pure { id, title := id }
+    posts := posts.push { post with pdf := (pdf.map (·.fileName)).getD "" }
+  return posts
+
+/-- `blog.json`: the posts, in order. -/
+def blogJson (posts : Array BlogPost) : Json :=
+  Json.mkObj [("posts", Json.arr (posts.map BlogPost.toJson))]
 
 /-! ## The history index -/
 

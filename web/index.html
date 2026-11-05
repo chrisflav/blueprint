@@ -35,7 +35,7 @@
   try {
     (function () {
       var view = (location.hash.match(/^#\/([a-z]+)/) || [])[1];
-      if (['object', 'contents', 'document', 'progress', 'search'].indexOf(view) < 0) view = 'graph';
+      if (['object', 'contents', 'document', 'progress', 'search', 'blog'].indexOf(view) < 0) view = 'graph';
       // Which page it is, for what the top bar shows on it (style.css): the
       // graph has no second row, so it must not show one while it loads.
       document.documentElement.setAttribute('data-view', view);
@@ -130,6 +130,8 @@
       <a href="#/contents" data-view="contents">Contents</a>
       <a href="#/document" data-view="document">Document</a>
       <a href="#/progress" data-view="progress">Progress</a>
+      <!-- Shown once blog.json says the site has posts (app.js, `loadBlog`). -->
+      <a href="#/blog"     data-view="blog" hidden>Blog</a>
     </nav>
     <!-- The style menu and Show progress, at the right of the first row; on
          a row too short for them they wrap under the title as a whole rather

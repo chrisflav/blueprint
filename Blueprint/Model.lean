@@ -355,6 +355,11 @@ structure Project where
   serves, such as the pictures of the intro.  `blueprint site` copies it into
   the site as `assets/`.  Empty for none; not part of the snapshot. -/
   assets : String := ""
+  /-- `[site] blog`: a directory, relative to the root, of posts the
+  website's *Blog* page shows, Markdown and PDFs (`readBlog`).  `blueprint
+  site` copies it into the site as `blog/` and lists its posts in
+  `blog.json`.  Empty for none; not part of the snapshot. -/
+  blog : String := ""
   /-- `[site.comments] zulip`: the address of the Zulip server the comment
   server keeps the website's comments on, rather than in its comment files;
   empty for those.  Not part of the snapshot: `blueprint site` writes it to

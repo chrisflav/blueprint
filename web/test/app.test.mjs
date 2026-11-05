@@ -53,6 +53,22 @@ global.window.marked = fakeMarked();
 const katex = fakeKatex();
 global.window.renderMathInElement = katex;
 
+// The site's blog, blog.json beside the snapshot, as `blueprint site` writes
+// it for `[site] blog`; and its tab, which index.html has hidden until then.
+const blog = { posts: [
+  { id: '01-hello', title: 'Hello $x$', date: '2026-11-05', body: 'Words about [def-compact].' },
+  { id: '02-paper', title: 'Notes on a paper', body: 'What I think of it.', pdf: '02-paper.pdf' },
+  { id: '03 slides', title: '03 slides', pdf: '03 slides.pdf' },
+] };
+dom.net.routes.push((u) => (/(^|\/)blog\.json$/.test(u) ? [200, JSON.stringify(blog), 'application/json'] : null));
+{
+  const tab = dom.document.createElement('a');
+  tab.setAttribute('href', '#/blog');
+  tab.setAttribute('data-view', 'blog');
+  tab.hidden = true;
+  dom.document.getElementById('tabs').appendChild(tab);
+}
+
 // What index.html's inline script does before any module has loaded: ask for
 // the snapshot, and leave the request for app.js to pick up.
 global.window.blueprintSnapshot = { url: './blueprint.json', response: global.fetch('./blueprint.json') };
@@ -1075,6 +1091,31 @@ await check('a chapter page: breadcrumbs, its entries, its siblings', async () =
   eq(pager.querySelectorAll('a.up')[0].getAttribute('href'), '#/document?collapse=refines', 'up to the top');
 });
 
+await check('the pager links a page to the neighbours of its own layer: headings to headings, statements to statements', async () => {
+  const links = () => {
+    const p = root.querySelectorAll('.doc-pager')[0];
+    const href = (sel) => { const a = p.querySelector(sel); return a ? decodeURIComponent(a.getAttribute('href')) : null; };
+    return { prev: href('a.prev'), next: href('a.next'), up: href('a.up') };
+  };
+  // 2.1 is chapter 2's only section; the statement after it (Theorem 2.3) is
+  // of another layer.
+  await go('#/document/sec-main-induction');
+  let l = links();
+  eq(l.prev, null, '2.1, the first section of its chapter, has no previous one');
+  eq(l.next, null, 'and, the last, no next one, though a theorem follows it');
+  eq(l.up, '#/document/sec-main?collapse=refines', 'up to its chapter');
+  // The last chapter: top-level statements follow it, but no chapter does.
+  await go('#/document/sec-applications');
+  l = links();
+  ok(l.prev && l.prev.startsWith('#/document/sec-main?'), 'the chapter before it');
+  eq(l.next, null, 'the last chapter has no next one');
+  // A statement with a page of its own: its neighbours are statements.
+  await go('#/document/' + encodeURIComponent('uses/thm-tychonoff/lem-ultrafilter'));
+  l = links();
+  ok(l.prev && l.prev.startsWith('#/document/generalises/'), `the statement before it, not a chapter: ${l.prev}`);
+  eq(l.next, null, 'the last statement at the top');
+});
+
 await check('a click on any title stays on the page, scrolled to it', async () => {
   const click = (a) => fire(root.querySelector('.doc-flow'), 'click', { target: a, button: 0 });
   const title = (sel) => root.querySelector(sel + ' .head a.doc-title');
@@ -1640,6 +1681,57 @@ await check('a Lean card link opens the panel and lands on the declaration', asy
   ok(target.classList.contains('flash'), 'the declaration asked for is marked');
   await go('#/object/def-filter?lean=');
   ok(root.querySelector('details.panel[data-fold="lean"]').classList.contains('flash'), '?lean= marks the panel');
+});
+
+// ---------------------------------------------------------------------------
+// 2e. the blog
+// ---------------------------------------------------------------------------
+
+await check('the blog: its tab once it has posts, the posts in the sidebar, and a list of them', async () => {
+  const tab = [...dom.document.getElementById('tabs').querySelectorAll('a')].find((a) => a.dataset.view === 'blog');
+  eq(tab.hidden, false, 'blog.json has posts, but the tab is still hidden');
+  await go('#/blog');
+  await app.rendered;
+  ok(tab.classList.contains('active'), 'the tab is not marked as the page on screen');
+  const rows = [...root.querySelectorAll('nav.blog-toc li.toc-entry a')];
+  eq(rows.map((a) => a.getAttribute('href')).join(' '),
+    '#/blog/01-hello #/blog/02-paper #/blog/03%20slides', 'a row per post, in order');
+  eq(root.querySelectorAll('nav.blog-toc li.current').length, 0, 'no post is open');
+  const items = [...root.querySelectorAll('ul.blog-list li')];
+  eq(items.length, 3, 'the page lists every post');
+  eq(items[0].querySelector('.blog-date').textContent, '2026-11-05', 'with its date');
+  eq(items.filter((li) => li.querySelector('.blog-tag')).length, 2, 'and whether it holds a PDF');
+});
+
+await check('a post: its words and its neighbours', async () => {
+  await go('#/blog/01-hello');
+  const current = root.querySelectorAll('nav.blog-toc li.current a');
+  eq(current.length, 1, 'the post opened is marked in the sidebar');
+  eq(current[0].getAttribute('aria-current'), 'page', 'and says so');
+  eq(root.querySelector('.blog-head .blog-date').textContent, '2026-11-05', 'its date');
+  const prose = root.querySelector('article.blog-post .prose');
+  ok(prose, 'its words are written out');
+  const ref = [...prose.querySelectorAll('a')].find((a) => (a.getAttribute('href') || '').startsWith('#/'));
+  ok(ref, 'a [slug] is a reference into the blueprint');
+  eq(root.querySelectorAll('.blog-pdf').length, 0, 'no PDF for a post without one');
+  const pager = root.querySelector('nav.blog-pager');
+  eq(pager.querySelector('a.prev'), null, 'the first post has no previous one');
+  eq(pager.querySelector('a.next').getAttribute('href'), '#/blog/02-paper', 'the next one');
+});
+
+await check('a post with a PDF reads it in the page; a PDF alone is a post too', async () => {
+  await go('#/blog/02-paper');
+  ok(root.querySelector('article.blog-post .prose'), 'its words come first');
+  const frame = root.querySelector('.blog-pdf iframe');
+  ok(frame && /\/blog\/02-paper\.pdf$/.test(frame.getAttribute('src')), `the PDF is read in the page: ${frame && frame.getAttribute('src')}`);
+  const open = root.querySelector('.blog-pdf-links a');
+  eq(open.getAttribute('href'), frame.getAttribute('src'), 'and can be opened on its own');
+  await go('#/blog/' + encodeURIComponent('03 slides'));
+  eq(root.querySelector('article.blog-post .prose'), null, 'a PDF without words has none');
+  ok(/\/blog\/03%20slides\.pdf$/.test(root.querySelector('.blog-pdf iframe').getAttribute('src')), 'its name is escaped');
+  eq(root.querySelector('nav.blog-pager a.next'), null, 'the last post has no next one');
+  await go('#/blog/nothing-here');
+  eq(root.querySelector('.error-box h1').textContent, 'No such post', 'a post that is not there says so');
 });
 
 // ---------------------------------------------------------------------------
@@ -2903,7 +2995,7 @@ await check('every module app.js imports is preloaded by index.html', () => {
 });
 
 await check('the app hands over the pages, ELK and the export, most likely first', async () => {
-  eq(appPrefetch.pendingPrefetch().join(' '), 'graph document contents object elk elk-worker search progress export',
+  eq(appPrefetch.pendingPrefetch().join(' '), 'graph document contents object elk elk-worker search progress blog export',
     'the tasks app.js set up');
 });
 
