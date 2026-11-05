@@ -59,10 +59,12 @@ Within the chosen part:
 * `hidden` text is set in place as bare prose, unnumbered;
 * an entry's `serial` numbers it as on the website, or leaves it
   unnumbered: its heading and its line in the contents are its title alone;
-* an entry with `hide_content = true` is left out as the website leaves it
-  off its parent's page: no heading, prose, proofs or steps of its own, while
-  its children, its number and its line in the PDF's contents stay.  As the
-  part exported it is written out, as on its own page;
+* an entry with `hide_content = true` is left out much as the website leaves
+  it off its parent's page: no prose, proofs or steps of its own, while its
+  children, its number and its line in the PDF's contents stay.  A heading
+  (a chapter, a section, …) keeps its heading line, number and title, so
+  what is below it is still read under it; the website shows no heading.  As
+  the part exported it is written out, as on its own page;
 * sugar edges with nothing to say (`refines/a/b`, a bare `uses`) are
   structure and are not set;
 * **an object with several parents is written out once**, at the first place

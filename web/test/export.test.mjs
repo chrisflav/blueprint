@@ -271,7 +271,7 @@ await check('serial: a chapter with a number of its own, and one with none, in t
   ok(/\\hyperref\[bp\d+\]\{Lemma A\.8\}/.test(tex), 'a reference does not read Lemma A.8');
 });
 
-await check('hide_content leaves an entry\'s heading and prose out, and keeps its children and its line in the contents', async () => {
+await check('hide_content leaves an entry\'s prose out, and keeps its heading, its children and its line in the contents', async () => {
   const snap = JSON.parse(paperText);
   const o = snap.objects.find((x) => x.id === 'spaces');
   o.attrs = { ...(o.attrs || {}), hide_content: true };
@@ -279,8 +279,9 @@ await check('hide_content leaves an entry\'s heading and prose out, and keeps it
   const res = exportLatex(m, {});
   const tex = res.tex;
   ok(/^% object: spaces .*content hidden$/m.test(tex), 'the hidden chapter is not marked as such');
-  ok(!/\\section\*\{\\texorpdfstring\{2\\quad Covers and compact spaces/.test(tex), 'its heading is written');
-  ok(/\\addcontentsline\{toc\}\{section\}\{\\texorpdfstring\{2\\quad Covers and compact spaces/.test(tex), 'its line in the contents is gone');
+  // The PDF keeps a hidden heading's heading line (the website leaves it off its parent's page).
+  eq((tex.match(/\\section\*\{\\texorpdfstring\{2\\quad Covers and compact spaces/g) || []).length, 1, 'its heading, once');
+  eq((tex.match(/\\addcontentsline\{toc\}\{section\}\{\\texorpdfstring\{2\\quad Covers and compact spaces/g) || []).length, 1, 'its line in the contents, once');
   ok(written(tex).includes('def-cover') && /2\.2\\quad Compact spaces/.test(tex), 'its children are gone');
   ok(!tex.includes(m.byId.get('spaces').body.trim().slice(0, 30)), 'its prose is written');
   // Every label referred to is set: nothing points at a heading not written.
@@ -291,6 +292,14 @@ await check('hide_content leaves an entry\'s heading and prose out, and keeps it
   eq(whole, planExport(paper(), {}).stats.entries - 1, 'the hidden entry is counted');
   const part = exportLatex(m, { scope: 'spaces' }).tex;
   ok(/\\section\*\{\\texorpdfstring\{2\\quad Covers and compact spaces/.test(part), 'exported as the part, it heads it');
+  ok(part.includes(m.byId.get('spaces').body.trim().slice(0, 30)), 'with its prose');
+  // A statement has no heading line: hidden, nothing of it is set but what places it.
+  const s2 = JSON.parse(paperText);
+  const thm = s2.objects.find((x) => x.id === 'thm-fip');
+  thm.attrs = { ...(thm.attrs || {}), hide_content: true };
+  const t2 = exportLatex(M.buildModel(s2), {}).tex;
+  ok(!t2.includes('{Theorem~2.4}'), 'a hidden statement gets no statement head');
+  ok(written(t2).includes('lem-complements'), 'its details stay');
 });
 
 await check('a shared lemma whose first place is elsewhere is written out in full', () => {
