@@ -66,8 +66,11 @@ Within the chosen part:
 Bibliography entries (kind `reference`, `docs/cli.md`) are set as
 `thebibliography` sets them, the label hanging in the margin (`\bpbibitem`),
 and a citation, `[id]`, `[a, b]` or `[a, Exp. X]`, reads as on the website,
-"[Del74, Exp. X]", each label a link to its entry when the entry is in the
-export.
+"[Del74, Exp. X]", each label a link to its entry.  An export that cites a
+work whose entry it does not write out in place (a chapter, say, while the
+bibliography is a section of its own) ends with a *References* section of
+those entries alone, sorted by label, so every citation in a PDF has its
+entry in it.
 
 References (`[slug]`) read as on the website ("Lemma 2.3", or just "2.3"
 after "Lemma"; `referenceLabel` in `model.js`):
@@ -75,7 +78,8 @@ after "Lemma"; `referenceLabel` in `model.js`):
 * to something in the export: a link to it;
 * to something the export leaves out: the same words, marked with a
   superscript ∗ that links to an *Outside this export* list at the end, which
-  says what each is and where in the blueprint it lives;
+  says what each is and where in the blueprint it lives.  It starts a new
+  page, and so does the *References* section after it;
 * to a step or proof: its slug, linked when it is in the export;
 * to nothing: `[slug?]` in red, and a diagnostic naming the object.
 
