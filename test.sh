@@ -893,6 +893,41 @@ else
   bad "a [site] assets that is not a directory is refused"; cat "$TMP/badassets.out"
 fi
 
+# `[site] blog` is copied into the site as `blog/`, its posts listed in
+# `blog.json`, in the order of their names: a Markdown post with its front
+# matter or its first heading as title, a PDF alone, and a post and a PDF of
+# the same name as one.  Without it there is no blog.json, even from a
+# previous run.
+rm -rf "$TMP/blog" "$TMP/blog.site"; cp -r examples/minimal "$TMP/blog"
+mkdir -p "$TMP/blog/posts/fig"
+printf '+++\ntitle = "Hello"\ndate = 2026-11-05\n+++\nWords, ![x](fig/a.png).\n' > "$TMP/blog/posts/01-hello.md"
+printf '# Notes on a paper\n\nWhat I think of it.\n' > "$TMP/blog/posts/02-paper.md"
+printf 'pdf' > "$TMP/blog/posts/02-paper.pdf"
+printf 'pdf' > "$TMP/blog/posts/03-slides.pdf"
+printf 'png' > "$TMP/blog/posts/fig/a.png"
+printf '\n[site]\nblog = "posts"\n' >> "$TMP/blog/blueprint.toml"
+if "$BP" site --root "$TMP/blog" -o "$TMP/blog.site" > "$TMP/blog.out" 2>&1 \
+   && grep -qF '{"posts":[{"body":"Words, ![x](fig/a.png).","date":"2026-11-05","id":"01-hello","title":"Hello"},{"body":"What I think of it.","id":"02-paper","pdf":"02-paper.pdf","title":"Notes on a paper"},{"id":"03-slides","pdf":"03-slides.pdf","title":"03-slides"}]}' "$TMP/blog.site/blog.json" \
+   && [ "$(cat "$TMP/blog.site/blog/02-paper.pdf")" = pdf ] \
+   && [ "$(cat "$TMP/blog.site/blog/fig/a.png")" = png ] \
+   && [ -f "$TMP/blog.site/blog.js" ] \
+   && ! grep -q '"blog"' "$TMP/blog.site/blueprint.json" \
+   && "$BP" site --root examples/minimal -o "$TMP/blog.site" > /dev/null 2>&1 \
+   && [ ! -e "$TMP/blog.site/blog.json" ]; then
+  ok "[site] blog reaches the site as blog/ and blog.json"
+else
+  bad "[site] blog reaches the site as blog/ and blog.json"
+  cat "$TMP/blog.out"; cat "$TMP/blog.site/blog.json"
+fi
+rm -rf "$TMP/badblog"; cp -r examples/minimal "$TMP/badblog"
+printf '\n[site]\nblog = "nowhere"\n' >> "$TMP/badblog/blueprint.toml"
+if ! "$BP" site --root "$TMP/badblog" -o "$TMP/badblog.site" > "$TMP/badblog.out" 2>&1 \
+   && grep -q "'\[site\] blog' is nowhere, but .* is not a directory" "$TMP/badblog.out"; then
+  ok "a [site] blog that is not a directory is refused"
+else
+  bad "a [site] blog that is not a directory is refused"; cat "$TMP/badblog.out"
+fi
+
 # unresolved `\uses` must not become an edge, and must be visible in the body
 # it was written in: here the proof, which is a file of its own
 if grep -q 'Unresolved dependencies: lem:nowhere' \

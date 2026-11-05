@@ -69,7 +69,7 @@ Only what the screen on it needs, and as much of it at once as can be:
   `index.html`, before any other script has arrived; `app.js` takes that
   request over (`fetchSnapshot`) rather than making its own;
 * each page's module (`graph.js`, `contents.js`, `document.js`, `object.js`,
-  `progress.js`, `search.js`) is imported the first time the reader goes to it (`PAGES` in
+  `progress.js`, `search.js`, `blog.js`) is imported the first time the reader goes to it (`PAGES` in
   `app.js`). The one the URL opens on is preloaded by the same script in
   `index.html`, and `app.js`'s own imports by `modulepreload` tags, so they
   download beside `app.js` instead of after it;
@@ -87,6 +87,9 @@ Only what the screen on it needs, and as much of it at once as can be:
   characters, and storage that is full or refused just means no cache;
 * `data/index.json` is not waited for: the first page is drawn without it, and
   the progress page again once it is in;
+* nor is `blog.json`, the blog's posts: it is asked for once the first page
+  is drawn (or by the Blog page itself, when that is the first), and the Blog
+  tab is shown only once it has posts;
 * the snapshot's SHA-256 is worked out when the PDF export first asks for it.
 
 `app.js` itself is loaded `async`, so it starts on the above while KaTeX and
@@ -123,6 +126,8 @@ All state lives in the URL hash, so every view is a shareable link.
 | `#/document` | the contents of the linear document |
 | `#/document/<id>` | the page of one entry of the document |
 | `#/progress` | dashboard and time slider |
+| `#/blog` | the blog's posts, listed |
+| `#/blog/<id>` | one post (the id is its file name without the extension) |
 | `#/search?query=<keywords>` | the search page; also `radius=all\|statements`, `page=<n>`, `perpage=10\|50\|all` |
 
 There is no page of checks: the site's snapshot carries none (`blueprint
@@ -345,6 +350,31 @@ once per snapshot. Two places use it:
   while a search is on;
 * the progress listing's search box, combined with its kind, status and
   "under" filters (`model.filterListing`).
+
+### The blog
+
+A project with `[site] blog` in `blueprint.toml` has a *Blog* tab after
+*Progress* (`blog.js`; `docs/cli.md` says what goes in the directory).
+`blueprint site` lists the posts in `blog.json` beside the snapshot,
+
+```jsonc
+{ "posts": [ { "id": "02-paper", "title": "Notes on a paper", "date": "2026-11-05",
+               "body": "Markdown", "pdf": "02-paper.pdf" } ] }
+```
+
+each field but `id` and `title` left out when the post has none, and copies
+the directory into the site as `blog/`. The page is set as the document's:
+the posts in the sidebar on the left (`.doc-layout`, `nav.toc` and
+`ul.toc-levels`, so every style sets it as it sets the document's), one row
+each, the one open marked `current`. `#/blog` lists them with their dates
+and a *PDF* tag on those that hold one. `#/blog/<id>` is the post: its title
+and date, its words rendered as an object's prose is (`renderBody`), every
+address in them read in `blog/` (`resolveUrls` in `intro.js`), then its PDF
+in an `<iframe>`, the browser's own viewer, with *Open the PDF* and
+*Download* links above it for a browser that shows none, and at the foot the
+previous and next posts and *All posts*. Without `blog.json`, or with no
+posts in it, the tab stays hidden (`index.html` has it `hidden`) and the
+page, opened all the same, says there is no blog.
 
 ### Comments
 

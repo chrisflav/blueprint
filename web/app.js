@@ -23,6 +23,7 @@ const PAGES = {
   document: () => import('./document.js'),
   progress: () => import('./progress.js'),
   search: () => import('./search.js'),
+  blog: () => import('./blog.js'),
 };
 const pageModules = new Map(); // view -> Promise of its module
 const loadedPages = new Map(); // view -> its module, once it is in
@@ -737,6 +738,7 @@ const app = {
   dataUrl: null,
   baseUrl: null,
   history: null, // {snapshots:[...]} from data/index.json, or null
+  blogData: undefined, // {posts:[...]} from blog.json, null for none, undefined until known
   viewingSha: null, // non-null while a historical snapshot is displayed
   showProgress: false, // true once the reader shows the formalization progress
 
@@ -828,6 +830,9 @@ const app = {
     await render();
   },
 
+  /** The blog's posts (a Promise of {posts}, or of null for no blog). */
+  blog: () => loadBlog(),
+
   /** Show or hide the formalization progress, remembered for the reader. */
   setShowProgress: (shown) => setShowProgress(shown),
 
@@ -908,6 +913,31 @@ async function loadHistory() {
   } catch (e) {
     app.history = null; // no history index: the slider stays hidden
   }
+}
+
+// The blog, blog.json beside the snapshot, which `blueprint site` writes for
+// `[site] blog`: asked for once, after the first page is drawn unless that is
+// the Blog page.  Its tab is shown only once it is known to have posts.
+let blogPromise = null;
+
+function loadBlog() {
+  if (!blogPromise) {
+    blogPromise = (async () => {
+      try {
+        const blog = await fetchJson(new URL('blog.json', snapshotBase(app)).href);
+        return blog && Array.isArray(blog.posts) && blog.posts.length ? blog : null;
+      } catch (e) {
+        return null; // no blog.json: no blog
+      }
+    })().then((blog) => {
+      app.blogData = blog;
+      for (const a of document.querySelectorAll('#tabs a')) {
+        if (a.dataset.view === 'blog') a.hidden = !blog;
+      }
+      return blog;
+    });
+  }
+  return blogPromise;
 }
 
 function dataUrlFromQuery() {
@@ -1411,6 +1441,7 @@ async function boot() {
   loadHistory().then(() => {
     if (app.history && app.route && app.route.view === 'progress' && !app.viewingSha) render();
   });
+  loadBlog();
   setupGlobalSearch();
   setupPreviews(app);
   setupExport(app);
@@ -1460,6 +1491,7 @@ function prefetchTasks() {
       run: async () => (await import('./graph.js')).warmElk(),
     },
     page('search'), page('progress'),
+    { ...page('blog'), needed: () => !!app.blogData && !pageModules.has('blog') },
     { name: 'export', needed: () => true, run: () => prefetchModule('./export/latex.js') },
   ];
 }

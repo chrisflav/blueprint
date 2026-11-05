@@ -669,6 +669,19 @@ def assembleSite (root : System.FilePath) (out : System.FilePath) (args : Args) 
       throw <| IO.userError s!"'[site] assets' is {assets}, but {src} is not a directory"
     let n ← copyDir src (out / "assets")
     IO.println s!"assets: {out / "assets"} ({n} file(s) from {src})"
+  -- The blog: its directory as `blog/`, and its posts listed in
+  -- `blog.json`, which the website reads to offer its Blog page at all.
+  let blogFile := out / "blog.json"
+  if project.blog.isEmpty then
+    if ← blogFile.pathExists then IO.FS.removeFile blogFile
+  else
+    let src := root / project.blog
+    unless ← src.isDir do
+      throw <| IO.userError s!"'[site] blog' is {project.blog}, but {src} is not a directory"
+    let posts ← readBlog src
+    let n ← copyDir src (out / "blog")
+    IO.FS.writeFile blogFile ((blogJson posts).compress ++ "\n")
+    IO.println s!"blog: {posts.size} post(s), {out / "blog"} ({n} file(s) from {src})"
   if let some h := args.get? "--history" then
     let data := out / "data"
     let n ← copyDir h data
