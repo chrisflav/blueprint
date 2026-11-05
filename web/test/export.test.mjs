@@ -193,6 +193,40 @@ await check('references are a bibliography, and citations link to its entries', 
   ok(!/\\begin\{(theorem|definition)\}[^]*Deligne/.test(tex.split('\\bpbibitem')[0]), 'no entry is a numbered statement');
 });
 
+await check('a part ends with what is outside it, then the works it cites, each on a page of its own', () => {
+  const m = M.buildModel(snapshot([
+    node('sec', 'section', 'Opening.', { title: 'S', order: 1 }),
+    node('thm', 'theorem', 'As in [sga4, Exp. X] and [del74]; compare [other].', { order: 1 }),
+    edge('refines', 'thm', 'sec'),
+    node('sec2', 'section', 'More.', { title: 'T', order: 2 }),
+    node('other', 'theorem', 'Elsewhere.', { order: 1 }),
+    edge('refines', 'other', 'sec2'),
+    node('refs', 'section', '', { title: 'References', order: 3 }),
+    node('del74', 'reference', '', { author: ['P. Deligne'], title: 'La conjecture de Weil. I', year: '1974' }),
+    node('sga4', 'reference', '', { label: 'SGA4', title: 'Cohomologie étale', year: '1972' }),
+    node('unused', 'reference', '', { author: ['N. Body'], title: 'Uncited', year: '2000' }),
+    edge('refines', 'del74', 'refs'), edge('refines', 'sga4', 'refs'), edge('refines', 'unused', 'refs'),
+  ], { reference: { boundary: {}, graph: 'never' } }));
+  const res = exportLatex(m, { scope: 'sec' });
+  const t = bodyOf(res.tex);
+  ok(/As in \[\\hyperref\[(bp\d+)\]\{SGA4\}, Exp\. X\] and \[\\hyperref\[(bp\d+)\]\{Del74\}\]/.test(t), 'citations link to their entries');
+  const outsideAt = t.indexOf('\\section*{Outside this export}');
+  const refsAt = t.indexOf('\\section*{References}');
+  ok(outsideAt > 0 && refsAt > outsideAt, 'References come after Outside this export');
+  ok(/\\clearpage\\phantomsection\\hypertarget\{bp-outside\}\{\}%\n\\section\*\{Outside this export\}/.test(t), 'a new page before Outside this export');
+  ok(/\\clearpage\\phantomsection%\n\\section\*\{References\}\n\\addcontentsline\{toc\}\{section\}\{References\}/.test(t), 'and before References, in the contents');
+  const items = [...t.slice(refsAt).matchAll(/\\bpbibitem\{([^}]*)\}\{(bp\d+)\}/g)].map((x) => x[1]);
+  same(items, ['Del74', 'SGA4'], 'the works cited, sorted by label, and only those');
+  for (const [, l] of t.matchAll(/\\hyperref\[(bp\d+)\]/g)) ok(new RegExp(`\\{${l}\\}|\\\\label\\{${l}\\}`).test(t), `${l} is set`);
+  eq(res.stats.cited, 2, 'counted');
+  // The whole blueprint has its bibliography in place, and no second one.
+  const whole = bodyOf(exportLatex(m, {}).tex);
+  eq((whole.match(/\\section\*\{References\}/g) || []).length, 0, 'no References appended');
+  eq((whole.match(/\\bpbibitem\{Del74\}/g) || []).length, 1, 'Del74 set once, in place');
+  // A part that cites nothing ends as before.
+  ok(!bodyOf(exportLatex(m, { scope: 'sec2' }).tex).includes('{References}'), 'nothing cited, no References');
+});
+
 await check('brackets that cite nothing keep their maths, emphasis and code; a locator too', () => {
   const m = M.buildModel(snapshot([
     node('sec', 'section', 'On [0, $\\epsilon$] and [a, *b*] and [x, `c`]; see [del74, Thm. $x^2$ and *Cor.* 4].', { title: 'S', order: 1 }),

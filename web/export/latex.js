@@ -532,11 +532,15 @@ export function exportLatex(model, request, options = {}) {
   for (const id of filedHere) labelOf(id);
 
   const outside = new Map(); // id -> {ref, entry}
+  // Works cited here whose bibliography entries the export does not write out
+  // in place: they are set at the end, under References.
+  const cited = new Set();
 
-  /** One cited label, linked to its entry when the entry is written out here. */
+  /** One cited label, linked to its entry: in place, or at the end. */
   const citeLabel = (id) => {
     const text = escapeText(M.referenceLabelOf(model, id) || id);
-    return writtenHere(id) || plan.written.has(id) ? `\\hyperref[${labelOf(id)}]{${text}}` : text;
+    if (!plan.written.has(id)) cited.add(id);
+    return `\\hyperref[${labelOf(id)}]{${text}}`;
   };
   /** A citation: the labels, linked, and the locator's Markdown; `null` when `inner` does not cite. */
   const cite = (inner) => {
@@ -814,9 +818,21 @@ export function exportLatex(model, request, options = {}) {
   if (described.appendices) detailBits.push(escapeText(described.appendices));
   const snapshotLabel = options.snapshot && options.snapshot.label ? options.snapshot.label : null;
 
+  // The entries of the works cited from outside the export, each written once;
+  // an entry may cite another.
+  const bibliography = [];
+  for (let fresh = [...cited]; fresh.length; fresh = [...cited].filter((id) => !bibliography.some((b) => b.id === id))) {
+    for (const id of fresh) {
+      current = id;
+      bibliography.push({ id, label: M.referenceLabelOf(model, id) || id, tex: body(model.byId.get(id)) });
+    }
+  }
+  current = null;
+  bibliography.sort((a, b) => a.label.localeCompare(b.label, 'en'));
+
   const back = [];
   if (outside.size) {
-    back.push('\\bigskip\\phantomsection\\hypertarget{bp-outside}{}%');
+    back.push('\\clearpage\\phantomsection\\hypertarget{bp-outside}{}%');
     back.push('\\section*{Outside this export}');
     back.push('\\addcontentsline{toc}{section}{Outside this export}');
     back.push('References marked \\ensuremath{{}^\\ast} are to parts of the blueprint this document leaves out:');
@@ -831,6 +847,15 @@ export function exportLatex(model, request, options = {}) {
       back.push(`\\item[${escapeText(M.referenceText(ref))}] ${titleTex(M.titleOf(model.byId.get(id)))}${where} (\\bpslug{${escapeCode(id)}})`);
     }
     back.push('\\end{description}');
+  }
+  if (bibliography.length) {
+    back.push('\\clearpage\\phantomsection%');
+    back.push('\\section*{References}');
+    back.push('\\addcontentsline{toc}{section}{References}');
+    for (const b of bibliography) {
+      back.push(`\\bpbibitem{${escapeText(b.label)}}{${labelOf(b.id)}}{${b.tex}}`);
+      back.push('');
+    }
   }
 
   const macroLines = macroDefinitions(model.project.katexMacros, (code, message) => {
@@ -898,7 +923,7 @@ export function exportLatex(model, request, options = {}) {
     description: described,
     assets,
     diagnostics: unique,
-    stats: { ...stats, outside: outside.size, labels: labels.size },
+    stats: { ...stats, outside: outside.size, cited: bibliography.length, labels: labels.size },
   };
 }
 
