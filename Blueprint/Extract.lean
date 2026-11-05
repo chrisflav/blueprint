@@ -122,11 +122,19 @@ def moduleOf? (env : Environment) (n : Name) : Option Name := do
   let idx ← env.getModuleIdxFor? n
   env.header.moduleNames[idx.toNat]?
 
-/-- Sort names and drop duplicates. -/
-def sortDedupNames (xs : Array Name) : Array Name :=
-  let sorted := xs.qsort Name.lt
-  sorted.foldl (init := #[]) fun acc x =>
-    if acc.back?.any (· == x) then acc else acc.push x
+/-- Sort names and drop duplicates.  The duplicates go first: `Array.qsort`
+partitions Lomuto style and is quadratic in a run of equal elements, and the
+unions below hand it thousands of copies of the same few names (every
+dependency of a large proof carries `propext`, `Classical.choice` and
+`Quot.sound`), which made `extract` take hours on a project of some size. -/
+def sortDedupNames (xs : Array Name) : Array Name := Id.run do
+  let mut seen : Std.HashSet Name := {}
+  let mut uniq : Array Name := #[]
+  for x in xs do
+    unless seen.contains x do
+      seen := seen.insert x
+      uniq := uniq.push x
+  return uniq.qsort Name.lt
 
 /-- The constants named by a declaration's type, and those named by its value
 and — for an inductive type — its constructors. -/
