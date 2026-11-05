@@ -772,6 +772,14 @@
     "proved": 2,
     "byStatus":
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "8911aaa07331283bdcb200c61a24bc22ecfb2682",
+   "file": "data/8911aaa07331283bdcb200c61a24bc22ecfb2682.json",
+   "date": "2026-11-05"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "9fc02be80baa0ed6c563e69465c2ff27083e988e",
    "file": "data/9fc02be80baa0ed6c563e69465c2ff27083e988e.json",
    "date": "2026-11-05"},
