@@ -632,6 +632,7 @@ export function exportLatex(model, request, options = {}) {
 
   const math = (span) => {
     if (unsafeMath(span.body)) warn('unsafe-maths', `a formula uses a TeX command no formula on the website can (${UNSAFE_TEX.exec(span.body)[0]}); it is set as its source`);
+    else if (unbalancedMath(span.body)) warn('broken-maths', `a formula's braces do not pair up (${span.source.replace(/\s+/g, ' ').slice(0, 60)}); it is set as its source, as the website shows it`);
     return mathToLatex(span);
   };
   const image = (src, alt, { block }) => {
@@ -1012,9 +1013,27 @@ export function unsafeMath(body) {
   return UNSAFE_TEX.test(String(body));
 }
 
+/**
+ * Whether a formula's braces do not pair up, as when a `$` inside `\text{…}`
+ * ends an inline formula early: `$x\text{ for $a$}$` is read as `$x\text{ for $`,
+ * `a`, `$}$`.  KaTeX sets such a formula as its source, in red, and the page
+ * goes on; LaTeX would stop at it, so it is set as its source here too.
+ */
+export function unbalancedMath(body) {
+  let depth = 0;
+  const s = String(body);
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s[i];
+    if (c === '\\') i += 1; // `\{`, `\}`, `\\`: never a group
+    else if (c === '{') depth += 1;
+    else if (c === '}' && --depth < 0) return true;
+  }
+  return depth !== 0;
+}
+
 /** A maths span as LaTeX: its source between LaTeX's own delimiters. */
 export function mathToLatex(span, { title = false } = {}) {
-  if (unsafeMath(span.body)) return `\\texttt{${escapeText(span.source)}}`;
+  if (unsafeMath(span.body) || unbalancedMath(span.body)) return `\\texttt{${escapeText(span.source)}}`;
   let body = String(span.body)
     // A blank line ends a paragraph in TeX, and with it the formula.
     .replace(/\n[ \t]*(?:\n[ \t]*)+/g, '\n')

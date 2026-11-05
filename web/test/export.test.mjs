@@ -18,7 +18,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as M from '../model.js';
 import {
-  ExportError, exportLatex, exportScopes, planExport, resolveRequest, requestKey, mathToLatex, macroDefinitions,
+  ExportError, exportLatex, exportScopes, planExport, resolveRequest, requestKey, mathToLatex, unbalancedMath, macroDefinitions,
 } from '../export/latex.js';
 import { markdownToLatex, escapeText, parseBlocks } from '../export/markdown-tex.js';
 import { sha256Hex } from '../export/sha256.js';
@@ -597,6 +597,26 @@ await check('a formula with a TeX command that reaches outside it is set as its 
   const res = exportLatex(m, {});
   ok(res.tex.includes('\\texttt{\\$\\textbackslash{}end\\{document\\}\\$}'), 'the document goes on');
   ok(res.diagnostics.some((d) => d.code === 'unsafe-maths' && d.object === 's'), 'and it is reported');
+});
+
+await check('a formula whose braces do not pair up is set as its source, as KaTeX shows it', () => {
+  ok(!unbalancedMath('\\left\\{ x \\right\\} \\\\ {a}'), 'escaped braces and a line break are not groups');
+  // A `$` inside `\text{…}` ends the formula early, on the website too.
+  const m = M.buildModel(snapshot([node('s', 'section', 'Then $x\\text{ for $a$}$ and $y$.', { title: 'S' })]));
+  const res = exportLatex(m, {});
+  ok(res.tex.includes('\\texttt{\\$x\\textbackslash{}text\\{ for \\$}'), 'the first piece is its source');
+  ok(res.tex.includes('\\texttt{\\$\\}\\$}'), 'and so is the second');
+  ok(res.tex.includes('\\(y\\)'), 'the formulas after it are formulas');
+  ok(res.diagnostics.some((d) => d.code === 'broken-maths' && d.object === 's'), 'and it is reported');
+});
+
+await check('maths inside a code span is its source, not a token', () => {
+  // ``…'' is TeX's quotes, but Markdown reads `` as a code span; the `$…$`
+  // inside are lifted before it is found.
+  const m = M.buildModel(snapshot([node('s', 'section', "The form ``bundle $\\mathbf P(E)$ over $S$'' and ``into $P$''.", { title: 'S' })]));
+  const res = exportLatex(m, {});
+  ok(!/[-]/.test(res.tex), 'no private-use character reaches the LaTeX');
+  ok(res.tex.includes('\\$\\textbackslash{}mathbf\\ P(E)\\$'), 'the formula is written as its source');
 });
 
 await check('macros become LaTeX definitions, except the ones that would break LaTeX', () => {
