@@ -695,9 +695,10 @@ its controls; not on the graph, whose top bar is its toolbar) opens a dialog tha
 is made (`pdf.js`): *this part* — the document page's entry, or the part an
 object page's object (or the graph's selection) is read in — or *the whole
 blueprint*, which is the default at the top of the document, or *another
-part* picked by its number and title; the hierarchy when there are several;
-the detail, all levels by default or a number of levels below the part; and
-whether to include appendices, when the part has any. It shows how many
+part* picked by its number and title; and whether to include appendices,
+when the part has any. A PDF is always read along the default hierarchy with
+every level below its part, so the dialog asks neither (the command line's
+`blueprint export` still takes `--collapse` and `--depth`). It shows how many
 entries and proofs that is, and which snapshot it comes from, a historical
 one included. *Export PDF* then finds the PDF prepared for exactly that
 snapshot and choice (`data/exports/<hash of the snapshot's bytes>/`, made by

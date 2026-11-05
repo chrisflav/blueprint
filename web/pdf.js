@@ -7,12 +7,14 @@
 //     or, from an object page or a graph selection, the part the object is
 //     read in — or the whole blueprint at the top of the document; the reader
 //     can switch to the whole blueprint or pick any other part by its title;
-//   * the hierarchy it is read along, when the snapshot has more than one;
-//   * the detail: all levels (the default), or how many levels below the
-//     part.  Proofs and steps come with their statements at any depth;
 //   * appendices, when the part has any;
 //   * the snapshot: the one on screen, including a historical one from the
 //     time slider.
+//
+// Nothing else is a choice: a PDF is read along the snapshot's default
+// hierarchy, with every level below its part (with `[site] pdfDetails =
+// false`, the levels that are not details).  `blueprint export` still takes
+// `--collapse` and `--depth`.
 //
 // The PDF is found, in this order:
 //
@@ -67,9 +69,8 @@ export function setupExport(ctx) {
 // what the reader is looking at
 // ---------------------------------------------------------------------------
 
-function routeCollapse(m) {
-  const wanted = app.route && app.route.params.get('collapse');
-  if (wanted && m.kinds[wanted] && m.kinds[wanted].collapse) return wanted;
+/** The hierarchy a PDF is read along: the snapshot's default, whatever the page shows. */
+function exportCollapse(m) {
   return m.defaultCollapse || m.collapseKinds[0] || null;
 }
 
@@ -126,7 +127,7 @@ export async function openExport() {
   const active = document.activeElement;
   const opener = active && active !== document.body ? active : document.getElementById('export-pdf');
   const lib = await loadLatex();
-  const collapse = routeCollapse(m);
+  const collapse = exportCollapse(m);
   if (!collapse) {
     showSimpleError('This blueprint has no collapsible kind, so it has no document to export.');
     return;
@@ -138,7 +139,6 @@ export async function openExport() {
     from: ctxPart && ctxPart.from,
     choice: ctxPart && ctxPart.id ? 'part' : 'whole',
     otherId: null,
-    depth: 'all',
     appendices: true,
     busy: false,
     opener,
@@ -206,7 +206,7 @@ function focusFirst() {
 /** The request the dialog's controls describe, before checking. */
 function rawRequest(state) {
   const scope = state.choice === 'part' ? state.contextId : state.choice === 'other' ? state.otherId : null;
-  return { collapse: state.collapse, scope, depth: state.depth, appendices: state.appendices };
+  return { collapse: state.collapse, scope, depth: 'all', appendices: state.appendices };
 }
 
 function drawDialog() {
@@ -242,7 +242,7 @@ function drawDialog() {
   const radio = (value, label, extra) => el('label.export-choice',
     el('input', {
       type: 'radio', name: 'export-scope', value, checked: state.choice === value,
-      onchange: () => { state.choice = value; state.depth = 'all'; drawDialog(); restoreFocus('input[value="' + value + '"]'); },
+      onchange: () => { state.choice = value; drawDialog(); restoreFocus('input[value="' + value + '"]'); },
     }),
     el('span', label), extra || null);
   const scopeSet = el('fieldset.export-scope', el('legend', 'What to export'));
@@ -258,41 +258,16 @@ function drawDialog() {
     // Picking a part in the menu chooses "another part" too.
     const select = el('select.export-other', {
       'aria-label': 'Another part to export',
-      onchange: (ev) => { state.otherId = ev.target.value; state.choice = 'other'; state.depth = 'all'; drawDialog(); restoreFocus('select.export-other'); },
+      onchange: (ev) => { state.otherId = ev.target.value; state.choice = 'other'; drawDialog(); restoreFocus('select.export-other'); },
     }, ...parts.map((s) => el('option', { value: s.id, selected: s.id === (state.otherId || parts[0].id) },
       ' '.repeat(Math.max(0, s.depth)) + (s.number == null ? s.title : `${s.number} ${s.title}`))));
     scopeSet.appendChild(radio('other', 'Another part: ', select));
   }
   panel.appendChild(scopeSet);
 
-  // ------------------------------------------------------------- hierarchy
+  // ------------------------------------------------------------ appendices
   const opts = el('div.export-options');
-  if (m.collapseKinds.length > 1) {
-    opts.appendChild(el('label.export-field', el('span', 'Hierarchy'),
-      el('select', {
-        onchange: (ev) => {
-          state.collapse = ev.target.value;
-          // Parts are those of the order: keep the part only if it is one there too.
-          state.depth = 'all';
-          drawDialog();
-          restoreFocus('.export-field select');
-        },
-      }, ...m.collapseKinds.map((k) => el('option', { value: k, selected: k === state.collapse }, k)))));
-  }
-
-  // ---------------------------------------------------------------- detail
   if (req) {
-    const below = req.scope === null ? 'the top level' : named(req.scope).split(' ').slice(0, 2).join(' ');
-    const depthOpts = [el('option', { value: 'all', selected: req.depth === 'all' }, 'All levels (complete)')];
-    for (let d = 1; d < req.height; d += 1) {
-      depthOpts.push(el('option', { value: String(d), selected: req.depth === d },
-        req.scope === null && d === 1 ? 'Top level only' : `${d} ${d === 1 ? 'level' : 'levels'} below ${below}`));
-    }
-    opts.appendChild(el('label.export-field', el('span', 'Detail'),
-      el('select.export-depth', {
-        disabled: req.height <= 1,
-        onchange: (ev) => { state.depth = ev.target.value === 'all' ? 'all' : Number(ev.target.value); drawDialog(); restoreFocus('select.export-depth'); },
-      }, ...depthOpts)));
     if (req.hasAppendices) {
       opts.appendChild(el('label.export-check',
         el('input', { type: 'checkbox', checked: req.appendices, onchange: (ev) => { state.appendices = ev.target.checked; drawDialog(); restoreFocus('.export-check input'); } }),
@@ -301,7 +276,6 @@ function drawDialog() {
   }
   panel.appendChild(opts);
   panel.appendChild(el('p.export-hint.muted.small',
-    'The detail counts levels of the document below the part: a section’s statements are one level below it. ',
     'Proofs and steps always come with their statement, and an object shared with another part is written out in full the first time this PDF meets it. ',
     'Folded proofs and what this page has not drawn yet are included all the same.'));
 
@@ -310,7 +284,7 @@ function drawDialog() {
     const plan = lib.planExport(m, req);
     const d = lib.describeRequest(m, req);
     panel.appendChild(el('p.export-summary',
-      el('strong', d.scope), ', ', d.detail, d.appendices ? ', ' + d.appendices : '', ': ',
+      el('strong', d.scope), d.appendices ? ', ' + d.appendices : '', ': ',
       `${plan.stats.entries} ${plan.stats.entries === 1 ? 'entry' : 'entries'}`,
       plan.stats.proofs ? `, ${plan.stats.proofs} ${plan.stats.proofs === 1 ? 'proof' : 'proofs'}` : '', '.'));
   } else if (problem) {

@@ -514,7 +514,7 @@ await check('appendices are in by default and out when asked, and only where the
   eq(withA.appendices, true, 'included by default');
   const without = exportLatex(m, { appendices: false });
   ok(!written(without.tex).includes('conventions') && !written(without.tex).includes('notation'), 'left out with its contents');
-  ok(without.tex.includes('appendices left out'), 'the title block says so');
+  ok(without.tex.includes('Appendices left out'), 'the title block says so');
   eq(without.fileName, 'paper-whole-no-appendix', 'and the file name');
   ok(requestKey(without.request) !== requestKey(withA), 'a different key');
   const own = resolveRequest(m, { scope: 'conventions', appendices: false });
@@ -654,8 +654,12 @@ await check('the parts on offer are the document\'s pages, named by their titles
   eq(scopes.find((s) => s.id === 'proof/thm-fip').title, 'Proof of Theorem 2.4', 'a detailed proof by what it proves');
   eq(scopes[0].title, 'Compactness through finite intersections', 'the whole blueprint by the project\'s title');
   const reqs = allRequests(m);
-  eq(reqs.length, 25, 'every choice the dialog can make, once');
-  ok(reqs.some((r) => r.scope === 'spaces' && r.depth === 3), 'depths short of all');
+  eq(reqs.length, 9, 'every choice the dialog can make, once: each part, and the whole without its appendix');
+  ok(reqs.every((r) => r.depth === 'all' && r.collapse === 'refines'), 'all levels, along the default hierarchy alone');
+  // The title block says nothing of what the dialog does not ask, unless the command line chose it.
+  const plain = bodyOf(exportLatex(m, {}).tex);
+  ok(!/All levels|read along/.test(plain), 'a default PDF: no levels, no hierarchy');
+  ok(bodyOf(exportLatex(m, { scope: 'spaces', depth: 1 }).tex).includes('1 level below Section 2'), '--depth is said');
   ok(reqs.some((r) => r.scope === null && r.appendices === false), 'without the appendix');
   eq(new Set(reqs.map(requestKey)).size, reqs.length, 'no repeats');
 });

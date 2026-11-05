@@ -22,7 +22,8 @@ outline, along the collapse order chosen, and only chooses a part of it:
   reason.  `[site] pdfScopes` narrows the parts to entries of the kinds it
   names, `["part", "chapter"]` say: no other part is offered or prepared,
   and a request for one is refused, naming the part or chapter it is in.
-* **Detail.**  `all` levels (the default), or *n* levels below the scope,
+* **Detail** (the command line's `--depth`; the dialog always exports
+  every level).  `all` levels (the default), or *n* levels below the scope,
   counted as the document's pages count them (`documentPageEntries`): a
   section's statements are one level below it.  A proof and a step belong to
   their statement and come with it at any depth; a proof with details of its
@@ -32,7 +33,8 @@ outline, along the collapse order chosen, and only chooses a part of it:
 * **Appendices.**  An entry of a kind the graph may hide (`graph =
   "optional"`, the built-in `appendix`) inside the scope is in by default
   and can be left out.  Exporting an appendix itself always includes it.
-* **Hierarchy.**  Any collapse kind; the default is the snapshot's
+* **Hierarchy** (the command line's `--collapse`; the dialog always reads
+  along the default).  Any collapse kind; the default is the snapshot's
   `defaultCollapse`.
 * **Details.**  With `[site] pdfDetails = false` (`project.pdfDetails`) a
   project's PDFs leave out every detail (`isDetailEntry`): a statement
@@ -121,7 +123,7 @@ engine and fonts fetched from a third party on every click.  So:
 
 | where | how a PDF is had |
 |-------|------------------|
-| published site (GitHub Pages) | **built in advance.** CI runs `blueprint site --pdf`, which compiles every choice the dialog offers — each hierarchy × each part × each depth × with and without appendices — for the current snapshot and the ten newest history snapshots, and files them under `data/exports/<hash>/` with a `manifest.json`. The dialog fetches the manifest of the bytes it loaded and the PDF it lists. |
+| published site (GitHub Pages) | **built in advance.** CI runs `blueprint site --pdf`, which compiles every choice the dialog offers — each part, with and without appendices, all levels along the default hierarchy — for the current snapshot and the ten newest history snapshots, and files them under `data/exports/<hash>/` with a `manifest.json`. The dialog fetches the manifest of the bytes it loaded and the PDF it lists. |
 | `blueprint serve` | **made on demand** by the local server (`POST api/export`), for any choice and any snapshot the site serves, historical ones included, and filed in the same place.  The dialog asks the server first, which reuses a prepared PDF when it was made from the same TeX and makes it again otherwise. |
 | any other static server | what was prepared, if the site was built with `--pdf`; otherwise the dialog says no PDF was prepared and hands out the TeX source, written in the page. |
 | command line | `blueprint export` (or `node web/export/cli.mjs export`). |
