@@ -394,7 +394,9 @@ one JSON file per object under `--comments` (default `<root>/comments`), and
 private, as the reader chooses: the server keeps both and answers with the
 public ones alone, numbered among themselves. With `[site.comments]` it keeps
 them on Zulip instead, posting as a bot of its own environment, so the page
-never sees the bot (`docs/cli.md`); a site served elsewhere finds its comment
+never sees the bot (`docs/cli.md`). The page names neither Zulip nor its
+channel and links to neither: it says only that every comment is posted to
+the background, and a comment's title is plain text. A site served elsewhere finds its comment
 server in `comments-config.json` (`server`). Comment
 HTML is parsed in an inert document and cut down to the tags markdown produces
 before it is shown. Served without that server, the section says comments are
