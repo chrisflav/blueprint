@@ -686,7 +686,9 @@ export function inlineToLatex(nodes, ctx) {
   for (const n of nodes) {
     switch (n.t) {
       case 'text': out += escapeText(n.v); break;
-      case 'code': out += `\\texttt{${escapeCode(n.v)}}`; break;
+      // Maths tokens inside a code span are its own text, as in a code block:
+      // the website shows them as written.
+      case 'code': out += `\\texttt{${escapeCode(n.v.replace(TOKEN_RE, (_, k) => ctx.spans[Number(k)].source))}}`; break;
       case 'math': out += ctx.math(ctx.spans[n.i]); break;
       case 'ref': out += ctx.ref(n.slug, n.before); break;
       case 'cite': {
