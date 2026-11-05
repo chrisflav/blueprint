@@ -193,7 +193,7 @@ function mount(root, app) {
   // `toolbarOpen`, `sideShown`, `statsShown`: the reader's choices (`shownPref`).
   ui = { page, toolbar, stage, svg, layer, side, back, transform: { x: 40, y: 40, k: 1 }, fitted: false,
     folded: new Map(), entered: null, legend: key, legendProgress: app.showProgress,
-    toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY), statsShown: shownPref(STATS_KEY) };
+    toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY, true), statsShown: shownPref(STATS_KEY) };
   page.classList.toggle('side-hidden', !ui.sideShown);
   stage.classList.toggle('stats-hidden', !ui.statsShown);
   installPanZoom(app);
@@ -267,22 +267,23 @@ function legend(app, progress) {
 // toolbar
 // ---------------------------------------------------------------------------
 
-// The graph opens on the graph alone: of the toolbar only Collapse all, the
-// search and the zoom, the rest folded behind the Filters button, no side
-// panel beside it and no statistics under it.  Whether the reader has shown
+// The graph opens with the side panel beside it, and of the toolbar only
+// Collapse all, the search and the zoom, the rest folded behind the Filters
+// button, and no statistics under it.  Whether the reader has shown or hidden
 // any of them is theirs to keep, in localStorage, as the top bar keeps the
 // progress (app.js).
 const TOOLS_KEY = 'blueprint.graph.tools';
 const SIDE_KEY = 'blueprint.graph.side';
 const STATS_KEY = 'blueprint.graph.stats';
 
-/** Whether the reader asked for this to be shown: no, unless they did. */
-function shownPref(key) {
+/** Whether the reader asked for this to be shown; `dflt` when they never said. */
+function shownPref(key, dflt = false) {
   try {
     const store = layoutStore();
-    return !!store && store.getItem(key) === 'shown';
+    const v = store ? store.getItem(key) : null;
+    return v === 'shown' ? true : v === 'hidden' ? false : dflt;
   } catch (e) {
-    return false;
+    return dflt;
   }
 }
 
@@ -2492,14 +2493,16 @@ function renderSide(app, st, view, quot) {
   // The title is the way into the document: the page with the object's level,
   // scrolled to it, as every link to it there leads.  What the document leaves
   // out (a plain sugar edge, say) has its object page instead.  The kind sits
-  // beside it.
+  // beside it, and under it the same way in, spelt out.
   const status = M.badgeStatusOf(m, id);
   const inDoc = app.documentLevelHref(M.documentOutline(app.model, st.collapse), st.collapse, id);
+  const href = inDoc || app.objectHref(id);
   const heading = el('h2', el('a.side-title', {
-    href: inDoc || app.objectHref(id),
+    href,
     title: inDoc ? 'open in the document' : 'open the object page',
   }, M.titleOf(o)));
   side.appendChild(el('div.side-head', { 'data-id': id }, heading, app.kindBadge(o.kind)));
+  side.appendChild(el('div.side-open', el('a', { href }, inDoc ? 'Open in document' : 'Open object page')));
   if (status !== null) side.appendChild(el('div.meta', app.statusBadge(status)));
 
   const prog = st.progress ? M.progressMixOf(app.model, st.collapse, id) : null;

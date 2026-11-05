@@ -240,22 +240,24 @@ graph never shows the second row while it loads).
 The graph opens on the graph alone. Of the toolbar only *Collapse all*, the
 highlight search, Fit, `+` and `−` show; the edge, *hide implied* and
 status filters fold behind *Filters*, which
-carries a dot while anything is filtered out. The side panel is hidden too,
-and the stage takes its column; *Show sidebar* at the right end of the
-toolbar brings it back, and *Hide sidebar* hides it again. So are the
-statistics at the foot of the stage (how many nodes and links, what is
+carries a dot while anything is filtered out. The side panel is shown beside
+it; *Hide sidebar* at the right end of the toolbar hides it, and the stage
+takes its column, and *Show sidebar* brings it back. The
+statistics at the foot of the stage are hidden (how many nodes and links, what is
 hidden, what is expanded): *Show statistics*, beside it, shows them, and
 *Hide statistics* hides them again; while a layout runs the line shows
 anyway, to say how much is being laid out. The three choices are the
 reader's, kept in `localStorage` (`blueprint.graph.tools`,
 `blueprint.graph.side` and `blueprint.graph.stats`, `shown` or `hidden`; no
-choice is hidden).
+choice is hidden for the filters and the statistics, shown for the side
+panel).
 
 The side panel of a selected node heads with its title, a link to the
 document's page with the node's level, scrolled to it, where every link to it
 in the document leads (in the graph's collapse kind); what the document leaves
-out leads to its object page instead. Beside the title is its kind, and under
-it its status, but not its id. Its prose comes next, folded like the listings
+out leads to its object page instead. Beside the title is its kind; under it
+an *Open in document* link to the same place (*Open object page* when that is
+the object page), then its status, but not its id. Its prose comes next, folded like the listings
 after it (*Incident objects*, *Hidden inside*): all three start shut. Whether
 each is open is kept while the reader clicks from node to node.
 
