@@ -2164,6 +2164,22 @@ await check('node and edge metadata survives the round trip through the worker',
   ok(edges.some((e) => e.classList.contains('kind-uses')), 'no uses edge kept its kind');
 });
 
+await check('a section box carries its number in the document before its title', async () => {
+  const outline = M.documentOutline(app.model, app.model.defaultCollapse || app.model.collapseKinds[0]);
+  // A long title is wrapped onto lines of its own, which join with no space.
+  const label = (n) => n.querySelector('.label').textContent.replace(/\s+/g, '');
+  const flat = (t) => t.replace(/\s+/g, '');
+  const nodes = root.querySelectorAll('.gnode').filter((n) => !n.classList.contains('junction'));
+  const sections = nodes.filter((n) => M.isSectionKind(app.model.byId.get(n.dataset.id).kind));
+  ok(sections.length > 0, 'no section box was drawn');
+  for (const n of sections) {
+    const o = app.model.byId.get(n.dataset.id);
+    const e = outline.byId.get(o.id);
+    eq(label(n), flat((e && e.number != null ? e.number : '') + M.titleOf(o)), `the box of ${o.id}`);
+    if (e && e.number != null) ok(n.querySelector('tspan').textContent.startsWith(e.number + ' '), `no number on ${o.id}`);
+  }
+});
+
 await check('clicking a node brings its edges and their far ends forward and fades the rest', async () => {
   const layer = root.querySelector('g.glayer');
   const edges = root.querySelectorAll('.gedge');

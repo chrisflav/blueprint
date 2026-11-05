@@ -730,13 +730,26 @@ function mathSettled(app, titles) {
 }
 
 /** [title, drawn expanded] of every object the view could draw as a box. */
-function boxTitles(m, view) {
+function boxTitles(app, st, view) {
   const out = [];
   for (const id of new Set([...view.visible, ...view.expanded])) {
-    const o = m.byId.get(id);
-    if (o && (o.boundary.length === 0 || view.isExpanded(id))) out.push([M.titleOf(o), view.isExpanded(id)]);
+    const o = view.model.byId.get(id);
+    if (o && (o.boundary.length === 0 || view.isExpanded(id))) out.push([nodeTitle(app, st, o), view.isExpanded(id)]);
   }
   return out;
+}
+
+/**
+ * The title a box shows: a section's (a chapter, a section, a subsection, an
+ * appendix) after its number in the document, "2.1 Groups", as the contents
+ * have it; the title alone for anything else, and for a section its `serial`
+ * leaves unnumbered.
+ */
+function nodeTitle(app, st, o) {
+  const title = M.titleOf(o);
+  if (!M.isSectionKind(o.kind)) return title;
+  const e = M.documentOutline(app.model, st.collapse).byId.get(o.id);
+  return e && e.number != null ? e.number + ' ' + title : title;
 }
 
 /** The wrapped title of a node: KaTeX's lines when measured, plain text otherwise. */
@@ -795,7 +808,7 @@ export function buildElk(app, st, view, quot) {
   const mk = (id) => {
     const o = m.byId.get(id);
     const compound = view.isExpanded(id);
-    const title = M.titleOf(o);
+    const title = nodeTitle(app, st, o);
     const prog = st.progress ? M.progressMixOf(app.model, st.collapse, id) : null;
     const node = {
       id,
@@ -825,7 +838,7 @@ export function buildElk(app, st, view, quot) {
   };
 
   // Titles with maths are measured by the browser, all of them in one go.
-  measureMathTitles(app, [...nodeIds].map((id) => [M.titleOf(m.byId.get(id)), view.isExpanded(id)]));
+  measureMathTitles(app, [...nodeIds].map((id) => [nodeTitle(app, st, m.byId.get(id)), view.isExpanded(id)]));
   for (const id of nodeIds) nodes.set(id, mk(id));
 
   const rootChildren = [];
@@ -1125,7 +1138,7 @@ async function scheduleLayout(app, st, view, quot) {
   const token = ++layoutToken;
   // The first titles with maths on the page wait for KaTeX's fonts before
   // they are measured for good; a graph without maths goes straight on.
-  const fonts = mathSettled(app, boxTitles(view.model, view));
+  const fonts = mathSettled(app, boxTitles(app, st, view));
   if (fonts) {
     ui.stage.classList.add('laying-out');
     await fonts;
@@ -1676,7 +1689,7 @@ function drawNode(app, box, meta, st, view) {
 
   // The whole title, on the lines `buildElk` sized the node for: a section's
   // at the top left after the expander, a leaf's centred above its progress bar.
-  const wrap = meta.wrap || { lines: [M.titleOf(o)], width: 0, height: LINE_H };
+  const wrap = meta.wrap || { lines: [nodeTitle(app, st, o)], width: 0, height: LINE_H };
   const lines = wrap.lines;
   const expandable = view.isExpandable(o.id);
   const bar = !meta.compound && meta.prog && meta.prog.total > 1 ? 10 : 0;
