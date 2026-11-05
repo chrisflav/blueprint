@@ -3,15 +3,16 @@
 //
 // Comments live beside the site, not in the snapshot, with the comment server
 // that `blueprint serve` runs (comments-server.py), which answers
-//   GET  api/comments/<id>  -> {"comments": [{n, name, body, date}, ...],
+//   GET  api/comments/<id>  -> {"comments": [{n, name, title, body, date, topic?}, ...],
 //                               "maxBody": n, "zulip": {site, channel, topic, streamId}?}
-//   POST api/comments/<id>  <- {"name", "body", "visibility": "public" | "private", "page"}
+//   POST api/comments/<id>  <- {"name", "title", "body", "visibility": "public" | "private", "page"}
 //                           -> {"comments": [...], "shown": true | false}
 // A comment is public, listed below the page, or private, kept but never
 // listed: the server answers with the public ones alone.  It keeps them as
 // one JSON file per object, or, for a site with `[site.comments]`, on Zulip,
-// as messages of a bot it holds itself: the browser never sees the bot, and
-// `zulip` above only says where the comments go.  Served by a plain static
+// as messages of a bot it holds itself, each comment a topic of its own named
+// by its title: the browser never sees the bot, and `zulip` above (and the
+// `topic` of a comment) only says where the comments go.  Served by a plain static
 // server there is no such endpoint, and the section says so.
 //
 // A site served elsewhere (a static host) finds its comment server in
@@ -80,10 +81,15 @@ export function commentsPanel(app, id) {
   const heading = el('h3', 'Comments');
   const list = el('div.comment-list', el('p.muted.small', 'Loading comments…'));
 
-  // ---- the form: name, public or private, Markdown + LaTeX, a preview, post
+  // ---- the form: name, title, public or private, Markdown + LaTeX, a preview, post
   const name = el('input', {
     type: 'text', name: 'name', required: true, maxlength: '100', autocomplete: 'name',
     placeholder: 'Your name', 'aria-label': 'Name',
+  });
+  // On Zulip the title is the comment's topic, which holds 60 characters.
+  const title = el('input', {
+    type: 'text', name: 'title', required: true, maxlength: '60', autocomplete: 'off',
+    placeholder: 'What the comment is about, in a few words', 'aria-label': 'Title',
   });
   name.value = remembered(NAME_KEY);
   const group = 'comment-visibility-' + ++panels;
@@ -111,6 +117,7 @@ export function commentsPanel(app, id) {
   const form = el('form.comment-form',
     el('h4', 'Add a comment'),
     el('label.comment-field', el('span', 'Name'), name),
+    el('label.comment-field', el('span', 'Title'), title),
     visibility,
     el('label.comment-field', el('span', 'Comment'), text),
     preview,
@@ -131,6 +138,11 @@ export function commentsPanel(app, id) {
   previewBtn.addEventListener('click', () => showPreview(preview.hidden));
 
   let onZulip = false; // the server keeps the comments on Zulip
+  let zulipAt = null; // and where: {site, channel, streamId}
+
+  /** A link to a channel, or to one of its topics, on the Zulip of the comments. */
+  const zulipLink = (topic) => String(zulipAt.site).replace(/\/*$/, '') + '/#narrow/channel/'
+    + narrowPart(zulipAt.streamId + '-' + zulipAt.channel) + (topic == null ? '' : '/topic/' + narrowPart(topic));
 
   const draw = (comments) => {
     clear(list);
@@ -143,7 +155,13 @@ export function commentsPanel(app, id) {
       const body = el('div.comment-body.body-prose');
       app.renderBody(body, c.body, app.knownIds(), undefined, { untrusted: true });
       const when = c.date ? new Date(c.date) : null;
+      // The title, which on Zulip leads to the comment's own topic.
+      const head = !c.title ? null
+        : zulipAt && typeof zulipAt.streamId === 'number' && typeof c.topic === 'string'
+          ? el('a.comment-title', { href: zulipLink(c.topic), target: '_blank', rel: 'noopener' }, c.title)
+          : el('span.comment-title', c.title);
       list.appendChild(el('article.comment', { id: 'comment-' + c.n },
+        head ? el('div.comment-title-row', head) : null,
         el('div.comment-head',
           el('b', c.name),
           when && !Number.isNaN(when.getTime())
@@ -160,7 +178,7 @@ export function commentsPanel(app, id) {
     list.appendChild(el('p.muted.small',
       'Comments need the comment server, which ', el('code', 'lake exe blueprint serve'),
       ' starts; this copy of the site is served without it', why ? ` (${why})` : '', '.'));
-    for (const c of [name, text, previewBtn, post, isPublic, isPrivate]) c.disabled = true;
+    for (const c of [name, title, text, previewBtn, post, isPublic, isPrivate]) c.disabled = true;
   };
 
   /** Says where the comments go, as the server answers it: on Zulip, the topic,
@@ -169,18 +187,17 @@ export function commentsPanel(app, id) {
     if (typeof data.maxBody === 'number') text.setAttribute('maxlength', String(data.maxBody));
     const z = data.zulip;
     onZulip = !!z;
+    zulipAt = z || null;
     if (!z) return;
     publicText.textContent = ' Public: shown below this page and posted to Zulip';
     privateText.textContent = ' Private: posted to Zulip only';
-    const label = `#${z.channel} › ${z.topic}`;
+    const label = `#${z.channel}`;
     clear(where);
     where.appendChild(el('span', 'Every comment is posted to Zulip, in ',
       typeof z.streamId !== 'number' ? el('b', label) : el('a', {
-        href: String(z.site).replace(/\/*$/, '') + '/#narrow/channel/'
-          + narrowPart(z.streamId + '-' + z.channel) + '/topic/' + narrowPart(z.topic),
-        target: '_blank', rel: 'noopener',
+        href: zulipLink(null), target: '_blank', rel: 'noopener',
       }, label),
-      '; public ones are also shown here.'));
+      ', as a topic of its own named by its title; public ones are also shown here.'));
   };
 
   const load = async () => {
@@ -208,9 +225,10 @@ export function commentsPanel(app, id) {
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const who = name.value.trim();
+    const about = title.value.trim().replace(/\s+/g, ' ');
     const what = text.value.trim();
-    if (!who || !what) {
-      note.textContent = 'A name and a comment, please.';
+    if (!who || !about || !what) {
+      note.textContent = 'A name, a title and a comment, please.';
       return;
     }
     const vis = isPrivate.checked ? 'private' : 'public';
@@ -223,13 +241,14 @@ export function commentsPanel(app, id) {
       const res = await fetch(await commentsUrl(id), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: who, body: what, visibility: vis, page }),
+        body: JSON.stringify({ name: who, title: about, body: what, visibility: vis, page }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
       remember(NAME_KEY, who);
       remember(VISIBILITY_KEY, vis);
       text.value = '';
+      title.value = '';
       showPreview(false);
       note.textContent = data.shown === false
         ? (onZulip ? 'Posted to Zulip (private: not shown here).' : 'Posted (private: not shown here).')
