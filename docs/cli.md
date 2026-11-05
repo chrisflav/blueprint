@@ -560,7 +560,8 @@ descend = ["MyProject", "MyLib"]    # optional: where the dependency walk goes
 theme   = "outline"                 # the style the website opens in
 numbering = "nested"                # statements inside statements: n.m.k, default "flat"
 pdfDetails = false                  # PDFs leave the details out, default true
-pdfScopes = ["part", "chapter"]     # PDFs only of these, besides the whole; default every page
+pdfScopes = ["part", "chapter"]     # PDFs only of these kinds or ids, besides the whole; default every page
+pdfReferences = "all"               # every PDF ends with the whole bibliography, default "cited"
 assets  = "site-assets"             # copied into the site as assets/
 blog    = "blog"                    # posts, Markdown and PDFs, on the Blog page
 logo    = "assets/logo.svg"         # left of the title in the top bar
@@ -710,14 +711,25 @@ numbering the details' numbers are gaps in the PDF; with `"nested"` there
 are none.  The default, `true`, writes the details out.  `blueprint build`
 copies `false` into the snapshot as `project.pdfDetails`.
 
-`[site] pdfScopes` names the kinds a PDF may be made of, besides the whole
+`[site] pdfScopes` names what a PDF may be made of, besides the whole
 blueprint: with `["part", "chapter", "appendix"]` the export dialog offers the
 whole blueprint, the parts and the chapters, `blueprint site --pdf` prepares
 those alone, and `blueprint export` and the server refuse a section or a
 statement, naming the part or chapter it is in.  On a section's page the
-dialog offers its chapter.  Every name must be a kind of the schema.  Without
-it every page, an entry with entries below it, may be a PDF.  `blueprint build`
-copies it into the snapshot as `project.pdfScopes`.
+dialog offers its chapter.  A name is a kind of the schema, every entry of
+which may be a PDF, or an object's id, that entry alone: `"chap-Introduction"`
+allows the introduction and not the references, though both are `matter`.
+A name that is neither is a `dangling-ref` error.  Without it every page, an
+entry with entries below it, may be a PDF.  `blueprint build` copies it into
+the snapshot as `project.pdfScopes`.
+
+`[site] pdfReferences = "all"` ends every PDF with the whole bibliography,
+every `reference` entry sorted by label, on pages of its own, whether the
+PDF cites it or not; where the PDF writes the bibliography out in place (the
+whole blueprint), that section starts a new page instead.  The default,
+`"cited"`, ends a PDF with the entries it cites and does not write out in
+place, and with none when it cites nothing.  `blueprint build` copies it into
+the snapshot as `project.pdfReferences`.
 
 `[site.intro]` is what the website shows in the middle of the screen when
 it is opened at its landing page, drawn as a single graph node, before it
@@ -1103,7 +1115,8 @@ merge.  `Topology.coverChoice` is a custom axiom (`proved_with_axioms`),
   it got before the field existed.  So is `project.theme` when `[site] theme`
   is not given, `project.numbering` when `[site] numbering` is not given, and `project.intro` when there is no `[site.intro]`.
   `project.pdfDetails` is written only when it is `false`, and
-  `project.pdfScopes` only when it names a kind.
+  `project.pdfScopes` only when it names a kind or an object, and
+  `project.pdfReferences` only when it is set.
 * **`blueprint read`** is an extra command, see above.
 * **The `attrMap` is merged into the object mapping (§5).**
   `docs/snapshot-format.md` records `attrMap` but says only that the names

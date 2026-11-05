@@ -170,7 +170,8 @@ export function resolveRequest(model, raw = {}) {
     }
     if (!M.isPdfScope(model, entry)) {
       const up = M.pdfScopeOf(model, entry);
-      const kinds = M.pdfScopeKinds(model).map((k) => M.kindWord(k).toLowerCase()).join(', ');
+      const kinds = M.pdfScopeKinds(model)
+        .map((k) => (model.byId.has(k) ? `'${k}'` : M.kindWord(k).toLowerCase())).join(', ');
       throw new ExportError('invalid', `'${scope}' is a ${M.kindWord(entry.object.kind).toLowerCase()}, and this blueprint's PDFs are of the whole blueprint or a ${kinds} ([site] pdfScopes); ` +
         (up ? `export '${up.id}' instead` : 'export the whole blueprint instead'));
     }
@@ -555,8 +556,11 @@ export function exportLatex(model, request, options = {}) {
 
   const outside = new Map(); // id -> {ref, entry}
   // Works cited here whose bibliography entries the export does not write out
-  // in place: they are set at the end, under References.
+  // in place: they are set at the end, under References.  With `[site]
+  // pdfReferences = "all"` that is every entry, cited or not.
   const cited = new Set();
+  const allReferences = M.exportsAllReferences(model);
+  if (allReferences) for (const o of model.objects) if (M.isReference(o) && !plan.written.has(o.id)) cited.add(o.id);
 
   // Without details, a detail, or a proof or step read with one, is named as
   // the statement it lies in (`M.detailHost`): the PDF says nothing of it.
@@ -755,6 +759,10 @@ export function exportLatex(model, request, options = {}) {
         `belongs here too; it is written out ${whereWritten(node.target)}, on page~\\pageref{${labelOf(o.id)}}.\\end{bpnote}`);
       return;
     }
+
+    // With `[site] pdfReferences = "all"` the bibliography is on pages of its
+    // own, written out in place too.
+    if (allReferences && node.children.some((c) => c.type === 'text' && c.entry.reference)) out.push('\\clearpage');
 
     const isPart = o.kind === M.PART_KIND;
     const level = node.rel - top - partsOpen;
