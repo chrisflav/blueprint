@@ -90,6 +90,14 @@ const TEXT = {
   0x2026: '\\ldots{}',
 };
 
+// The Roman numerals (Ⅰ Ⅱ … Ⅿ, ⅰ ⅱ … ⅿ), which a part's `serial` may be: set
+// as their letters, upright, in text and in maths alike.
+['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'L', 'C', 'D', 'M']
+  .forEach((r, k) => {
+    TEXT[0x2160 + k] = `\\textup{${r}}`;
+    TEXT[0x2170 + k] = `\\textup{${r.toLowerCase()}}`;
+  });
+
 /** Whether pdfLaTeX's utf8 and T1 already know the character in text. */
 function knownToLatex(cp) {
   // Latin-1 and Latin Extended-A, and the punctuation the TS1 encoding has.
