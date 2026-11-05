@@ -208,28 +208,37 @@ def axiomsOf (env : Environment) (g : DepGraph) : Std.HashMap Name (Array Name) 
     m := m.insert n (sortDedupNames acc)
   return m
 
-/-- For every reachable constant, the mapped constants below it, stopping at
-mapped constants and at the edge of the project: `below n = {n}` when `n` is
-mapped, the union of the `below` of its direct dependencies when `descend n`
-(`n` is the project's own), and `∅` otherwise.  A mapped constant of a
-dependency is still recorded when project code reaches it, but the walk never
-passes through a dependency's internals: a project declaration that uses
-`Finset.sum` does not depend on every mapped Mathlib lemma `Finset.sum` is
-built from. -/
-def mappedBelow (g : DepGraph) (mapped : Std.HashSet Name) (descend : Name → Bool) :
-    Std.HashMap Name (Array Name) := Id.run do
-  let mut m : Std.HashMap Name (Array Name) := {}
-  for n in g.order do
+/-- The mapped constants below some starting constants, sorted, stopping at
+mapped constants and at the edge of the project: a mapped constant is
+collected and not passed through, a constant for which `descend` holds (the
+project's own) is passed through to its direct dependencies, and anything else
+ends the walk.  A mapped constant of a dependency is still recorded when
+project code reaches it, but the walk never passes through a dependency's
+internals: a project declaration that uses `Finset.sum` does not depend on
+every mapped Mathlib lemma `Finset.sum` is built from.
+
+One walk per question rather than a table of `below` sets for every reachable
+constant: the table unions, at every one of the project's own constants, the
+sets of all its children, and on weil-conjectures (340 000 reachable
+constants, 1 077 mapped) that took the better part of an hour, while only the
+direct dependencies of the mapped constants are ever asked about. -/
+def mappedReach (g : DepGraph) (mapped : Std.HashSet Name) (descend : Name → Bool)
+    (starts : Array Name) : Array Name := Id.run do
+  let mut visited : Std.HashSet Name := {}
+  let mut found : Array Name := #[]
+  let mut stack := starts
+  while 0 < stack.size do
+    let n := stack.back!
+    stack := stack.pop
+    if visited.contains n then continue
+    visited := visited.insert n
     if mapped.contains n then
-      m := m.insert n #[n]
+      found := found.push n
     else if descend n then
-      let mut acc : Array Name := #[]
       for d in g.direct.getD n #[] do
-        acc := acc ++ m.getD d #[]
-      m := m.insert n (sortDedupNames acc)
-    else
-      m := m.insert n #[]
-  return m
+        unless visited.contains d do
+          stack := stack.push d
+  return found.qsort Name.lt
 
 /-- The module prefixes the dependency walk descends through: `descend` when
 it is given, else the first component of every imported module. -/
@@ -312,7 +321,8 @@ def declFactsOf (env : Environment) (names roots : Array Name) (srcPath : Search
     (cwd : System.FilePath) : IO (Array DeclFacts) := do
   let g := buildDepGraph env names
   let axs := axiomsOf env g
-  let below := mappedBelow g (Std.HashSet.ofArray names) (inModules env roots)
+  let mapped := Std.HashSet.ofArray names
+  let descend := inModules env roots
   -- resolve each module's source file once rather than once per constant
   let mut files : Std.HashMap Name String := {}
   for m in sortDedupNames (names.filterMap (moduleOf? env ·)) do
@@ -327,16 +337,14 @@ def declFactsOf (env : Environment) (names roots : Array Name) (srcPath : Search
       let axioms := axs.getD n #[]
       -- the mapped constants below the direct dependencies; a constant is
       -- never a dependency of itself
-      let mappedOf (ds : Array Name) : Array Name := Id.run do
-        let mut acc : Array Name := #[]
-        for d in ds do
-          acc := acc ++ below.getD d #[]
-        return (sortDedupNames acc).filter (· != n)
-      let deps := mappedOf (g.direct.getD n #[])
-      -- the same walk, started from the type alone and from the value alone
+      let mappedOf (ds : Array Name) : Array Name :=
+        (mappedReach g mapped descend ds).filter (· != n)
+      -- the walk started from the type alone and from the value alone; the
+      -- direct dependencies are the two together, so `deps` is their union
       let (fromType, fromValue) := directDepsSplit env n
       let typeDeps := mappedOf fromType
       let valueDeps := mappedOf fromValue
+      let deps := sortDedupNames (typeDeps ++ valueDeps)
       let kind := declKind env n (← Meta.isInstance n)
       let signature ←
         try
