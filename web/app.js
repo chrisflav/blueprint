@@ -617,11 +617,15 @@ export function linkifySlugs(root, known, refs) {
         last = m.index + m[0].length;
         continue;
       }
-      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
       const ok = !known || known.has(slug);
       const ref = ok && refs ? refs(slug) : null;
-      // "Lemma [x]" and "Thm [x]" already have their word.
-      const label = ref && app.model ? model.referenceLabel(app.model, ref, text.slice(0, m.index)) : slug;
+      // "Lemma [x]" and "Thm [x]" already have their word: it is not
+      // repeated, and it goes into the link, which reads "Lemma 2.3" either way.
+      const naming = ref && app.model ? model.referenceNaming(app.model, ref, text.slice(last, m.index)) : '';
+      const start = m.index - naming.length;
+      if (start > last) frag.appendChild(document.createTextNode(text.slice(last, start)));
+      const label = naming ? naming.replace(/\s+/g, ' ') + ref.number
+        : ref && app.model ? model.referenceLabel(app.model, ref, '') : slug;
       frag.appendChild(
         el(
           'a',

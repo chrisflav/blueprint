@@ -1383,7 +1383,18 @@ await check('the word already in the prose is not repeated', async () => {
   const div = dom.document.createElement('div');
   app.renderBody(div, 'By Lemma [lem-ultrafilter], by lemma [lem-ultrafilter], a dilemma [lem-ultrafilter].', app.knownIds());
   const texts = [...div.querySelectorAll('a.objlink')].map((a) => a.textContent);
-  eq(texts.join(' | '), '1.5 | 1.5 | Lemma 1.5', 'only the number after the word, whole words only');
+  eq(texts.join(' | '), 'Lemma 1.5 | lemma 1.5 | Lemma 1.5', 'the word once, whole words only');
+  eq(div.textContent, 'By Lemma 1.5, by lemma 1.5, a dilemma Lemma 1.5.', 'the prose around it as written');
+});
+
+await check('the word the prose names a reference with is part of its link', async () => {
+  const div = dom.document.createElement('div');
+  app.renderBody(div, 'as in Section\n[sec-main], Lemmas [lem-ultrafilter] and [lem-ultrafilter]', app.knownIds());
+  const links = [...div.querySelectorAll('a.objlink')];
+  eq(links.map((a) => a.textContent).join(' | '), 'Section 2 | Lemmas 1.5 | Lemma 1.5',
+    'a section like a statement, a line break as a space; a plural word with the first only');
+  eq(links.map((a) => a.getAttribute('data-ref')).join(' '), 'sec-main lem-ultrafilter lem-ultrafilter', 'each its own target');
+  eq(div.textContent.replace(/\s+/g, ' '), 'as in Section 2, Lemmas 1.5 and Lemma 1.5', 'nothing lost or doubled');
 });
 
 await check('a word the prose names a reference with stands, whatever the kind', async () => {
@@ -1391,7 +1402,7 @@ await check('a word the prose names a reference with stands, whatever the kind',
   app.renderBody(div, 'Thm [lem-ultrafilter], Props. [lem-ultrafilter], definition [lem-ultrafilter], ' +
     'the theorem [lem-ultrafilter], using [lem-ultrafilter], athm [lem-ultrafilter].', app.knownIds());
   const texts = [...div.querySelectorAll('a.objlink')].map((a) => a.textContent);
-  eq(texts.join(' | '), '1.5 | 1.5 | 1.5 | 1.5 | Lemma 1.5 | Lemma 1.5',
+  eq(texts.join(' | '), 'Thm 1.5 | Props. 1.5 | definition 1.5 | theorem 1.5 | Lemma 1.5 | Lemma 1.5',
     'abbreviations, plurals, other kind words; ordinary words still get the kind word');
 });
 

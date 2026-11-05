@@ -673,8 +673,11 @@ default order on the object page. The slug stays the link's tooltip.
   object is drawn at: the sections above it opened, the object itself too
   when it has contents (so the reader is in it), and the object selected; the
   rest of the view (filters, collapse order) is kept.
-* When the prose already says the word, "by Lemma [lem-x]", only the number
-  is added, so it does not read "Lemma Lemma 2.3".
+* When the prose already says the word, "by Lemma [lem-x]" or "Chapter
+  [sec-x]", only the number is added, so it does not read "Lemma Lemma 2.3",
+  and the prose's word goes into the link: "Lemma 2.3" and "Chapter 3" are
+  each one link, as they are where the prose wrote only `[lem-x]`
+  (`referenceNaming` in `model.js`).
 * An object the document gives no number keeps its slug as the text: one
   that is not in the flow (a sugar edge with no prose, an object with neither
   prose nor children), or a step, which is read as part of its source. An
