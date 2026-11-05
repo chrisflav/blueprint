@@ -14,7 +14,7 @@ the Lean core, the Lean extractor and the website under `web/`.
 This repository is at phase 4: the model, the schema, the parser, `check`,
 `build`, the Lean extractor behind `extract` and `check --lean`, and the
 semantic diff behind `diff`, `log`, `progress`, `history add`, `site` and
-`serve`, written in Lean 4 (toolchain `v4.34.0`, no dependencies beyond the
+`serve`, written in Lean 4 (toolchain `v4.33.1`, no dependencies beyond the
 toolchain — TOML comes from `Lake.Toml` and JSON from `Lean.Data.Json`).
 Authors write Markdown files with TOML front matter under `blueprint/`; the
 tool derives the edges the front matter implies, validates the whole thing,
