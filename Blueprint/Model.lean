@@ -1,3 +1,5 @@
+import Std.Data.HashSet
+
 /-!
 # Core data model
 
@@ -15,11 +17,16 @@ namespace Blueprint
 def replaceAll (s pat repl : String) : String :=
   if pat.isEmpty then s else String.intercalate repl (s.splitOn pat)
 
-/-- Sort an array of strings, dropping duplicates. -/
-def sortDedup (xs : Array String) : Array String :=
-  let sorted := xs.qsort (fun a b => a < b)
-  sorted.foldl (init := #[]) fun acc x =>
-    if acc.back?.any (· == x) then acc else acc.push x
+/-- Sort an array of strings, dropping duplicates.  The duplicates go first,
+because `Array.qsort` is quadratic in a run of equal elements. -/
+def sortDedup (xs : Array String) : Array String := Id.run do
+  let mut seen : Std.HashSet String := {}
+  let mut uniq : Array String := #[]
+  for x in xs do
+    unless seen.contains x do
+      seen := seen.insert x
+      uniq := uniq.push x
+  return uniq.qsort (fun a b => a < b)
 
 /-! ## Attribute values -/
 
