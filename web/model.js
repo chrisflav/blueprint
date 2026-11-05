@@ -2029,22 +2029,37 @@ function escapeRegExp(s) {
  * links and the PDF export both read references this way.
  */
 export function referenceLabel(model, ref, before) {
-  const text = String(before || '');
-  const said = new RegExp('(?:^|[^\\p{L}])' + escapeRegExp(ref.word) + '\\s+$', 'iu');
   if (!ref.word) return String(ref.number);
-  return said.test(text) || namesReference(model, text) ? ref.number : ref.word + ' ' + ref.number;
+  return referenceNaming(model, ref, before) ? ref.number : ref.word + ' ' + ref.number;
+}
+
+/**
+ * The words at the end of the prose `before` a `[slug]` reference that name
+ * it, the space after them included: "Chapter " in "by Chapter [x]", "Props. "
+ * in "see Props. [x]"; `''` when the prose does not name it, or when the
+ * reference has no word of its own (a citation, an unnumbered entry).  The
+ * website links them with the number, so that "Chapter 3" is one link, as
+ * "Theorem 2.1" is where the prose wrote only `[x]`.
+ */
+export function referenceNaming(model, ref, before) {
+  if (!ref.word) return '';
+  const text = String(before || '');
+  const said = new RegExp('(?:^|[^\\p{L}])(' + escapeRegExp(ref.word) + '\\s+)$', 'iu').exec(text);
+  const named = said || namingRegExp(model).exec(text);
+  return named ? named[1] : '';
 }
 
 // One pattern per model: "<word>[s][.] " at the end of the text before the
 // reference, the word whole (`\p{L}`, so "dilemma [x]" does not count).
-function namesReference(model, before) {
+// Group 1 is the word with its space.
+function namingRegExp(model) {
   if (!model._namingRe) {
     const words = new Set(REFERENCE_WORDS);
     for (const k of Object.keys(model.kinds || {})) words.add(kindWord(k).toLowerCase());
     const alt = [...words].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|');
-    model._namingRe = new RegExp('(?:^|[^\\p{L}])(?:' + alt + ')s?\\.?\\s+$', 'iu');
+    model._namingRe = new RegExp('(?:^|[^\\p{L}])((?:' + alt + ')s?\\.?\\s+)$', 'iu');
   }
-  return model._namingRe.test(before);
+  return model._namingRe;
 }
 
 /** A `[slug]` reference in prose: the slug is group 1.  Not `[text](url)`. */

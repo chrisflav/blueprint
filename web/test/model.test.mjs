@@ -967,6 +967,18 @@ check('serial = false: no number; what is inside it numbered on its own, the sib
   eq(M.referenceText(ref), title, 'by its title');
   eq(M.referenceLabel(model, ref, 'see '), title, 'in prose too');
   eq(M.referenceLabel(model, ref, 'by Section '), title, 'whatever word stands before it');
+  eq(M.referenceNaming(model, ref, 'by Section '), '', 'and that word is not part of its link');
+});
+
+check('referenceNaming: the words before a reference that name it, with their space', () => {
+  const ref = { word: 'Section', number: '2' };
+  eq(M.referenceNaming(model, ref, 'by Section '), 'Section ', 'its own word');
+  eq(M.referenceNaming(model, ref, 'in chapter\n'), 'chapter\n', 'another naming word, the line break kept');
+  eq(M.referenceNaming(model, ref, 'see Props. '), 'Props. ', 'plural and abbreviation');
+  eq(M.referenceNaming(model, ref, 'a dilemma '), '', 'whole words only');
+  eq(M.referenceNaming(model, ref, 'using '), '', 'an ordinary word');
+  eq(M.referenceNaming(model, ref, 'Section'), '', 'no space, no reference after it');
+  eq(M.referenceNaming(model, { word: '', number: 'Del74', cite: true }, 'see Section '), '', 'a citation has no word');
 });
 
 check('serial on a section or a statement inside a chapter heads its own series', () => {
