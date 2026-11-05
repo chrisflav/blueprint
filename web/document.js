@@ -419,8 +419,13 @@ function breadcrumbs(app, outline, pageEntry, href) {
 function pager(app, outline, pageEntry, href) {
   const { el } = app;
   if (!pageEntry) return null;
+  // Its neighbours in its own layer, as its number counts them: a heading's
+  // among the headings, a statement's among the statements.  Section 4.1 is
+  // the first of chapter 4's sections, and has no previous one, whatever
+  // statements stand before it in the chapter.
+  const heading = M.isSectionKind(pageEntry.object.kind);
   const siblings = (pageEntry.parent ? pageEntry.parent.children : outline.roots)
-    .filter((e) => !e.duplicate && !e.text && !e.proof);
+    .filter((e) => !e.duplicate && !e.text && !e.proof && M.isSectionKind(e.object.kind) === heading);
   const i = siblings.indexOf(pageEntry);
   const prev = i > 0 ? siblings[i - 1] : null;
   const next = i >= 0 && i + 1 < siblings.length ? siblings[i + 1] : null;

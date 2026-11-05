@@ -1075,6 +1075,31 @@ await check('a chapter page: breadcrumbs, its entries, its siblings', async () =
   eq(pager.querySelectorAll('a.up')[0].getAttribute('href'), '#/document?collapse=refines', 'up to the top');
 });
 
+await check('the pager links a page to the neighbours of its own layer: headings to headings, statements to statements', async () => {
+  const links = () => {
+    const p = root.querySelectorAll('.doc-pager')[0];
+    const href = (sel) => { const a = p.querySelector(sel); return a ? decodeURIComponent(a.getAttribute('href')) : null; };
+    return { prev: href('a.prev'), next: href('a.next'), up: href('a.up') };
+  };
+  // 2.1 is chapter 2's only section; the statement after it (Theorem 2.3) is
+  // of another layer.
+  await go('#/document/sec-main-induction');
+  let l = links();
+  eq(l.prev, null, '2.1, the first section of its chapter, has no previous one');
+  eq(l.next, null, 'and, the last, no next one, though a theorem follows it');
+  eq(l.up, '#/document/sec-main?collapse=refines', 'up to its chapter');
+  // The last chapter: top-level statements follow it, but no chapter does.
+  await go('#/document/sec-applications');
+  l = links();
+  ok(l.prev && l.prev.startsWith('#/document/sec-main?'), 'the chapter before it');
+  eq(l.next, null, 'the last chapter has no next one');
+  // A statement with a page of its own: its neighbours are statements.
+  await go('#/document/' + encodeURIComponent('uses/thm-tychonoff/lem-ultrafilter'));
+  l = links();
+  ok(l.prev && l.prev.startsWith('#/document/generalises/'), `the statement before it, not a chapter: ${l.prev}`);
+  eq(l.next, null, 'the last statement at the top');
+});
+
 await check('a click on any title stays on the page, scrolled to it', async () => {
   const click = (a) => fire(root.querySelector('.doc-flow'), 'click', { target: a, button: 0 });
   const title = (sel) => root.querySelector(sel + ' .head a.doc-title');

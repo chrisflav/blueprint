@@ -383,8 +383,11 @@ text between them. `#/document/<id>` writes out one entry and the levels
 below it. An entry whose children are not on the page links on to its own
 page by a *Show details 1.2 →* link beside its title. Each page has breadcrumbs up
 its chain, back to the top, its previous and next siblings, and the contents
-in a sidebar. A top-level entry with nothing under it (an introduction, say)
-has its own page too.
+in a sidebar. The siblings are those of its own layer, as its number counts
+them: a heading's are the headings beside it, a statement's the statements,
+so section 4.1 has no previous section even when a statement of chapter 4
+stands before it, and the last section of a chapter no next one. A top-level
+entry with nothing under it (an introduction, say) has its own page too.
 
 `hide_content = true` (or `"yes"`) in an entry's front matter leaves it off
 its parent's page: its heading and its prose, and a repeat of it, are not
