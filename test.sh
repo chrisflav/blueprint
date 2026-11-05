@@ -170,13 +170,14 @@ else
   bad "an unknown arrow is rejected"; cat "$TMP/arrow.check"
 fi
 
-head_ "kinds: the graph display hint, appendix, matter, hidden and reference"
-if [ "$(grep -c '"graph"' "$TMP/induction.json")" = 4 ] \
+head_ "kinds: the graph display hint, part, appendix, matter, hidden and reference"
+if [ "$(grep -c '"graph"' "$TMP/induction.json")" = 5 ] \
+   && [ "$(grep -c '"graph": "through"' "$TMP/induction.json")" = 1 ] \
    && [ "$(grep -c '"graph": "optional"' "$TMP/induction.json")" = 1 ] \
    && [ "$(grep -c '"graph": "never"' "$TMP/induction.json")" = 3 ]; then
-  ok "only appendix, matter, hidden and reference carry a graph hint, optional and never"
+  ok "only part, appendix, matter, hidden and reference carry a graph hint, through, optional and never"
 else
-  bad "only appendix, matter, hidden and reference carry a graph hint, optional and never"
+  bad "only part, appendix, matter, hidden and reference carry a graph hint, through, optional and never"
 fi
 cp -r examples/minimal "$TMP/graph"
 mkdir -p "$TMP/graph/blueprint/appendix"
@@ -189,16 +190,22 @@ mkdir -p "$TMP/graph/blueprint/intro"
 printf '+++\nkind = "matter"\ntitle = "Introduction"\n+++\nWhy.\n' \
   > "$TMP/graph/blueprint/intro/_section.md"
 printf '+++\nkind = "remark"\n+++\nA motivation.\n' > "$TMP/graph/blueprint/intro/motive.md"
+mkdir -p "$TMP/graph/blueprint/part1"
+printf '+++\nid = "part1"\nkind = "part"\ntitle = "The first part"\n+++\nWhat this part does.\n' \
+  > "$TMP/graph/blueprint/part1/_section.md"
+printf '+++\nkind = "chapter"\ntitle = "A chapter in it"\nrefines = "part1"\n+++\nIts text.\n' \
+  > "$TMP/graph/blueprint/in-part.md"
 if "$BP" check --root "$TMP/graph" > "$TMP/graph.check" 2>&1 \
    && "$BP" build --root "$TMP/graph" -o "$TMP/graph.json" > /dev/null 2>&1; then
-  ok "an appendix and matter with contents and a hidden object check clean"
+  ok "an appendix, matter and a part with contents and a hidden object check clean"
 else
-  bad "an appendix and matter with contents and a hidden object check clean"; cat "$TMP/graph.check"
+  bad "an appendix, matter and a part with contents and a hidden object check clean"; cat "$TMP/graph.check"
 fi
-wants "$TMP/graph.json" '"id": "refines/detail/appendix"' '"kind": "hidden"' '"id": "refines/motive/intro"'
+wants "$TMP/graph.json" '"id": "refines/detail/appendix"' '"kind": "hidden"' '"id": "refines/motive/intro"' \
+  '"id": "refines/in-part/part1"'
 printf '\n[kinds.remark]\ngraph = "never"\n' >> "$TMP/graph/blueprint.toml"
 if "$BP" build --root "$TMP/graph" -o "$TMP/graph.json" > /dev/null 2>&1 \
-   && [ "$(grep -c '"graph"' "$TMP/graph.json")" = 5 ]; then
+   && [ "$(grep -c '"graph"' "$TMP/graph.json")" = 6 ]; then
   ok "blueprint.toml can keep another kind out of the graph"
 else
   bad "blueprint.toml can keep another kind out of the graph"
@@ -1375,6 +1382,8 @@ if command -v node > /dev/null 2>&1; then
     : > "$TMP/zulip.log"
     python3 web/test/fake-zulip.py "$zport" bot@zulip.example k3y "blueprint comment" "$TMP/zulip.log" &
     fake=$!
+    # The fake Zulip listening first: a comment server asking it too early gets 502.
+    for _ in $(seq 1 50); do curl -s "http://127.0.0.1:$zport/" > /dev/null 2>&1 && break; sleep 0.1; done
     BLUEPRINT_ZULIP_EMAIL=bot@zulip.example BLUEPRINT_ZULIP_KEY=k3y \
       python3 web/comments-server.py --port "$cport" --directory "$TMP/relay.site" \
         --comments "$TMP/comments.relay" --allow-origin https://pages.example > "$TMP/relay.log" 2>&1 &

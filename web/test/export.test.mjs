@@ -97,6 +97,33 @@ const edge = (kind, src, tgt, body = '', attrs = {}, id = `${kind}/${src}/${tgt}
 // 1. the whole blueprint, in the document's order
 // ---------------------------------------------------------------------------
 
+await check('a part is set as \\part*, and what is in it at the depth it would have without it', () => {
+  const m = M.buildModel(snapshot([
+    node('p1', 'part', '', { title: 'The six operations', order: 1 }),
+    node('ch1', 'section', 'A chapter.', { title: 'Sites', order: 2 }),
+    node('sec1', 'section', 'A section.', { title: 'Covers', order: 3 }),
+    node('thm', 'theorem', 'A statement.', { order: 4 }),
+    edge('refines', 'ch1', 'p1'), edge('refines', 'sec1', 'ch1'), edge('refines', 'thm', 'sec1'),
+  ], { part: { boundary: {}, graph: 'through' } }));
+  const res = exportLatex(m, {});
+  ok(res.tex.includes('\\part*{\\texorpdfstring{Part I\\quad The six operations}{Part I The six operations}}'),
+    'the part, with its word and number');
+  ok(res.tex.includes('\\addcontentsline{toc}{part}{'), 'on a line of its own in the contents');
+  ok(res.tex.includes('\\section*{\\texorpdfstring{1\\quad Sites}'), 'its chapter is a section, numbered 1');
+  ok(res.tex.includes('\\subsection*{\\texorpdfstring{1.1\\quad Covers}'), 'and the section under it a subsection');
+  ok(res.tex.includes('{Theorem~1.1}'), 'its statement numbered in its chapter');
+  // A part whose content is hidden still has its line in the contents.
+  const hid = M.buildModel(snapshot([
+    node('p1', 'part', '', { title: 'The six operations', order: 1, hide_content: true }),
+    node('ch1', 'section', 'A chapter.', { title: 'Sites', order: 2 }),
+    edge('refines', 'ch1', 'p1'),
+  ], { part: { boundary: {}, graph: 'through' } }));
+  const h = exportLatex(hid, { depth: 1 });
+  ok(h.tex.includes('\\addcontentsline{toc}{part}{\\texorpdfstring{Part I\\quad The six operations}'),
+    'a part whose content is hidden is in the contents');
+  ok(/entr(y|ies) below Part I (is|are) left out/.test(h.tex) || h.tex.includes('Sites'), 'and read as "Part I"');
+});
+
 await check('the whole blueprint is the document, in its order and with its numbers', () => {
   const m = paper();
   const outline = M.documentOutline(m, 'refines');

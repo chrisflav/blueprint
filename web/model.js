@@ -190,11 +190,35 @@ const TYPE_MARK = {
 
 /**
  * Kinds the document sets as headings rather than as numbered statements, and
- * the graph draws as sections: a chapter, a section, a subsection, an
- * appendix (a section the graph can hide) and matter (a section the graph
- * never draws: an introduction, the references).
+ * the graph draws as sections: a part (which the graph does not draw, though
+ * it draws what is in it), a chapter, a section, a subsection, an appendix (a
+ * section the graph can hide) and matter (a section the graph never draws: an
+ * introduction, the references).
  */
-const SECTION_KINDS = new Set(['chapter', 'section', 'subsection', 'appendix', 'matter']);
+const SECTION_KINDS = new Set(['part', 'chapter', 'section', 'subsection', 'appendix', 'matter']);
+
+/**
+ * The kind of a part of the document, "Part I": a heading above chapters,
+ * numbered in a series of its own with what is in it numbered as if it were
+ * not there (`documentOutline`), and left out of the graph without what is in
+ * it (`graph = "through"`, `outOfGraph`).
+ */
+export const PART_KIND = 'part';
+
+/** The word a heading's number is read with in a heading or a contents row: "Part" for a part, none for the others. */
+export function headingWord(kind) {
+  return kind === PART_KIND ? 'Part' : null;
+}
+
+/** I, II, III, …: the number of the `n`th part. */
+export function romanNumeral(n) {
+  let out = '';
+  for (const [v, r] of [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'],
+    [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]) {
+    while (n >= v) { out += r; n -= v; }
+  }
+  return out;
+}
 
 export function isSectionKind(kind) {
   return SECTION_KINDS.has(kind);
@@ -1523,13 +1547,13 @@ function stronglyConnected(succ) {
 
 /**
  * The `graph` display hint of a kind: `always` (the default), `optional` (an
- * appendix: drawn unless the reader hides it) or `never` (read in the
- * document only).
+ * appendix: drawn unless the reader hides it), `never` (read in the document
+ * only) or `through` (a part: not drawn, though what is in it is).
  */
 export function graphHint(model, kindName) {
   const k = model.kinds[kindName];
   const g = k && k.graph;
-  return g === 'optional' || g === 'never' ? g : 'always';
+  return g === 'optional' || g === 'never' || g === 'through' ? g : 'always';
 }
 
 /**
@@ -1539,7 +1563,10 @@ export function graphHint(model, kindName) {
  * graph is driven by; and every object with one of them on its boundary, so a
  * relation never points at something that is not there.  The last two apply
  * again to what they add, which takes a proof along with its statement and a
- * lemma refining a left-out relation along with that relation.
+ * lemma refining a left-out relation along with that relation.  An object of
+ * a kind drawn `through` (a part) is left out with the relations touching it,
+ * but not with what is below it, which then stands where it stood: its
+ * chapters become roots.
  */
 export function outOfGraph(model, { hideOptional = false } = {}) {
   const out = new Set();
@@ -1547,6 +1574,11 @@ export function outOfGraph(model, { hideOptional = false } = {}) {
   for (const o of model.objects) {
     const g = graphHint(model, o.kind);
     if (g === 'never' || (g === 'optional' && hideOptional)) stack.push(o.id);
+  }
+  for (const o of model.objects) {
+    if (graphHint(model, o.kind) !== 'through' || out.has(o.id)) continue;
+    out.add(o.id);
+    for (const { object } of incidentTo(model, o.id)) stack.push(object.id);
   }
   // Built only when something is left out: most snapshots leave nothing, and
   // the graph and object pages then need no order but the one they show.
@@ -1774,6 +1806,11 @@ export function topLevel(model, kind) {
  * has exactly one number and a cross reference to it means one place.  A piece
  * of text (`TEXT_KIND`) is read where it stands and numbered not at all.
  *
+ * A part (`PART_KIND`) is numbered in a series of its own, "I", "II", …, and
+ * is otherwise not there for the numbers: what is in it is numbered as if it
+ * stood where the part stands, so the chapters of a book in parts count on
+ * from one part to the next.
+ *
  * An object's `serial` attribute (`serialOf`) overrides its number: a number
  * of its own ("A"), or none.  It takes no place among its siblings, so they
  * are numbered as if it were not there, and it heads a series of its own:
@@ -1848,6 +1885,7 @@ export function documentOutline(model, kind) {
   const nested = !!(model.project && model.project.numbering === 'nested');
   const headingCounts = new Map();
   const statementCounts = new Map();
+  let parts = 0; // the parts written out so far, for their numbers
   const nextNumber = (counts, key) => {
     const k = (counts.get(key) || 0) + 1;
     counts.set(key, k);
@@ -1884,12 +1922,18 @@ export function documentOutline(model, kind) {
     } else if (serialOf(e.object) !== undefined) {
       // A number of its own, or none, taking no place among its siblings.
       entry.number = serialOf(e.object);
-      entry.serial = true;
+      entry.serial = e.object.kind !== PART_KIND; // a part heads no series
+      byId.set(e.id, entry);
+    } else if (e.object.kind === PART_KIND) {
+      // A part: in a series of its own, taking no place among the headings.
+      entry.number = romanNumeral(++parts);
       byId.set(e.id, entry);
     } else {
-      // The headings above it, nearest first.
+      // The headings above it, nearest first; a part is not there for the numbers.
       const headings = [];
-      for (let a = parent; a; a = a.parent) if (isSectionKind(a.object.kind)) headings.push(a);
+      for (let a = parent; a; a = a.parent) {
+        if (isSectionKind(a.object.kind) && a.object.kind !== PART_KIND) headings.push(a);
+      }
       // Under `[site] numbering = "nested"`, inside a statement: numbered within it.
       const host = nested && !isSectionKind(e.object.kind) && parent && !isSectionKind(parent.object.kind)
         ? parent : null;

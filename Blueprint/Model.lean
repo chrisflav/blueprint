@@ -202,7 +202,9 @@ structure KindSpec where
   kind, `optional` draws them unless the reader hides them (an appendix),
   `never` leaves them to the document alone.  An object the graph leaves out
   takes everything below it in a collapse order, and every relation touching
-  it, along.  Only the picture changes, never the data. -/
+  it, along.  `through` leaves out the object and the relations touching it
+  but not what is below it, which then stands as if it were not there (a
+  part of the document).  Only the picture changes, never the data. -/
   graph : String := "always"
   deriving Inhabited, BEq
 

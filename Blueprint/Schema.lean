@@ -72,6 +72,10 @@ def defaultSchema : Schema where
   defaultCollapse := some "refines"
   kinds :=
     let ks : Array KindSpec := #[
+      -- a part of the document above its chapters, "Part I": read as a
+      -- heading in the document, never drawn in the graph, where what is in
+      -- it stands as if it were not there (`graph := "through"`)
+      mkNodeKind "part" false "#8a93a0" (graph := "through"),
       -- the levels of headings: a chapter, a section, a subsection
       mkNodeKind "chapter" false "#778899",
       mkNodeKind "section" false "#8899aa",
@@ -219,8 +223,8 @@ def decodeKind (name : String) (base : Option KindSpec) (t : TValue) :
   if let some v := t.get? "graph" then
     match v.asString? with
     | some s =>
-      unless s == "always" || s == "optional" || s == "never" do
-        throw s!"kind '{name}': unknown graph '{s}' (expected 'always', 'optional' or 'never')"
+      unless s == "always" || s == "optional" || s == "never" || s == "through" do
+        throw s!"kind '{name}': unknown graph '{s}' (expected 'always', 'optional', 'never' or 'through')"
       k := { k with graph := s }
     | none => throw s!"kind '{name}': 'graph' must be a string"
   return k
