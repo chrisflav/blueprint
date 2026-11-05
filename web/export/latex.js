@@ -15,6 +15,10 @@
 //     one level below it;
 //   * an appendix (a kind the graph may hide, `graph = "optional"`) inside the
 //     scope can be left out;
+//   * with `[site] pdfDetails = false` (`project.pdfDetails`) no detail
+//     (`M.isDetailEntry`: a statement refining a statement, text inside one,
+//     and what is below them) is written out, counted, offered as a part or
+//     named: a reference to one reads as one to the statement it lies in;
 //   * an object with several parents is written out once, where this export
 //     first meets it, with what is below it, and is a pointer to that place
 //     everywhere else.  When its first place in the full document is outside
@@ -55,14 +59,19 @@ function isAppendix(model, o) {
  * (`id: null`), then every entry of the document with entries below it, in
  * reading order, as {id, number, title, word, depth, appendix}.  These are the
  * document's pages, so a section, a subsection and a refined statement or
- * relation are all parts.
+ * relation are all parts.  Without details (`M.exportsDetails`) a detail is no
+ * part, and a statement whose entries below are all details has none.  With
+ * `[site] pdfScopes` only entries of those kinds are (`M.isPdfScope`).
  */
 export function exportScopes(model, collapse) {
   const kind = pickCollapse(model, collapse);
   const outline = M.documentOutline(model, kind);
+  const details = M.exportsDetails(model);
   const out = [{ id: null, number: null, title: projectTitle(model), word: null, depth: -1, appendix: false }];
   for (const e of outline.entries) {
     if (e.duplicate || e.text || !e.children.length) continue;
+    if (!details && (M.isDetailEntry(e) || e.children.every(M.isDetailEntry))) continue;
+    if (!M.isPdfScope(model, e)) continue;
     out.push({ id: e.id, number: e.number, title: entryTitle(model, outline, e), word: M.kindWord(e.object.kind),
       depth: e.depth, appendix: isAppendix(model, e.object) });
   }
@@ -155,10 +164,20 @@ export function resolveRequest(model, raw = {}) {
       const where = entry.parent ? entry.parent.id : null;
       throw new ExportError('invalid', `'${scope}' is ${entry.proof ? 'a proof' : 'text'} read in place` + (where ? ` inside '${where}'; export '${where}' instead` : '; export the whole blueprint instead'));
     }
+    if (!M.exportsDetails(model) && M.isDetailEntry(entry)) {
+      const host = M.detailHost(entry);
+      throw new ExportError('invalid', `'${scope}' is a detail of '${host.id}', and this blueprint's PDFs leave details out ([site] pdfDetails = false); export '${host.id}' instead`);
+    }
+    if (!M.isPdfScope(model, entry)) {
+      const up = M.pdfScopeOf(model, entry);
+      const kinds = M.pdfScopeKinds(model).map((k) => M.kindWord(k).toLowerCase()).join(', ');
+      throw new ExportError('invalid', `'${scope}' is a ${M.kindWord(entry.object.kind).toLowerCase()}, and this blueprint's PDFs are of the whole blueprint or a ${kinds} ([site] pdfScopes); ` +
+        (up ? `export '${up.id}' instead` : 'export the whole blueprint instead'));
+    }
   }
   const wanted = parseDepth(raw.depth);
   const appendicesWanted = raw.appendices === undefined ? true : raw.appendices !== false && raw.appendices !== 'false' && raw.appendices !== '0';
-  const full = planTree(model, outline, entry, Infinity, true);
+  const full = planTree(model, outline, entry, Infinity, true, M.exportsDetails(model));
   if (!full.nodes.length) throw new ExportError('empty', 'nothing to export: no object of this blueprint carries prose');
   const depth = wanted >= full.height ? 'all' : wanted;
   const appendices = full.appendices ? appendicesWanted : true;
@@ -186,15 +205,17 @@ export function requestKey(req) {
  * else; `hidden` that the entry hides its content (`M.isHiddenEntry`) and is
  * not the scope: its heading, prose, proofs and steps are left out, as the
  * website leaves it off its parent's page, while its children and its line in
- * the contents stay.  Returns {nodes, written, height, appendices}: `written` maps an id
+ * the contents stay.  Without `details` no detail (`M.isDetailEntry`) is
+ * met at all.  Returns {nodes, written, height, appendices}: `written` maps an id
  * to its node, `height` is the deepest `rel` written with depth all (at
  * least 1), `appendices` whether an appendix other than the scope was met.
  */
-function planTree(model, outline, scopeEntry, depth, appendices) {
+function planTree(model, outline, scopeEntry, depth, appendices, details) {
   const written = new Map();
   let height = 1;
   let sawAppendix = false;
   const visit = (e, rel, parent) => {
+    if (!details && M.isDetailEntry(e)) return null;
     // Text, and a proof read in its section (`M.proofPlacement`), are written
     // where they are read, once.
     if (e.text || e.proof) {
@@ -226,7 +247,7 @@ function planTree(model, outline, scopeEntry, depth, appendices) {
         if (n) node.children.push(n);
       }
     } else {
-      node.omitted = countBelow(real, new Set());
+      node.omitted = countBelow(real, new Set(), details);
     }
     return node;
   };
@@ -243,14 +264,15 @@ function planTree(model, outline, scopeEntry, depth, appendices) {
   return { nodes, written, height, appendices: sawAppendix };
 }
 
-/** How many entries, other than text and proofs, are below an entry. */
-function countBelow(entry, seen) {
+/** How many entries, other than text and proofs (and details, without `details`), are below an entry. */
+function countBelow(entry, seen, details) {
   let n = 0;
   for (const c of entry.children) {
     if (c.text || c.proof || seen.has(c.id)) continue;
+    if (!details && M.isDetailEntry(c)) continue;
     seen.add(c.id);
     n += 1;
-    if (!c.duplicate) n += countBelow(c, seen);
+    if (!c.duplicate) n += countBelow(c, seen, details);
   }
   return n;
 }
@@ -264,7 +286,7 @@ export function planExport(model, request) {
   const req = resolveRequest(model, request);
   const outline = M.documentOutline(model, req.collapse);
   const scopeEntry = req.scope === null ? null : outline.byId.get(req.scope);
-  const plan = planTree(model, outline, scopeEntry, req.depth === 'all' ? Infinity : req.depth, req.appendices);
+  const plan = planTree(model, outline, scopeEntry, req.depth === 'all' ? Infinity : req.depth, req.appendices, M.exportsDetails(model));
   let entries = 0;
   let proofs = 0;
   const walk = (nodes) => {
@@ -532,11 +554,26 @@ export function exportLatex(model, request, options = {}) {
   for (const id of filedHere) labelOf(id);
 
   const outside = new Map(); // id -> {ref, entry}
+  // Works cited here whose bibliography entries the export does not write out
+  // in place: they are set at the end, under References.
+  const cited = new Set();
 
-  /** One cited label, linked to its entry when the entry is written out here. */
+  // Without details, a detail, or a proof or step read with one, is named as
+  // the statement it lies in (`M.detailHost`): the PDF says nothing of it.
+  const details = M.exportsDetails(model);
+  const shown = (id) => {
+    if (details) return id;
+    let of = id;
+    while (outline.stepOf.has(of)) of = outline.stepOf.get(of);
+    const e = outline.byId.get(of);
+    return M.isDetailEntry(e) ? M.detailHost(e).id : id;
+  };
+
+  /** One cited label, linked to its entry: in place, or at the end. */
   const citeLabel = (id) => {
     const text = escapeText(M.referenceLabelOf(model, id) || id);
-    return writtenHere(id) || plan.written.has(id) ? `\\hyperref[${labelOf(id)}]{${text}}` : text;
+    if (!plan.written.has(id)) cited.add(id);
+    return `\\hyperref[${labelOf(id)}]{${text}}`;
   };
   /** A citation: the labels, linked, and the locator's Markdown; `null` when `inner` does not cite. */
   const cite = (inner) => {
@@ -552,6 +589,17 @@ export function exportLatex(model, request, options = {}) {
     if (!o) {
       warn('unresolved-reference', `[${slug}] resolves to no object of this blueprint`);
       return `\\bpbroken{${escapeText(slug)}}`;
+    }
+    if (shown(slug) !== slug) {
+      // "Theorem 2.4" for "[x]"; for "Lemma [x]", whose word is the detail's,
+      // "Lemma (in Theorem 2.4)".
+      const host = shown(slug);
+      const ref = M.referenceOf(outline, host);
+      const whole = escapeText(ref.word + ' ' + ref.number);
+      const named = M.referenceLabel(model, ref, before) === ref.number;
+      const link = writtenHere(host) ? `\\hyperref[${labelOf(host)}]{${whole}}` : `\\bpout{${whole}}`;
+      if (!writtenHere(host)) outside.set(host, { ref, entry: outline.byId.get(host) });
+      return named ? `(in ${link})` : link;
     }
     const ref = M.referenceOf(outline, slug);
     if (ref) {
@@ -570,6 +618,7 @@ export function exportLatex(model, request, options = {}) {
   const objectName = (id) => {
     const o = model.byId.get(id);
     if (!o) return `\\bpbroken{${escapeText(id)}}`;
+    if (shown(id) !== id) return objectName(shown(id));
     const ref = M.referenceOf(outline, id);
     // An object with no title is named by its id, as the website names it.
     const title = o.attrs && typeof o.attrs.title === 'string' && o.attrs.title
@@ -723,12 +772,31 @@ export function exportLatex(model, request, options = {}) {
       tocLines += 1;
       out.push(`\\addcontentsline{toc}{part}{\\texorpdfstring{${partLead}${titleTex(title)}}{${partPlain}}}`);
     };
-    if (node.hidden) {
-      // Its line in the contents and a place for references to land, then
-      // its children; nothing of its own.
+    // A heading: its number and title, a place for references to land, its line in the contents.
+    const heading = () => {
+      if (isPart) {
+        // "Part I  The six operations".
+        out.push(`\\part*{\\texorpdfstring{${partLead}${titleTex(title)}}{${partPlain}}}`);
+        out.push(`\\phantomsection\\label{${label}}%`);
+        partLine();
+        return;
+      }
+      const cmd = HEADINGS[Math.min(level, HEADINGS.length - 1)];
+      out.push(`\\${cmd}*{\\texorpdfstring{${number == null ? '' : escapeText(number) + '\\quad '}${titleTex(title)}}{${escapePdf(numPrefix(number) + plainTitle(title))}}}`);
       out.push(`\\phantomsection\\label{${label}}%`);
-      if (isPart) partLine();
-      else if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
+      if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
+    };
+    if (node.hidden) {
+      // Its children, and of its own only what places them: a heading (a part,
+      // a chapter, a section, ...) keeps its heading line, anything else its
+      // line in the contents and a place for references to land.  Its prose,
+      // proofs and steps are left out.
+      if (isPart || isSection) {
+        heading();
+      } else {
+        out.push(`\\phantomsection\\label{${label}}%`);
+        if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
+      }
       if (isPart) partsOpen += 1;
       for (const c of node.children) writeNode(c);
       if (isPart) partsOpen -= 1;
@@ -739,16 +807,8 @@ export function exportLatex(model, request, options = {}) {
       out.push('');
       return;
     }
-    if (isPart) {
-      // "Part I  The six operations".
-      out.push(`\\part*{\\texorpdfstring{${partLead}${titleTex(title)}}{${partPlain}}}`);
-      out.push(`\\phantomsection\\label{${label}}%`);
-      partLine();
-    } else if (isSection) {
-      const cmd = HEADINGS[Math.min(level, HEADINGS.length - 1)];
-      out.push(`\\${cmd}*{\\texorpdfstring{${number == null ? '' : escapeText(number) + '\\quad '}${titleTex(title)}}{${escapePdf(numPrefix(number) + plainTitle(title))}}}`);
-      out.push(`\\phantomsection\\label{${label}}%`);
-      if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
+    if (isPart || isSection) {
+      heading();
     } else {
       out.push(`\\phantomsection\\label{${label}}%`);
       if (node.children.length && level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
@@ -809,14 +869,29 @@ export function exportLatex(model, request, options = {}) {
   const scopeTex = scopeEntry
     ? `${escapeText(M.kindWord(scopeEntry.object.kind))}${scopeEntry.number == null ? '' : ' ' + escapeText(scopeEntry.number)}: ${titleTex(entryTitle(model, outline, scopeEntry))}`
     : 'The complete blueprint';
-  const detailBits = [escapeText(described.detail.charAt(0).toUpperCase() + described.detail.slice(1))];
-  detailBits.push(`read along the \\texttt{${escapeText(req.collapse)}} order`);
-  if (described.appendices) detailBits.push(escapeText(described.appendices));
+  // What the dialog does not ask is said only when the command line chose it:
+  // fewer levels, another hierarchy.
+  const detailBits = [];
+  if (req.depth !== 'all') detailBits.push(escapeText(described.detail.charAt(0).toUpperCase() + described.detail.slice(1)));
+  if (req.collapse !== (model.defaultCollapse || model.collapseKinds[0])) detailBits.push(`read along the \\texttt{${escapeText(req.collapse)}} order`);
+  if (described.appendices) detailBits.push(escapeText(described.appendices.charAt(0).toUpperCase() + described.appendices.slice(1)));
   const snapshotLabel = options.snapshot && options.snapshot.label ? options.snapshot.label : null;
+
+  // The entries of the works cited from outside the export, each written once;
+  // an entry may cite another.
+  const bibliography = [];
+  for (let fresh = [...cited]; fresh.length; fresh = [...cited].filter((id) => !bibliography.some((b) => b.id === id))) {
+    for (const id of fresh) {
+      current = id;
+      bibliography.push({ id, label: M.referenceLabelOf(model, id) || id, tex: body(model.byId.get(id)) });
+    }
+  }
+  current = null;
+  bibliography.sort((a, b) => a.label.localeCompare(b.label, 'en'));
 
   const back = [];
   if (outside.size) {
-    back.push('\\bigskip\\phantomsection\\hypertarget{bp-outside}{}%');
+    back.push('\\clearpage\\phantomsection\\hypertarget{bp-outside}{}%');
     back.push('\\section*{Outside this export}');
     back.push('\\addcontentsline{toc}{section}{Outside this export}');
     back.push('References marked \\ensuremath{{}^\\ast} are to parts of the blueprint this document leaves out:');
@@ -831,6 +906,15 @@ export function exportLatex(model, request, options = {}) {
       back.push(`\\item[${escapeText(M.referenceText(ref))}] ${titleTex(M.titleOf(model.byId.get(id)))}${where} (\\bpslug{${escapeCode(id)}})`);
     }
     back.push('\\end{description}');
+  }
+  if (bibliography.length) {
+    back.push('\\clearpage\\phantomsection%');
+    back.push('\\section*{References}');
+    back.push('\\addcontentsline{toc}{section}{References}');
+    for (const b of bibliography) {
+      back.push(`\\bpbibitem{${escapeText(b.label)}}{${labelOf(b.id)}}{${b.tex}}`);
+      back.push('');
+    }
   }
 
   const macroLines = macroDefinitions(model.project.katexMacros, (code, message) => {
@@ -847,7 +931,7 @@ export function exportLatex(model, request, options = {}) {
     '\\vspace{0.7em}',
     `{\\large ${scopeTex}\\par}`,
     '\\vspace{0.5em}',
-    `{\\small\\color{bpmuted}${detailBits.join(' \\textperiodcentered{} ')}\\par}`,
+    detailBits.length ? `{\\small\\color{bpmuted}${detailBits.join(' \\textperiodcentered{} ')}\\par}` : null,
     snapshotLabel ? `{\\small\\color{bpmuted}${escapeText(snapshotLabel)}\\par}` : null,
     '\\end{center}',
     tocLines >= 2 ? '\\vspace{0.5em}\n{\\small\\tableofcontents}\n\\bigskip\\hrule\\bigskip' : '\\bigskip',
@@ -898,7 +982,7 @@ export function exportLatex(model, request, options = {}) {
     description: described,
     assets,
     diagnostics: unique,
-    stats: { ...stats, outside: outside.size, labels: labels.size },
+    stats: { ...stats, outside: outside.size, cited: bibliography.length, labels: labels.size },
   };
 }
 

@@ -19,8 +19,11 @@ outline, along the collapse order chosen, and only chooses a part of it:
   entry with entries below it (`exportScopes`).  The command line takes any
   entry.  A proof or a step is read with its statement, and a piece of text
   (`hidden`) in its section, so those are refused as scopes with that
-  reason.
-* **Detail.**  `all` levels (the default), or *n* levels below the scope,
+  reason.  `[site] pdfScopes` narrows the parts to entries of the kinds it
+  names, `["part", "chapter"]` say: no other part is offered or prepared,
+  and a request for one is refused, naming the part or chapter it is in.
+* **Detail** (the command line's `--depth`; the dialog always exports
+  every level).  `all` levels (the default), or *n* levels below the scope,
   counted as the document's pages count them (`documentPageEntries`): a
   section's statements are one level below it.  A proof and a step belong to
   their statement and come with it at any depth; a proof with details of its
@@ -30,8 +33,19 @@ outline, along the collapse order chosen, and only chooses a part of it:
 * **Appendices.**  An entry of a kind the graph may hide (`graph =
   "optional"`, the built-in `appendix`) inside the scope is in by default
   and can be left out.  Exporting an appendix itself always includes it.
-* **Hierarchy.**  Any collapse kind; the default is the snapshot's
+* **Hierarchy** (the command line's `--collapse`; the dialog always reads
+  along the default).  Any collapse kind; the default is the snapshot's
   `defaultCollapse`.
+* **Details.**  With `[site] pdfDetails = false` (`project.pdfDetails`) a
+  project's PDFs leave out every detail (`isDetailEntry`): a statement
+  inside a statement, text inside one, and what is below them, with their
+  proofs and steps.  Nothing of a detail is written, counted as left out by
+  a depth, offered as a part or listed as outside the export; a part whose
+  entries below are all details has none, and a reference to a detail, its
+  proof or its step reads as one to the statement it lies in ("Theorem
+  2.4", or "Lemma (in Theorem 2.4)" where the prose says "Lemma [x]").  A
+  statement's own proof stays, without the details below it.  Asked for a
+  detail as the part, the export refuses and names that statement.
 
 Within the chosen part:
 
@@ -49,10 +63,12 @@ Within the chosen part:
 * `hidden` text is set in place as bare prose, unnumbered;
 * an entry's `serial` numbers it as on the website, or leaves it
   unnumbered: its heading and its line in the contents are its title alone;
-* an entry with `hide_content = true` is left out as the website leaves it
-  off its parent's page: no heading, prose, proofs or steps of its own, while
-  its children, its number and its line in the PDF's contents stay.  As the
-  part exported it is written out, as on its own page;
+* an entry with `hide_content = true` is left out much as the website leaves
+  it off its parent's page: no prose, proofs or steps of its own, while its
+  children, its number and its line in the PDF's contents stay.  A heading
+  (a chapter, a section, …) keeps its heading line, number and title, so
+  what is below it is still read under it; the website shows no heading.  As
+  the part exported it is written out, as on its own page;
 * sugar edges with nothing to say (`refines/a/b`, a bare `uses`) are
   structure and are not set;
 * **an object with several parents is written out once**, at the first place
@@ -66,8 +82,11 @@ Within the chosen part:
 Bibliography entries (kind `reference`, `docs/cli.md`) are set as
 `thebibliography` sets them, the label hanging in the margin (`\bpbibitem`),
 and a citation, `[id]`, `[a, b]` or `[a, Exp. X]`, reads as on the website,
-"[Del74, Exp. X]", each label a link to its entry when the entry is in the
-export.
+"[Del74, Exp. X]", each label a link to its entry.  An export that cites a
+work whose entry it does not write out in place (a chapter, say, while the
+bibliography is a section of its own) ends with a *References* section of
+those entries alone, sorted by label, so every citation in a PDF has its
+entry in it.
 
 References (`[slug]`) read as on the website ("Lemma 2.3", or just "2.3"
 after "Lemma"; `referenceLabel` in `model.js`):
@@ -75,7 +94,8 @@ after "Lemma"; `referenceLabel` in `model.js`):
 * to something in the export: a link to it;
 * to something the export leaves out: the same words, marked with a
   superscript ∗ that links to an *Outside this export* list at the end, which
-  says what each is and where in the blueprint it lives;
+  says what each is and where in the blueprint it lives.  It starts a new
+  page, and so does the *References* section after it;
 * to a step or proof: its slug, linked when it is in the export;
 * to nothing: `[slug?]` in red, and a diagnostic naming the object.
 
@@ -103,7 +123,7 @@ engine and fonts fetched from a third party on every click.  So:
 
 | where | how a PDF is had |
 |-------|------------------|
-| published site (GitHub Pages) | **built in advance.** CI runs `blueprint site --pdf`, which compiles every choice the dialog offers — each hierarchy × each part × each depth × with and without appendices — for the current snapshot and the ten newest history snapshots, and files them under `data/exports/<hash>/` with a `manifest.json`. The dialog fetches the manifest of the bytes it loaded and the PDF it lists. |
+| published site (GitHub Pages) | **built in advance.** CI runs `blueprint site --pdf`, which compiles every choice the dialog offers — each part, with and without appendices, all levels along the default hierarchy — for the current snapshot and the ten newest history snapshots, and files them under `data/exports/<hash>/` with a `manifest.json`. The dialog fetches the manifest of the bytes it loaded and the PDF it lists. |
 | `blueprint serve` | **made on demand** by the local server (`POST api/export`), for any choice and any snapshot the site serves, historical ones included, and filed in the same place.  The dialog asks the server first, which reuses a prepared PDF when it was made from the same TeX and makes it again otherwise. |
 | any other static server | what was prepared, if the site was built with `--pdf`; otherwise the dialog says no PDF was prepared and hands out the TeX source, written in the page. |
 | command line | `blueprint export` (or `node web/export/cli.mjs export`). |

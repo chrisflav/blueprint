@@ -124,30 +124,25 @@ export async function recordEntry(site, hash, entry) {
 }
 
 /**
- * Every request the website's export dialog can make of a snapshot: each
- * hierarchy, each part (`exportScopes`), each depth from 1 to the last one
- * that cuts something, and all; with and without appendices where the part
- * has any.  Canonical, and without repeats.
+ * Every request the website's export dialog can make of a snapshot: each part
+ * (`exportScopes`), read along the default hierarchy with all its levels,
+ * with and without appendices where the part has any.  Canonical, and
+ * without repeats.
  */
 export function allRequests(model) {
   const out = [];
   const seen = new Set();
-  for (const collapse of model.collapseKinds) {
-    for (const s of exportScopes(model, collapse)) {
-      let base;
-      try { base = resolveRequest(model, { collapse, scope: s.id, depth: 'all' }); } catch (e) { continue; }
-      const depths = [];
-      for (let d = 1; d < base.height; d += 1) depths.push(d);
-      depths.push('all');
-      for (const depth of depths) {
-        for (const appendices of base.hasAppendices ? [true, false] : [true]) {
-          const req = resolveRequest(model, { collapse, scope: s.id, depth, appendices });
-          const k = requestKey(req);
-          if (seen.has(k)) continue;
-          seen.add(k);
-          out.push(req);
-        }
-      }
+  const collapse = model.defaultCollapse || model.collapseKinds[0];
+  if (!collapse) return out;
+  for (const s of exportScopes(model, collapse)) {
+    let base;
+    try { base = resolveRequest(model, { collapse, scope: s.id, depth: 'all' }); } catch (e) { continue; }
+    for (const appendices of base.hasAppendices ? [true, false] : [true]) {
+      const req = resolveRequest(model, { collapse, scope: s.id, depth: 'all', appendices });
+      const k = requestKey(req);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(req);
     }
   }
   return out;

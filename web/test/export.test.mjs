@@ -193,6 +193,40 @@ await check('references are a bibliography, and citations link to its entries', 
   ok(!/\\begin\{(theorem|definition)\}[^]*Deligne/.test(tex.split('\\bpbibitem')[0]), 'no entry is a numbered statement');
 });
 
+await check('a part ends with what is outside it, then the works it cites, each on a page of its own', () => {
+  const m = M.buildModel(snapshot([
+    node('sec', 'section', 'Opening.', { title: 'S', order: 1 }),
+    node('thm', 'theorem', 'As in [sga4, Exp. X] and [del74]; compare [other].', { order: 1 }),
+    edge('refines', 'thm', 'sec'),
+    node('sec2', 'section', 'More.', { title: 'T', order: 2 }),
+    node('other', 'theorem', 'Elsewhere.', { order: 1 }),
+    edge('refines', 'other', 'sec2'),
+    node('refs', 'section', '', { title: 'References', order: 3 }),
+    node('del74', 'reference', '', { author: ['P. Deligne'], title: 'La conjecture de Weil. I', year: '1974' }),
+    node('sga4', 'reference', '', { label: 'SGA4', title: 'Cohomologie étale', year: '1972' }),
+    node('unused', 'reference', '', { author: ['N. Body'], title: 'Uncited', year: '2000' }),
+    edge('refines', 'del74', 'refs'), edge('refines', 'sga4', 'refs'), edge('refines', 'unused', 'refs'),
+  ], { reference: { boundary: {}, graph: 'never' } }));
+  const res = exportLatex(m, { scope: 'sec' });
+  const t = bodyOf(res.tex);
+  ok(/As in \[\\hyperref\[(bp\d+)\]\{SGA4\}, Exp\. X\] and \[\\hyperref\[(bp\d+)\]\{Del74\}\]/.test(t), 'citations link to their entries');
+  const outsideAt = t.indexOf('\\section*{Outside this export}');
+  const refsAt = t.indexOf('\\section*{References}');
+  ok(outsideAt > 0 && refsAt > outsideAt, 'References come after Outside this export');
+  ok(/\\clearpage\\phantomsection\\hypertarget\{bp-outside\}\{\}%\n\\section\*\{Outside this export\}/.test(t), 'a new page before Outside this export');
+  ok(/\\clearpage\\phantomsection%\n\\section\*\{References\}\n\\addcontentsline\{toc\}\{section\}\{References\}/.test(t), 'and before References, in the contents');
+  const items = [...t.slice(refsAt).matchAll(/\\bpbibitem\{([^}]*)\}\{(bp\d+)\}/g)].map((x) => x[1]);
+  same(items, ['Del74', 'SGA4'], 'the works cited, sorted by label, and only those');
+  for (const [, l] of t.matchAll(/\\hyperref\[(bp\d+)\]/g)) ok(new RegExp(`\\{${l}\\}|\\\\label\\{${l}\\}`).test(t), `${l} is set`);
+  eq(res.stats.cited, 2, 'counted');
+  // The whole blueprint has its bibliography in place, and no second one.
+  const whole = bodyOf(exportLatex(m, {}).tex);
+  eq((whole.match(/\\section\*\{References\}/g) || []).length, 0, 'no References appended');
+  eq((whole.match(/\\bpbibitem\{Del74\}/g) || []).length, 1, 'Del74 set once, in place');
+  // A part that cites nothing ends as before.
+  ok(!bodyOf(exportLatex(m, { scope: 'sec2' }).tex).includes('{References}'), 'nothing cited, no References');
+});
+
 await check('brackets that cite nothing keep their maths, emphasis and code; a locator too', () => {
   const m = M.buildModel(snapshot([
     node('sec', 'section', 'On [0, $\\epsilon$] and [a, *b*] and [x, `c`]; see [del74, Thm. $x^2$ and *Cor.* 4].', { title: 'S', order: 1 }),
@@ -237,7 +271,7 @@ await check('serial: a chapter with a number of its own, and one with none, in t
   ok(/\\hyperref\[bp\d+\]\{Lemma A\.8\}/.test(tex), 'a reference does not read Lemma A.8');
 });
 
-await check('hide_content leaves an entry\'s heading and prose out, and keeps its children and its line in the contents', async () => {
+await check('hide_content leaves an entry\'s prose out, and keeps its heading, its children and its line in the contents', async () => {
   const snap = JSON.parse(paperText);
   const o = snap.objects.find((x) => x.id === 'spaces');
   o.attrs = { ...(o.attrs || {}), hide_content: true };
@@ -245,8 +279,9 @@ await check('hide_content leaves an entry\'s heading and prose out, and keeps it
   const res = exportLatex(m, {});
   const tex = res.tex;
   ok(/^% object: spaces .*content hidden$/m.test(tex), 'the hidden chapter is not marked as such');
-  ok(!/\\section\*\{\\texorpdfstring\{2\\quad Covers and compact spaces/.test(tex), 'its heading is written');
-  ok(/\\addcontentsline\{toc\}\{section\}\{\\texorpdfstring\{2\\quad Covers and compact spaces/.test(tex), 'its line in the contents is gone');
+  // The PDF keeps a hidden heading's heading line (the website leaves it off its parent's page).
+  eq((tex.match(/\\section\*\{\\texorpdfstring\{2\\quad Covers and compact spaces/g) || []).length, 1, 'its heading, once');
+  eq((tex.match(/\\addcontentsline\{toc\}\{section\}\{\\texorpdfstring\{2\\quad Covers and compact spaces/g) || []).length, 1, 'its line in the contents, once');
   ok(written(tex).includes('def-cover') && /2\.2\\quad Compact spaces/.test(tex), 'its children are gone');
   ok(!tex.includes(m.byId.get('spaces').body.trim().slice(0, 30)), 'its prose is written');
   // Every label referred to is set: nothing points at a heading not written.
@@ -257,6 +292,14 @@ await check('hide_content leaves an entry\'s heading and prose out, and keeps it
   eq(whole, planExport(paper(), {}).stats.entries - 1, 'the hidden entry is counted');
   const part = exportLatex(m, { scope: 'spaces' }).tex;
   ok(/\\section\*\{\\texorpdfstring\{2\\quad Covers and compact spaces/.test(part), 'exported as the part, it heads it');
+  ok(part.includes(m.byId.get('spaces').body.trim().slice(0, 30)), 'with its prose');
+  // A statement has no heading line: hidden, nothing of it is set but what places it.
+  const s2 = JSON.parse(paperText);
+  const thm = s2.objects.find((x) => x.id === 'thm-fip');
+  thm.attrs = { ...(thm.attrs || {}), hide_content: true };
+  const t2 = exportLatex(M.buildModel(s2), {}).tex;
+  ok(!t2.includes('{Theorem~2.4}'), 'a hidden statement gets no statement head');
+  ok(written(t2).includes('lem-complements'), 'its details stay');
 });
 
 await check('a shared lemma whose first place is elsewhere is written out in full', () => {
@@ -309,6 +352,77 @@ await check('a refined statement exports with its proof and the proof\'s details
   ok(t.includes('Of \\hyperref['), 'the proof says what it proves');
   ok(res.tex.includes('2.5\\quad Proof of Theorem 2.4'), 'and is named that in the contents');
   ok(/\\bpout\{Definition 2\.2\}/.test(res.tex), 'the step\'s target is outside');
+});
+
+await check('with pdfDetails = false a PDF says nothing of the details', () => {
+  const snap = JSON.parse(paperText);
+  snap.project.pdfDetails = false;
+  const m = M.buildModel(snap);
+  const outline = M.documentOutline(m, 'refines');
+  const details = outline.entries.filter(M.isDetailEntry).map((e) => e.id);
+  same(details, ['lem-complements', 'lem-finite-subfamily'], 'the proof\'s lemmas are details, the proof is not');
+  const res = exportLatex(m, {});
+  const expected = outline.entries.filter((e) => !e.duplicate && !e.text && !M.isDetailEntry(e)).map((e) => e.id);
+  same(written(res.tex), expected, 'every entry but the details');
+  ok(marks(res.tex).includes('object proof/thm-fip'), 'the theorem\'s proof stays');
+  for (const id of details) {
+    ok(!marks(res.tex).some((x) => x.endsWith(' ' + id)), `nothing of ${id} is set`);
+    ok(!res.tex.includes(M.titleOf(m.byId.get(id))), `${id} is not named`);
+  }
+  ok(!/Lemma~?2\.[67]\b/.test(res.tex), 'nor numbered');
+  ok(/taken: \\hyperref\[bp\d+\]\{Theorem 2\.4\} exchanges/.test(res.tex), 'the proof\'s reference to a lemma reads as the theorem');
+  eq(res.stats.outside, 0, 'a detail is not outside the export either');
+  eq(planExport(m, {}).stats.entries, planExport(paper(), {}).stats.entries - 2, 'the dialog counts no details');
+  // No detail is a part, nor a statement whose entries below are all details.
+  const scopes = exportScopes(m).map((s) => s.id);
+  ok(scopes.includes('thm-fip') && !scopes.includes('proof/thm-fip'), 'the theorem is a part, its proof no longer');
+  throwsExport(() => resolveRequest(m, { scope: 'lem-complements' }), /'lem-complements' is a detail of 'thm-fip'.*pdfDetails = false.*export 'thm-fip' instead/, 'a detail is no part');
+  // A level of details only is no level: cutting nothing, a depth is all.
+  eq(resolveRequest(m, { scope: 'thm-fip', depth: 1 }).depth, 'all', 'nothing below the proof to cut');
+  ok(exportLatex(m, { scope: 'compact', depth: 1 }).tex.includes('1 entry below 2.4 is left out'), 'the proof is counted as left out, its details not');
+  // Without the setting, nothing changes.
+  ok(written(exportLatex(paper(), {}).tex).includes('lem-complements'), 'details are written by default');
+});
+
+await check('without details, a reference, step or boundary naming one names the statement it lies in', () => {
+  const m = M.buildModel(snapshot([
+    node('sec', 'section', 'Opening.', { title: 'S', order: 1 }),
+    node('thm', 'theorem', 'Main.', { title: 'Main', order: 1 }),
+    node('lem', 'lemma', 'A clause.', { title: 'Clause', order: 1 }),
+    node('def', 'definition', 'See [lem], Lemma [lem] and [proof/lem].', { order: 2 }),
+    { ...node('proof/lem', 'proof', 'Clear.'), boundary: [{ role: 'of', id: 'lem' }] },
+    edge('refines', 'thm', 'sec'), edge('refines', 'lem', 'thm'), edge('refines', 'def', 'sec'),
+    edge('uses', 'def', 'lem', 'Because of the clause.'),
+  ], {}, { pdfDetails: false, numbering: 'nested' }));
+  const tex = exportLatex(m, {}).tex;
+  same(written(tex), ['sec', 'thm', 'def'], 'no detail');
+  ok(!tex.includes('Clause') && !tex.includes('A clause.') && !tex.includes('Clear.'), 'nothing of it, nor of its proof');
+  ok(/See \\hyperref\[bp\d+\]\{Theorem 1\.1\}, Lemma \(in \\hyperref\[bp\d+\]\{Theorem 1\.1\}\) and \\hyperref\[bp\d+\]\{Theorem 1\.1\}\./.test(tex),
+    'references to it and its proof read as the theorem, "Lemma [x]" as a lemma in it');
+  ok(/\\ensuremath\{\\to\} \\hyperref\[bp\d+\]\{Main\} \(Theorem 1\.1\)/.test(tex), 'the step\'s target is the theorem');
+  ok(tex.includes('{Definition~1.2}'), 'numbered nested, the details take no number from the statements');
+});
+
+await check('with pdfScopes a PDF is of the whole blueprint or an entry of those kinds, and nothing else', () => {
+  const objects = [
+    node('p1', 'part', 'Opening of the part.', { title: 'The part', order: 1 }),
+    node('c1', 'chapter', 'Opening of the chapter.', { title: 'The chapter', order: 1 }),
+    node('s1', 'section', 'Opening of the section.', { title: 'The section', order: 1 }),
+    node('t1', 'theorem', 'Main.', { title: 'Main', order: 1 }),
+    node('l1', 'lemma', 'A step.', { title: 'Step', order: 1 }),
+    edge('refines', 'c1', 'p1'), edge('refines', 's1', 'c1'), edge('refines', 't1', 's1'), edge('refines', 'l1', 't1'),
+  ];
+  const kinds = { part: { boundary: {} }, chapter: { boundary: {} } };
+  const m = M.buildModel(snapshot(objects, kinds, { pdfScopes: ['part', 'chapter'] }));
+  same(exportScopes(m).map((x) => x.id), [null, 'p1', 'c1'], 'the whole blueprint, the part and the chapter');
+  throwsExport(() => resolveRequest(m, { scope: 's1' }), /'s1' is a section, and this blueprint's PDFs are of the whole blueprint or a part, chapter \(\[site\] pdfScopes\); export 'c1' instead/, 'a section is refused');
+  throwsExport(() => resolveRequest(m, { scope: 't1' }), /export 'c1' instead/, 'and a refined statement');
+  ok(exportLatex(m, { scope: 'c1' }).tex.includes('Opening of the section.'), 'the chapter has its sections in it');
+  const prepared = allRequests(m).map((r) => r.scope);
+  same([...new Set(prepared)], [null, 'p1', 'c1'], 'site --pdf prepares those alone');
+  // Without the setting every entry with entries below it is a part, as before.
+  const open = M.buildModel(snapshot(objects, kinds));
+  same(exportScopes(open).map((x) => x.id), [null, 'p1', 'c1', 's1', 't1'], 'by default');
 });
 
 await check('a proof with details of its own is read right after its statement, on the website too', () => {
@@ -400,7 +514,7 @@ await check('appendices are in by default and out when asked, and only where the
   eq(withA.appendices, true, 'included by default');
   const without = exportLatex(m, { appendices: false });
   ok(!written(without.tex).includes('conventions') && !written(without.tex).includes('notation'), 'left out with its contents');
-  ok(without.tex.includes('appendices left out'), 'the title block says so');
+  ok(without.tex.includes('Appendices left out'), 'the title block says so');
   eq(without.fileName, 'paper-whole-no-appendix', 'and the file name');
   ok(requestKey(without.request) !== requestKey(withA), 'a different key');
   const own = resolveRequest(m, { scope: 'conventions', appendices: false });
@@ -540,8 +654,12 @@ await check('the parts on offer are the document\'s pages, named by their titles
   eq(scopes.find((s) => s.id === 'proof/thm-fip').title, 'Proof of Theorem 2.4', 'a detailed proof by what it proves');
   eq(scopes[0].title, 'Compactness through finite intersections', 'the whole blueprint by the project\'s title');
   const reqs = allRequests(m);
-  eq(reqs.length, 25, 'every choice the dialog can make, once');
-  ok(reqs.some((r) => r.scope === 'spaces' && r.depth === 3), 'depths short of all');
+  eq(reqs.length, 9, 'every choice the dialog can make, once: each part, and the whole without its appendix');
+  ok(reqs.every((r) => r.depth === 'all' && r.collapse === 'refines'), 'all levels, along the default hierarchy alone');
+  // The title block says nothing of what the dialog does not ask, unless the command line chose it.
+  const plain = bodyOf(exportLatex(m, {}).tex);
+  ok(!/All levels|read along/.test(plain), 'a default PDF: no levels, no hierarchy');
+  ok(bodyOf(exportLatex(m, { scope: 'spaces', depth: 1 }).tex).includes('1 level below Section 2'), '--depth is said');
   ok(reqs.some((r) => r.scope === null && r.appendices === false), 'without the appendix');
   eq(new Set(reqs.map(requestKey)).size, reqs.length, 'no repeats');
 });

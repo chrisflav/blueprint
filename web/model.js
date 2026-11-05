@@ -2087,6 +2087,58 @@ export function isHiddenEntry(outline, entry) {
 }
 
 /**
+ * Whether an entry is a detail: it lies inside a statement rather than
+ * directly under a heading (`isSectionKind`), as a statement refining another
+ * does, or text read inside one.  Everything below a detail is a detail too.
+ * A statement's own proof with details of its own is no detail, though it lies
+ * under the statement: it is read with it (`detailedProofs`); its details are.
+ * These are the entries `[site] numbering = "nested"` numbers `n.m.k`.
+ */
+export function isDetailEntry(entry) {
+  const p = entry && entry.parent;
+  if (!p || isSectionKind(p.object.kind)) return false;
+  if (entry.object.kind === 'proof' && attachedTo(entry.object) === p.id) return false;
+  return true;
+}
+
+/** The statement a detail lies in: up past details, and past the proof they detail. */
+export function detailHost(entry) {
+  let e = entry;
+  while (e.parent && (isDetailEntry(e) || e.object.kind === 'proof')) e = e.parent;
+  return e;
+}
+
+/**
+ * Whether the PDF export writes out details (`isDetailEntry`): `[site]
+ * pdfDetails` in `blueprint.toml`, `project.pdfDetails`, true unless `false`.
+ */
+export function exportsDetails(model) {
+  return !(model.project && model.project.pdfDetails === false);
+}
+
+/**
+ * The kinds whose entries a PDF may be made of, besides the whole blueprint:
+ * `[site] pdfScopes` in `blueprint.toml`, `project.pdfScopes`.  `null` when
+ * the project names none, and any entry with entries below it may be.
+ */
+export function pdfScopeKinds(model) {
+  const k = model.project && model.project.pdfScopes;
+  return Array.isArray(k) && k.length ? k : null;
+}
+
+/** Whether a PDF may be made of this entry (`pdfScopeKinds`). */
+export function isPdfScope(model, entry) {
+  const kinds = pdfScopeKinds(model);
+  return !kinds || kinds.includes(entry.object.kind);
+}
+
+/** The nearest entry at or above this one a PDF may be made of; `null` for the whole blueprint. */
+export function pdfScopeOf(model, entry) {
+  for (let e = entry; e; e = e.parent) if (isPdfScope(model, e)) return e;
+  return null;
+}
+
+/**
  * The page of the split document an object is read on: its own page if it has
  * entries under it, otherwise its parent's, which shows it among its siblings.
  * The top of the document is its contents, so a top-level entry with nothing

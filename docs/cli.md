@@ -559,6 +559,8 @@ descend = ["MyProject", "MyLib"]    # optional: where the dependency walk goes
 [site]
 theme   = "outline"                 # the style the website opens in
 numbering = "nested"                # statements inside statements: n.m.k, default "flat"
+pdfDetails = false                  # PDFs leave the details out, default true
+pdfScopes = ["part", "chapter"]     # PDFs only of these, besides the whole; default every page
 assets  = "site-assets"             # copied into the site as assets/
 blog    = "blog"                    # posts, Markdown and PDFs, on the Blog page
 logo    = "assets/logo.svg"         # left of the title in the top bar
@@ -695,6 +697,27 @@ post refers to its pictures and other files by their place in the directory
 makes posts. It is not part of the snapshot, so `blueprint build` ignores it;
 keep it outside `dir`, whose Markdown files are the blueprint's objects. A
 site without it has no Blog tab.
+
+`[site] pdfDetails = false` keeps the details out of every PDF the website
+and `blueprint export` make (`docs/pdf-export.md`): a statement that lies
+inside another statement, text inside one, and everything below them, the
+entries `numbering = "nested"` numbers `n.m.k`.  The website shows them as
+before.  A PDF then writes none of them out, counts none as left out, offers
+none as a part, and names none: a reference to one reads as one to the
+statement it lies in.  A statement's own proof is no detail, even when it has
+details of its own.  The numbers stay the website's, so with `"flat"`
+numbering the details' numbers are gaps in the PDF; with `"nested"` there
+are none.  The default, `true`, writes the details out.  `blueprint build`
+copies `false` into the snapshot as `project.pdfDetails`.
+
+`[site] pdfScopes` names the kinds a PDF may be made of, besides the whole
+blueprint: with `["part", "chapter", "appendix"]` the export dialog offers the
+whole blueprint, the parts and the chapters, `blueprint site --pdf` prepares
+those alone, and `blueprint export` and the server refuse a section or a
+statement, naming the part or chapter it is in.  On a section's page the
+dialog offers its chapter.  Every name must be a kind of the schema.  Without
+it every page, an entry with entries below it, may be a PDF.  `blueprint build`
+copies it into the snapshot as `project.pdfScopes`.
 
 `[site.intro]` is what the website shows in the middle of the screen when
 it is opened at its landing page, drawn as a single graph node, before it
@@ -1079,6 +1102,8 @@ merge.  `Topology.coverChoice` is a custom axiom (`proved_with_axioms`),
   that a project without `[katex.macros]` gets exactly the `project` object
   it got before the field existed.  So is `project.theme` when `[site] theme`
   is not given, `project.numbering` when `[site] numbering` is not given, and `project.intro` when there is no `[site.intro]`.
+  `project.pdfDetails` is written only when it is `false`, and
+  `project.pdfScopes` only when it names a kind.
 * **`blueprint read`** is an extra command, see above.
 * **The `attrMap` is merged into the object mapping (§5).**
   `docs/snapshot-format.md` records `attrMap` but says only that the names

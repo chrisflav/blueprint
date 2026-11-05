@@ -3121,12 +3121,12 @@ if (ELK_PATH && fs.existsSync(ELK_PATH) && fs.existsSync(ELK_WORKER_PATH)) {
     const titles = d.querySelectorAll('.export-part-title').map((x) => x.textContent);
     eq(titles[0], 'Section 2 ' + M_title('sec-main'), 'named by its number and title, not its id');
     ok(d.querySelector('input[value="whole"]'), 'the whole blueprint is one choice away');
-    ok(/Section 2 .*all levels: \d+ entries/.test(d.querySelector('.export-summary').textContent), 'it says what the export holds');
-    const depths = d.querySelector('select.export-depth').querySelectorAll('option').map((o) => o.getAttribute('value'));
-    eq(depths[0], 'all', 'all levels first, and chosen');
-    ok(depths.includes('1'), 'and fewer');
+    ok(/Section 2 [^:]*: \d+ entries/.test(d.querySelector('.export-summary').textContent), 'it says what the export holds');
+    ok(!/levels/.test(d.querySelector('.export-summary').textContent), 'and nothing of levels');
+    eq(d.querySelector('select.export-depth'), null, 'no Detail to choose: a PDF has every level');
+    ok(!d.querySelectorAll('.export-field span').some((x) => x.textContent === 'Hierarchy'), 'nor a Hierarchy');
     fire(d.querySelector('input[value="whole"]'), 'change');
-    ok(/The whole blueprint, all levels/.test(dialogEl().querySelector('.export-summary').textContent), 'switching to the whole blueprint says so');
+    ok(/The whole blueprint/.test(dialogEl().querySelector('.export-summary').textContent), 'switching to the whole blueprint says so');
     pdf.closeExport();
     eq(dialogEl(), null, 'closed');
   });
@@ -3145,6 +3145,28 @@ if (ELK_PATH && fs.existsSync(ELK_PATH) && fs.existsSync(ELK_WORKER_PATH)) {
     ok(/Section 2\.1/.test(d.querySelector('.export-part-title').textContent), 'the part the lemma is read in');
     ok(/where Lemma 2\.2 is read/.test(d.querySelector('.export-why').textContent), 'and why');
     pdf.closeExport();
+  });
+
+  await check('without details in the PDFs, a detail\'s page offers the part its statement is in', () => {
+    const snap = JSON.parse(fs.readFileSync(path.join(webDir, 'sample', 'paper', 'blueprint.json'), 'utf8'));
+    snap.project.pdfDetails = false;
+    const m = modelMod.buildModel(snap);
+    const at = (view, id) => pdf.contextPart(m, 'refines', { view, id, params: new URLSearchParams() });
+    eq(at('object', 'lem-complements').id, 'thm-fip', 'a lemma of the proof: the theorem it details');
+    eq(at('document', 'proof/thm-fip').id, 'thm-fip', 'the proof, whose entries below are all details: its theorem');
+    eq(at('object', 'thm-fip').id, 'thm-fip', 'the theorem keeps its proof, so it is a part');
+    eq(pdf.contextPart(modelMod.buildModel(JSON.parse(JSON.stringify({ ...snap, project: { ...snap.project, pdfDetails: undefined } }))),
+      'refines', { view: 'object', id: 'lem-complements', params: new URLSearchParams() }).id, 'proof/thm-fip', 'by default the lemma is read on its proof\'s page');
+  });
+
+  await check('with pdfScopes, a section\'s page offers its chapter, and a statement\'s too', () => {
+    const snap = JSON.parse(fs.readFileSync(path.join(webDir, 'sample', 'paper', 'blueprint.json'), 'utf8'));
+    snap.project.pdfScopes = ['appendix'];
+    const m = modelMod.buildModel(snap);
+    const at = (view, id) => pdf.contextPart(m, 'refines', { view, id, params: new URLSearchParams() });
+    eq(at('document', 'covers').id, null, 'a section under no appendix: the whole blueprint');
+    eq(at('document', 'conventions').id, 'conventions', 'the appendix itself');
+    eq(at('object', 'notation').id, 'conventions', 'a remark in the appendix: the appendix');
   });
 
   const pdfBytes = new TextEncoder().encode('%PDF-1.5\nfake but shaped like one\n%%EOF\n');

@@ -327,8 +327,9 @@ validated but create no edges.
 The linear document view orders sections by the `order` attribute and their
 children likewise, so a blueprint still reads as a paper. `hide_content =
 true` (or `"yes"`), allowed on every kind, leaves an entry that has a page of
-its own off its parent's page, heading and prose, and out of the PDF; it is
-read on its own page, and keeps its number and its place in the contents.
+its own off its parent's page, heading and prose, and its prose out of the
+PDF, where a heading keeps its heading line; it is read on its own page, and
+keeps its number and its place in the contents.
 `serial`, allowed on every kind too, sets an entry's number: a string or a
 whole number of its own, under which what is inside it is numbered, or
 `false` for none, inside which numbering starts afresh; either way its

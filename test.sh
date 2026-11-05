@@ -1317,13 +1317,13 @@ if command -v node > /dev/null 2>&1; then
   if command -v pdflatex > /dev/null 2>&1; then
     rm -rf "$TMP/site.pdf"
     if "$BP" site --root examples/paper -o "$TMP/site.pdf" --pdf > "$TMP/site.pdf.log" 2>&1 \
-       && grep -q 'exports: 25 made, 0 already there, 0 failed' "$TMP/site.pdf.log"; then
+       && grep -q 'exports: 9 made, 0 already there, 0 failed' "$TMP/site.pdf.log"; then
       ok "site --pdf prepares every export the dialog offers"
     else
       bad "site --pdf prepares every export the dialog offers"; cat "$TMP/site.pdf.log"
     fi
     if "$BP" site --root examples/paper -o "$TMP/site.pdf" --pdf > "$TMP/site.pdf.log" 2>&1 \
-       && grep -q 'exports: 0 made, 25 already there, 0 failed' "$TMP/site.pdf.log"; then
+       && grep -q 'exports: 0 made, 9 already there, 0 failed' "$TMP/site.pdf.log"; then
       ok "site --pdf again reuses what is prepared for the same snapshot"
     else
       bad "site --pdf again reuses what is prepared for the same snapshot"; cat "$TMP/site.pdf.log"
