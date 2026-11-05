@@ -933,7 +933,7 @@ await check('a comment has a title, is public or private, and goes to the commen
     ok(panel.querySelector('.comment-visibility').textContent.includes('not shown here'), 'and what private means');
     eq(panel.querySelector('textarea').getAttribute('maxlength'), '20000', 'as long as the server takes');
     ok(panel.querySelector('input[name=title]'), 'a title is asked for');
-    eq(panel.querySelector('input[name=title]').getAttribute('maxlength'), '60', 'as long as a Zulip topic');
+    eq(panel.querySelector('input[name=title]').getAttribute('maxlength'), '60', 'as long as a topic on the server\'s side');
     panel.querySelector('input[name=name]').value = 'Ada';
     panel.querySelector('input[name=title]').value = '';
     panel.querySelector('textarea').value = 'No title.';
@@ -952,7 +952,8 @@ await check('a comment has a title, is public or private, and goes to the commen
     eq(panel.querySelector('h3').textContent, 'Comments (2)', 'shown');
     eq(panel.querySelectorAll('.comment-title')[0].textContent, 'On A public one.', 'with its title');
 
-    // On Zulip: the server says where, and nothing of the bot reaches the page.
+    // On Zulip: the page says only that the comments go to the background,
+    // and names no Zulip, links to none.
     zulip = { site: 'https://zulip.example', channel: 'blueprint comment', topic: 'sec-main', streamId: 7 };
     dom.net.fetches.length = 0;
     await go('#/object/sec-main');
@@ -961,17 +962,16 @@ await check('a comment has a title, is public or private, and goes to the commen
     eq(dom.net.fetches.filter((f) => !f.url.startsWith('api/comments/') && f.url !== 'comments-config.json'
       && /zulip/.test(f.url)).length, 0, 'the page never calls Zulip');
     eq(panel.querySelector('textarea').getAttribute('maxlength'), '9000', 'a comment fits a Zulip message');
-    eq(panel.querySelector('form a[target=_blank]').getAttribute('href'),
-      'https://zulip.example/#narrow/channel/7-blueprint.20comment', 'a link to the channel');
-    ok(panel.querySelector('form').textContent.includes('a topic of its own'), 'each comment a topic of its own');
-    await submit(panel, 'Seen on Zulip.', 'public');
-    const titles = panel.querySelectorAll('a.comment-title');
-    eq(titles.length ? titles[titles.length - 1].getAttribute('href') : null,
-      'https://zulip.example/#narrow/channel/7-blueprint.20comment/topic/On.20Seen.20on.20Zulip.2E',
-      'a comment\'s title leads to its own topic');
-    ok(panel.querySelector('.comment-visibility').textContent.includes('posted to Zulip only'), 'private means Zulip only');
+    ok(panel.querySelector('form').textContent.includes('Every comment is posted to the background'), 'where they go');
+    await submit(panel, 'Seen elsewhere.', 'public');
+    const titles = panel.querySelectorAll('.comment-title');
+    eq(titles[titles.length - 1].textContent, 'On Seen elsewhere.', 'a title');
+    eq(panel.querySelectorAll('a.comment-title').length, 0, 'and no link');
+    ok(panel.querySelector('.comment-visibility').textContent.includes('posted to the background only'), 'what private means');
     await submit(panel, 'A private one.', 'private');
-    eq(panel.querySelector('.comment-note').textContent, 'Posted to Zulip (private: not shown here).', 'and said so');
+    eq(panel.querySelector('.comment-note').textContent, 'Posted to the background (private: not shown here).', 'and said so');
+    eq(panel.querySelectorAll('a').filter((a) => /zulip/i.test(a.getAttribute('href') || '')).length, 0, 'no link to Zulip');
+    ok(!/zulip/i.test(panel.textContent), 'and no Zulip in its text');
     ok(!Object.keys(comments).some((k) => /zulip|topic|headLine/i.test(k)), 'the page has no Zulip code of its own');
   } finally {
     routes.length = 0;
