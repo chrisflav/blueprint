@@ -77,7 +77,9 @@ function routeCollapse(m) {
  * The part the reader is in: {id, because} or null for the top.  A document
  * page is its entry's part.  An object (its page, or the graph's selection)
  * is its own part when it has entries below it, and otherwise the part it is
- * read in, so its prose is in the PDF either way.
+ * read in, so its prose is in the PDF either way.  When the PDFs leave details
+ * out (`M.exportsDetails`), a detail is read in the statement it lies in, and
+ * entries below that are all details are none.
  */
 export function contextPart(m, collapse, route) {
   if (!collapse) return null;
@@ -89,9 +91,15 @@ export function contextPart(m, collapse, route) {
   else if (route.view === 'graph') { id = route.params.get('sel') || null; from = id; }
   if (!id || !m.byId.has(id)) return null;
   if (outline.stepOf.has(id)) id = outline.stepOf.get(id);
-  const entry = outline.byId.get(id);
+  let entry = outline.byId.get(id);
   if (!entry) {
     return route.view === 'document' ? null : { id: null, from, missing: true };
+  }
+  if (!M.exportsDetails(m)) {
+    if (M.isDetailEntry(entry)) entry = M.detailHost(entry);
+    if (!entry.text && !entry.duplicate && entry.children.length && entry.children.every(M.isDetailEntry)) {
+      return { id: entry.parent ? entry.parent.id : null, from };
+    }
   }
   if (entry.children.length && !entry.text && !entry.duplicate) return { id: entry.id, from };
   const page = M.documentPageOf(outline, id);

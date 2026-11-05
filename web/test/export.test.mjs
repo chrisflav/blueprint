@@ -345,6 +345,55 @@ await check('a refined statement exports with its proof and the proof\'s details
   ok(/\\bpout\{Definition 2\.2\}/.test(res.tex), 'the step\'s target is outside');
 });
 
+await check('with pdfDetails = false a PDF says nothing of the details', () => {
+  const snap = JSON.parse(paperText);
+  snap.project.pdfDetails = false;
+  const m = M.buildModel(snap);
+  const outline = M.documentOutline(m, 'refines');
+  const details = outline.entries.filter(M.isDetailEntry).map((e) => e.id);
+  same(details, ['lem-complements', 'lem-finite-subfamily'], 'the proof\'s lemmas are details, the proof is not');
+  const res = exportLatex(m, {});
+  const expected = outline.entries.filter((e) => !e.duplicate && !e.text && !M.isDetailEntry(e)).map((e) => e.id);
+  same(written(res.tex), expected, 'every entry but the details');
+  ok(marks(res.tex).includes('object proof/thm-fip'), 'the theorem\'s proof stays');
+  for (const id of details) {
+    ok(!marks(res.tex).some((x) => x.endsWith(' ' + id)), `nothing of ${id} is set`);
+    ok(!res.tex.includes(M.titleOf(m.byId.get(id))), `${id} is not named`);
+  }
+  ok(!/Lemma~?2\.[67]\b/.test(res.tex), 'nor numbered');
+  ok(/taken: \\hyperref\[bp\d+\]\{Theorem 2\.4\} exchanges/.test(res.tex), 'the proof\'s reference to a lemma reads as the theorem');
+  eq(res.stats.outside, 0, 'a detail is not outside the export either');
+  eq(planExport(m, {}).stats.entries, planExport(paper(), {}).stats.entries - 2, 'the dialog counts no details');
+  // No detail is a part, nor a statement whose entries below are all details.
+  const scopes = exportScopes(m).map((s) => s.id);
+  ok(scopes.includes('thm-fip') && !scopes.includes('proof/thm-fip'), 'the theorem is a part, its proof no longer');
+  throwsExport(() => resolveRequest(m, { scope: 'lem-complements' }), /'lem-complements' is a detail of 'thm-fip'.*pdfDetails = false.*export 'thm-fip' instead/, 'a detail is no part');
+  // A level of details only is no level: cutting nothing, a depth is all.
+  eq(resolveRequest(m, { scope: 'thm-fip', depth: 1 }).depth, 'all', 'nothing below the proof to cut');
+  ok(exportLatex(m, { scope: 'compact', depth: 1 }).tex.includes('1 entry below 2.4 is left out'), 'the proof is counted as left out, its details not');
+  // Without the setting, nothing changes.
+  ok(written(exportLatex(paper(), {}).tex).includes('lem-complements'), 'details are written by default');
+});
+
+await check('without details, a reference, step or boundary naming one names the statement it lies in', () => {
+  const m = M.buildModel(snapshot([
+    node('sec', 'section', 'Opening.', { title: 'S', order: 1 }),
+    node('thm', 'theorem', 'Main.', { title: 'Main', order: 1 }),
+    node('lem', 'lemma', 'A clause.', { title: 'Clause', order: 1 }),
+    node('def', 'definition', 'See [lem], Lemma [lem] and [proof/lem].', { order: 2 }),
+    { ...node('proof/lem', 'proof', 'Clear.'), boundary: [{ role: 'of', id: 'lem' }] },
+    edge('refines', 'thm', 'sec'), edge('refines', 'lem', 'thm'), edge('refines', 'def', 'sec'),
+    edge('uses', 'def', 'lem', 'Because of the clause.'),
+  ], {}, { pdfDetails: false, numbering: 'nested' }));
+  const tex = exportLatex(m, {}).tex;
+  same(written(tex), ['sec', 'thm', 'def'], 'no detail');
+  ok(!tex.includes('Clause') && !tex.includes('A clause.') && !tex.includes('Clear.'), 'nothing of it, nor of its proof');
+  ok(/See \\hyperref\[bp\d+\]\{Theorem 1\.1\}, Lemma \(in \\hyperref\[bp\d+\]\{Theorem 1\.1\}\) and \\hyperref\[bp\d+\]\{Theorem 1\.1\}\./.test(tex),
+    'references to it and its proof read as the theorem, "Lemma [x]" as a lemma in it');
+  ok(/\\ensuremath\{\\to\} \\hyperref\[bp\d+\]\{Main\} \(Theorem 1\.1\)/.test(tex), 'the step\'s target is the theorem');
+  ok(tex.includes('{Definition~1.2}'), 'numbered nested, the details take no number from the statements');
+});
+
 await check('a proof with details of its own is read right after its statement, on the website too', () => {
   const m = paper();
   const outline = M.documentOutline(m, 'refines');

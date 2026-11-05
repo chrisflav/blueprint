@@ -313,6 +313,12 @@ structure Project where
   statement within it, `n.m.k` under `n.m`.  Handed to the website as
   `project.numbering`. -/
   numbering : String := ""
+  /-- `[site] pdfDetails`: whether the PDF export writes out details, the
+  entries inside a statement (a statement refining a statement, text inside
+  one, and what is below them).  With `false` its PDFs say nothing of them:
+  a reference to one reads as one to the statement it lies in.  Handed to the
+  website as `project.pdfDetails`, only when `false`. -/
+  pdfDetails : Bool := true
   /-- `[site] logo`: a picture the website shows left of the title in its top
   bar, the address of a file the site serves (`assets/…`); empty for the
   website's own mark.  Handed to the website as `project.logo`. -/
