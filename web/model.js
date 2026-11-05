@@ -2132,19 +2132,29 @@ export function exportsDetails(model) {
 }
 
 /**
- * The kinds whose entries a PDF may be made of, besides the whole blueprint:
- * `[site] pdfScopes` in `blueprint.toml`, `project.pdfScopes`.  `null` when
- * the project names none, and any entry with entries below it may be.
+ * What a PDF may be made of, besides the whole blueprint: `[site] pdfScopes`
+ * in `blueprint.toml`, `project.pdfScopes`, each a kind (every entry of it) or
+ * an object's id (that entry alone: an introduction, say, whose kind it shares
+ * with the references).  `null` when the project names none, and any entry
+ * with entries below it may be.
  */
 export function pdfScopeKinds(model) {
   const k = model.project && model.project.pdfScopes;
   return Array.isArray(k) && k.length ? k : null;
 }
 
-/** Whether a PDF may be made of this entry (`pdfScopeKinds`). */
+/** Whether a PDF may be made of this entry (`pdfScopeKinds`): its kind or its id is named. */
 export function isPdfScope(model, entry) {
   const kinds = pdfScopeKinds(model);
-  return !kinds || kinds.includes(entry.object.kind);
+  return !kinds || kinds.includes(entry.object.kind) || kinds.includes(entry.id);
+}
+
+/**
+ * Whether every PDF ends with the whole bibliography, `[site] pdfReferences =
+ * "all"` (`project.pdfReferences`), rather than the entries it cites.
+ */
+export function exportsAllReferences(model) {
+  return !!(model.project && model.project.pdfReferences === 'all');
 }
 
 /** The nearest entry at or above this one a PDF may be made of; `null` for the whole blueprint. */

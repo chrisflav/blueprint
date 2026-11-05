@@ -20,7 +20,8 @@ outline, along the collapse order chosen, and only chooses a part of it:
   entry.  A proof or a step is read with its statement, and a piece of text
   (`hidden`) in its section, so those are refused as scopes with that
   reason.  `[site] pdfScopes` narrows the parts to entries of the kinds it
-  names, `["part", "chapter"]` say: no other part is offered or prepared,
+  names, `["part", "chapter"]` say, and to the objects it names by id: no
+  other part is offered or prepared,
   and a request for one is refused, naming the part or chapter it is in.
 * **Detail** (the command line's `--depth`; the dialog always exports
   every level).  `all` levels (the default), or *n* levels below the scope,
@@ -86,7 +87,10 @@ and a citation, `[id]`, `[a, b]` or `[a, Exp. X]`, reads as on the website,
 work whose entry it does not write out in place (a chapter, say, while the
 bibliography is a section of its own) ends with a *References* section of
 those entries alone, sorted by label, so every citation in a PDF has its
-entry in it.
+entry in it.  With `[site] pdfReferences = "all"` that section holds every
+entry of the bibliography, cited or not, and every PDF has it; the whole
+blueprint, which writes the bibliography out in place, starts it on a new
+page instead.
 
 References (`[slug]`) read as on the website ("Lemma 2.3", or just "2.3"
 after "Lemma"; `referenceLabel` in `model.js`):

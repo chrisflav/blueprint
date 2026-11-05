@@ -227,6 +227,41 @@ await check('a part ends with what is outside it, then the works it cites, each 
   ok(!bodyOf(exportLatex(m, { scope: 'sec2' }).tex).includes('{References}'), 'nothing cited, no References');
 });
 
+await check('with pdfReferences = "all" every PDF ends with the whole bibliography, on a page of its own', () => {
+  const m = M.buildModel(snapshot([
+    node('sec', 'section', 'Opening, as in [del74].', { title: 'S', order: 1 }),
+    node('sec2', 'section', 'Cites nothing.', { title: 'T', order: 2 }),
+    node('refs', 'section', '', { title: 'References', order: 3 }),
+    node('del74', 'reference', '', { author: ['P. Deligne'], title: 'La conjecture de Weil. I', year: '1974' }),
+    node('unused', 'reference', '', { author: ['N. Body'], title: 'Uncited', year: '2000' }),
+    edge('refines', 'del74', 'refs'), edge('refines', 'unused', 'refs'),
+  ], { reference: { boundary: {}, graph: 'never' } }, { pdfReferences: 'all' }));
+  for (const scope of ['sec', 'sec2']) {
+    const t = bodyOf(exportLatex(m, { scope }).tex);
+    ok(/\\clearpage\\phantomsection%\n\\section\*\{References\}/.test(t), `${scope}: References on a new page`);
+    same([...t.matchAll(/\\bpbibitem\{([^}]*)\}/g)].map((x) => x[1]), ['Bod00', 'Del74'], `${scope}: every entry, cited or not`);
+  }
+  // The whole blueprint writes its bibliography in place, after a page break.
+  const whole = bodyOf(exportLatex(m, {}).tex);
+  ok(/\\clearpage\n% object: refs/.test(whole), 'the References section in place starts a new page');
+  eq((whole.match(/\\bpbibitem\{Del74\}/g) || []).length, 1, 'and is not repeated');
+});
+
+await check('pdfScopes may name an object, which alone of its kind is a part', () => {
+  const objects = [
+    node('intro', 'section', 'Opening.', { title: 'Introduction', order: 1 }),
+    node('i1', 'theorem', 'Overview.', { order: 1 }),
+    node('c1', 'chapter', 'A chapter.', { title: 'The chapter', order: 2 }),
+    node('t1', 'theorem', 'Main.', { order: 1 }),
+    node('other', 'section', 'Elsewhere.', { title: 'Other', order: 3 }),
+    node('o1', 'theorem', 'More.', { order: 1 }),
+    edge('refines', 'i1', 'intro'), edge('refines', 't1', 'c1'), edge('refines', 'o1', 'other'),
+  ];
+  const m = M.buildModel(snapshot(objects, { chapter: { boundary: {} } }, { pdfScopes: ['chapter', 'intro'] }));
+  same(exportScopes(m).map((x) => x.id), [null, 'intro', 'c1'], 'the named section, not the other one');
+  throwsExport(() => resolveRequest(m, { scope: 'other' }), /PDFs are of the whole blueprint or a chapter, 'intro' \(\[site\] pdfScopes\)/, 'another section is refused');
+});
+
 await check('brackets that cite nothing keep their maths, emphasis and code; a locator too', () => {
   const m = M.buildModel(snapshot([
     node('sec', 'section', 'On [0, $\\epsilon$] and [a, *b*] and [x, `c`]; see [del74, Thm. $x^2$ and *Cor.* 4].', { title: 'S', order: 1 }),

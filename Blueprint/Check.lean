@@ -123,6 +123,11 @@ def structuralChecks (b : Blueprint) : Array Check := Id.run do
     if (b.schema.kind? o.kind).isNone then
       cs := cs.push <| Check.error "unknown-kind"
         s!"{o.source.file}: object '{o.id}' has unknown kind '{o.kind}'" #[o.id]
+  -- `[site] pdfScopes` names kinds and object ids
+  for n in b.project.pdfScopes do
+    unless (b.schema.kind? n).isSome || b.contains n do
+      cs := cs.push <| Check.error "dangling-ref"
+        s!"'[site] pdfScopes' names '{n}', which is neither a kind nor an object" #[]
   -- dangling references and boundary shape
   for o in b.objects do
     for e in o.boundary do

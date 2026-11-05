@@ -363,6 +363,9 @@ def decodeConfig (t : TValue) (defaultName : String) :
     | some v => match v.asStrings? with
       | some ss => pure ss
       | none => throw "'[site] pdfScopes' must be a string or an array of strings"
+  let pdfReferences ← siteStr "pdfReferences"
+  unless pdfReferences ∈ ["", "cited", "all"] do
+    throw s!"'[site] pdfReferences' must be \"cited\" or \"all\", got \"{pdfReferences}\""
   let logo ← siteStr "logo"
   let logoInk ← match site.bind (·.get? "logoInk") with
     | none => pure false
@@ -431,7 +434,7 @@ def decodeConfig (t : TValue) (defaultName : String) :
     | some v => throw s!"'[site] comments' must be a table, got a {v.typeName}"
   let project : Project :=
     { name, title, dir, leanModules, leanDescend, katexMacros, theme, numbering, pdfDetails,
-      pdfScopes, logo, logoInk,
+      pdfScopes, pdfReferences, logo, logoInk,
       intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom,
       assets, blog, commentsZulip, commentsChannel, commentsServer }
   let mut schema := defaultSchema
@@ -454,9 +457,8 @@ def decodeConfig (t : TValue) (defaultName : String) :
     | none => throw s!"defaultCollapse names an unknown kind '{c}'"
     | some k => unless k.collapse do
         throw s!"defaultCollapse names '{c}', which is not declared collapse = true"
-  for k in project.pdfScopes do
-    if (schema.kind? k).isNone then
-      throw s!"'[site] pdfScopes' names an unknown kind '{k}'"
+  -- A name in `[site] pdfScopes` that is no kind is an object's id, which
+  -- `structuralChecks` looks for once the objects are read.
   return (project, schema)
 
 /-- Read `blueprint.toml` from `root`.  When there is no such file the default

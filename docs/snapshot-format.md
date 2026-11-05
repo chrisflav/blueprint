@@ -23,6 +23,7 @@ by editing this file first. Version 1.
     "numbering": "nested",                       // optional, see below
     "pdfDetails": false,                         // optional, see below
     "pdfScopes": ["part", "chapter"],            // optional, see below
+    "pdfReferences": "all",                      // optional, see below
     "logo": "assets/logo.svg",                   // optional, see below
     "logoInk": true,                             // optional
     "intro": {                                   // optional, see below
@@ -127,9 +128,13 @@ Notes
   (`isDetailEntry` in `web/model.js`), a statement inside a statement, text
   inside one, and what is below them.  Left out, the PDFs write them out.
 - `project.pdfScopes` is `[site] pdfScopes` of `blueprint.toml`, written only
-  when it names a kind: a PDF is of the whole blueprint or of an entry of one
-  of these kinds (`isPdfScope` in `web/model.js`).  Left out, of any entry
-  with entries below it.
+  when it names something: a PDF is of the whole blueprint, of an entry of one
+  of these kinds, or of an entry whose id is named (`isPdfScope` in
+  `web/model.js`).  Left out, of any entry with entries below it.
+- `project.pdfReferences` is `[site] pdfReferences` of `blueprint.toml`,
+  written only when it is set: `"all"` ends every PDF with the whole
+  bibliography (`exportsAllReferences` in `web/model.js`); left out, or
+  `"cited"`, with the entries it cites.
 - `project.logo` is `[site] logo` of `blueprint.toml`: the address of a
   picture the website shows left of its title, resolved against the
   directory holding the snapshot.  `project.logoInk`, `[site] logoInk`, says
