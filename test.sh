@@ -700,6 +700,24 @@ if grep -q '"hide_content": true' "$TMP/hide.json" \
 else
   bad "hide_content: kept on a section, refused on a leaf and as anything but a yes or a no"; cat "$TMP/hide.out"
 fi
+# `serial` is an attribute of every kind: a string or a whole number is the
+# entry's own number, false none; anything else is refused
+cp -r examples/minimal "$TMP/serial"
+sed -i 's/^order = 1$/order = 1\nserial = "A"/' "$TMP/serial/blueprint/_section.md"
+sed -i 's/^title = "Addition"$/title = "Addition"\nserial = 0/' "$TMP/serial/blueprint/add.md"
+sed -i 's/^title = "The natural numbers"$/title = "The natural numbers"\nserial = false/' "$TMP/serial/blueprint/nat.md"
+sed -i 's/^title  = "Addition is commutative"$/title  = "Addition is commutative"\nserial = true/' "$TMP/serial/blueprint/add-comm.md"
+"$BP" build --root "$TMP/serial" -o "$TMP/serial.json" > "$TMP/serial.out" 2>&1
+if grep -q '"serial": "A"' "$TMP/serial.json" \
+   && grep -q '"serial": 0' "$TMP/serial.json" \
+   && grep -q '"serial": false' "$TMP/serial.json" \
+   && ! grep -q "unknown-attr" "$TMP/serial.out" \
+   && ! grep -q "bad-attr\] .*'add' has serial" "$TMP/serial.out" \
+   && grep -q "error: \[bad-attr\] .*'add-comm' has serial = true" "$TMP/serial.out"; then
+  ok "serial: a string, a whole number or false on any kind; true refused"
+else
+  bad "serial: a string, a whole number or false on any kind; true refused"; cat "$TMP/serial.out"
+fi
 cp -r examples/minimal "$TMP/badlogo"
 printf '\n[site]\nlogoInk = true\n' >> "$TMP/badlogo/blueprint.toml"
 cp -r examples/minimal "$TMP/badink"

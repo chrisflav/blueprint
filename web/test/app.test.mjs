@@ -992,6 +992,34 @@ await check('hide_content takes an entry off its parent\'s page, and leads every
   }
 });
 
+await check('serial: a chapter with no number reads by its title, and the next one closes up', async () => {
+  const o = app.model.byId.get('sec-main');
+  const before = o.attrs;
+  o.attrs = { ...(o.attrs || {}), serial: false };
+  app.model._outlines.clear(); // numbers are memoised with the outline
+  try {
+    await go('#/document');
+    const head = root.querySelector('#doc-sec-main .head a.doc-title');
+    eq(head.querySelectorAll('.num').length, 0, 'no number, not even an empty one, in its heading');
+    eq(head.textContent.trim(), modelMod.titleOf(o), 'its heading is its title');
+    ok(/Show details\s+\S/.test(root.querySelector('#doc-sec-main a.doc-open').textContent), 'the link on names it');
+    eq(root.querySelector('#doc-sec-applications .head .num').textContent, '2', 'the next chapter closes up');
+    // Inside it: its own series.
+    await go('#/document/sec-main');
+    eq(root.querySelector('#doc-sec-main-induction .head .num').textContent, '1', 'a section inside it');
+    eq(root.querySelector('#doc-thm-tychonoff .head .num').textContent, '3', 'a statement inside it');
+    const crumb = root.querySelector('.doc-crumbs .here').textContent;
+    eq(crumb, modelMod.titleOf(o), 'its breadcrumb is its title, with no number before it');
+    await go('#/contents?collapse=refines');
+    const link = root.querySelectorAll('a.contents-link').find((a) => a.getAttribute('href') === '#/document/sec-main?collapse=refines');
+    eq(link.querySelector('.num').textContent, '', 'its contents row has no number');
+  } finally {
+    o.attrs = before;
+    app.model._outlines.clear();
+    await go('#/document');
+  }
+});
+
 await check('depth=2 inlines a second level', async () => {
   await go('#/document?depth=2');
   ok(entryIds().includes('doc-sec-main-induction'), 'sections are written out');
@@ -2134,6 +2162,22 @@ await check('node and edge metadata survives the round trip through the worker',
   const edges = root.querySelectorAll('.gedge');
   ok(edges.length > 0, 'no edges were drawn');
   ok(edges.some((e) => e.classList.contains('kind-uses')), 'no uses edge kept its kind');
+});
+
+await check('a section box carries its number in the document before its title', async () => {
+  const outline = M.documentOutline(app.model, app.model.defaultCollapse || app.model.collapseKinds[0]);
+  // A long title is wrapped onto lines of its own, which join with no space.
+  const label = (n) => n.querySelector('.label').textContent.replace(/\s+/g, '');
+  const flat = (t) => t.replace(/\s+/g, '');
+  const nodes = root.querySelectorAll('.gnode').filter((n) => !n.classList.contains('junction'));
+  const sections = nodes.filter((n) => M.isSectionKind(app.model.byId.get(n.dataset.id).kind));
+  ok(sections.length > 0, 'no section box was drawn');
+  for (const n of sections) {
+    const o = app.model.byId.get(n.dataset.id);
+    const e = outline.byId.get(o.id);
+    eq(label(n), flat((e && e.number != null ? e.number : '') + M.titleOf(o)), `the box of ${o.id}`);
+    if (e && e.number != null) ok(n.querySelector('tspan').textContent.startsWith(e.number + ' '), `no number on ${o.id}`);
+  }
 });
 
 await check('clicking a node brings its edges and their far ends forward and fades the rest', async () => {

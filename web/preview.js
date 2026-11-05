@@ -68,7 +68,7 @@ export function previewCard(ctx, id) {
   const ref = ctx.referenceFor(id);
   const of = o.kind === 'proof' ? M.attachedTo(o) : null;
   const own = o.attrs && typeof o.attrs.title === 'string' && o.attrs.title ? o.attrs.title : null;
-  const lead = of ? 'Proof' : ref ? ref.word + ' ' + ref.number : M.kindWord(o.kind);
+  const lead = of ? 'Proof' : ref && !ref.unnumbered ? M.referenceText(ref) : M.kindWord(o.kind);
   const title = of ? 'of ' + M.titleOf(m.byId.get(of)) + (own ? ' (' + own + ')' : '') : own;
   const status = M.badgeStatusOf(m, id);
   const head = el('div.preview-head',
@@ -117,7 +117,7 @@ export function leanCard(ctx, id) {
   const status = M.badgeStatusOf(m, id);
   const head = el('div.preview-head',
     el('span.preview-lead', facts.length === 1 ? 'Lean declaration' : `Lean declarations (${facts.length})`),
-    el('span.preview-title', 'of ' + (ref ? ref.word + ' ' + ref.number : M.titleOf(o))),
+    el('span.preview-title', 'of ' + (ref ? M.referenceText(ref) : M.titleOf(o))),
     status === null ? null : ctx.statusBadge(status));
   const rows = facts.map(({ name, fact }) => el('li',
     el('a.lean-name', { href: ctx.objectHref(id, { lean: name }) }, el('code', name)),
