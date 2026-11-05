@@ -211,37 +211,45 @@ def axiomsOf (env : Environment) (g : DepGraph) : Std.HashMap Name (Array Name) 
     m := m.insert n (sortDedupNames acc)
   return m
 
-/-- The mapped constants below some starting constants, sorted, stopping at
-mapped constants and at the edge of the project: a mapped constant is
-collected and not passed through, a constant for which `descend` holds (the
-project's own) is passed through to its direct dependencies, and anything else
-ends the walk.  A mapped constant of a dependency is still recorded when
-project code reaches it, but the walk never passes through a dependency's
-internals: a project declaration that uses `Finset.sum` does not depend on
-every mapped Mathlib lemma `Finset.sum` is built from.
+/-- For every reachable constant, the mapped constants below it, stopping at
+mapped constants and at the edge of the project: `below n = {n}` when `n` is
+mapped, the union of the `below` of its direct dependencies when `descend n`
+(`n` is the project's own), and `∅` otherwise.  A mapped constant of a
+dependency is still recorded when project code reaches it, but the walk never
+passes through a dependency's internals: a project declaration that uses
+`Finset.sum` does not depend on every mapped Mathlib lemma `Finset.sum` is
+built from.
 
-One walk per question rather than a table of `below` sets for every reachable
-constant: the table unions, at every one of the project's own constants, the
-sets of all its children, and on weil-conjectures (340 000 reachable
-constants, 1 077 mapped) that took the better part of an hour, while only the
-direct dependencies of the mapped constants are ever asked about. -/
-def mappedReach (g : DepGraph) (mapped : Std.HashSet Name) (descend : Name → Bool)
-    (starts : Array Name) : Array Name := Id.run do
-  let mut visited : Std.HashSet Name := {}
-  let mut found : Array Name := #[]
-  let mut stack := starts
-  while 0 < stack.size do
-    let n := stack.back!
-    stack := stack.pop
-    if visited.contains n then continue
-    visited := visited.insert n
-    if mapped.contains n then
-      found := found.push n
-    else if descend n then
-      for d in g.direct.getD n #[] do
-        unless visited.contains d do
-          stack := stack.push d
-  return found.qsort Name.lt
+A set is a bitset over `mapped` (bit `i` is `mapped[i]`), kept as a `Nat`, so
+that the union at a node is one `|||` per edge.  Unions of name arrays, one
+per node, took the better part of an hour on weil-conjectures (342 000
+reachable constants, 1 077 mapped); so did a walk per question.  Constants
+whose set is empty are left out. -/
+def mappedBelow (g : DepGraph) (mapped : Array Name) (descend : Name → Bool) :
+    Std.HashMap Name Nat := Id.run do
+  let mut index : Std.HashMap Name Nat := {}
+  for h : i in [0:mapped.size] do
+    index := index.insert mapped[i] i
+  let mut m : Std.HashMap Name Nat := {}
+  for n in g.order do
+    match index[n]? with
+    | some i => m := m.insert n (1 <<< i)
+    | none =>
+      if descend n then
+        let mut acc : Nat := 0
+        for d in g.direct.getD n #[] do
+          acc := acc ||| m.getD d 0
+        if acc != 0 then
+          m := m.insert n acc
+  return m
+
+/-- The names of a bitset over `mapped`, in the order of `mapped`. -/
+def bitsetNames (mapped : Array Name) (s : Nat) : Array Name := Id.run do
+  let mut out : Array Name := #[]
+  for h : i in [0:mapped.size] do
+    if s.testBit i then
+      out := out.push mapped[i]
+  return out
 
 /-- The module prefixes the dependency walk descends through: `descend` when
 it is given, else the first component of every imported module. -/
@@ -324,8 +332,9 @@ def declFactsOf (env : Environment) (names roots : Array Name) (srcPath : Search
     (cwd : System.FilePath) : IO (Array DeclFacts) := do
   let g := buildDepGraph env names
   let axs := axiomsOf env g
-  let mapped := Std.HashSet.ofArray names
-  let descend := inModules env roots
+  -- sorted, so that a bitset's names come out sorted
+  let mapped := sortDedupNames names
+  let below := mappedBelow g mapped (inModules env roots)
   -- resolve each module's source file once rather than once per constant
   let mut files : Std.HashMap Name String := {}
   for m in sortDedupNames (names.filterMap (moduleOf? env ·)) do
@@ -341,7 +350,8 @@ def declFactsOf (env : Environment) (names roots : Array Name) (srcPath : Search
       -- the mapped constants below the direct dependencies; a constant is
       -- never a dependency of itself
       let mappedOf (ds : Array Name) : Array Name :=
-        (mappedReach g mapped descend ds).filter (· != n)
+        let s := ds.foldl (init := 0) fun acc d => acc ||| below.getD d 0
+        (bitsetNames mapped s).filter (· != n)
       -- the walk started from the type alone and from the value alone; the
       -- direct dependencies are the two together, so `deps` is their union
       let (fromType, fromValue) := directDepsSplit env n
