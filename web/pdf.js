@@ -79,7 +79,9 @@ function routeCollapse(m) {
  * is its own part when it has entries below it, and otherwise the part it is
  * read in, so its prose is in the PDF either way.  When the PDFs leave details
  * out (`M.exportsDetails`), a detail is read in the statement it lies in, and
- * entries below that are all details are none.
+ * entries below that are all details are none.  With `[site] pdfScopes` the
+ * part is the nearest one at or above that a PDF may be made of
+ * (`M.pdfScopeOf`): a section's chapter, or the whole blueprint.
  */
 export function contextPart(m, collapse, route) {
   if (!collapse) return null;
@@ -95,15 +97,18 @@ export function contextPart(m, collapse, route) {
   if (!entry) {
     return route.view === 'document' ? null : { id: null, from, missing: true };
   }
+  const part = (pid) => {
+    const p = pid == null ? null : M.pdfScopeOf(m, outline.byId.get(pid));
+    return { id: p ? p.id : null, from };
+  };
   if (!M.exportsDetails(m)) {
     if (M.isDetailEntry(entry)) entry = M.detailHost(entry);
     if (!entry.text && !entry.duplicate && entry.children.length && entry.children.every(M.isDetailEntry)) {
-      return { id: entry.parent ? entry.parent.id : null, from };
+      return part(entry.parent ? entry.parent.id : null);
     }
   }
-  if (entry.children.length && !entry.text && !entry.duplicate) return { id: entry.id, from };
-  const page = M.documentPageOf(outline, id);
-  return page ? { id: page, from } : { id: null, from };
+  if (entry.children.length && !entry.text && !entry.duplicate) return part(entry.id);
+  return part(M.documentPageOf(outline, id) || null);
 }
 
 // ---------------------------------------------------------------------------

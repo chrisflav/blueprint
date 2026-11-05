@@ -22,6 +22,7 @@ by editing this file first. Version 1.
     "theme": "outline",                          // optional, see below
     "numbering": "nested",                       // optional, see below
     "pdfDetails": false,                         // optional, see below
+    "pdfScopes": ["part", "chapter"],            // optional, see below
     "logo": "assets/logo.svg",                   // optional, see below
     "logoInk": true,                             // optional
     "intro": {                                   // optional, see below
@@ -125,6 +126,10 @@ Notes
   only when it is `false`: the PDF export leaves out every detail
   (`isDetailEntry` in `web/model.js`), a statement inside a statement, text
   inside one, and what is below them.  Left out, the PDFs write them out.
+- `project.pdfScopes` is `[site] pdfScopes` of `blueprint.toml`, written only
+  when it names a kind: a PDF is of the whole blueprint or of an entry of one
+  of these kinds (`isPdfScope` in `web/model.js`).  Left out, of any entry
+  with entries below it.
 - `project.logo` is `[site] logo` of `blueprint.toml`: the address of a
   picture the website shows left of its title, resolved against the
   directory holding the snapshot.  `project.logoInk`, `[site] logoInk`, says

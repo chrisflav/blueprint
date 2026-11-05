@@ -136,7 +136,8 @@ def Snapshot.toJson (s : Snapshot) : Json :=
   Json.mkObj [
     ("version", Json.num (JsonNumber.fromInt s.version)),
     -- `katexMacros`, `theme`, `numbering`, `logo` and `intro` are left out when the project
-    -- declares none, and `pdfDetails` unless it is `false`, so that a blueprint
+    -- declares none, `pdfDetails` unless it is `false` and `pdfScopes` unless it
+    -- names a kind, so that a blueprint
     -- without them has exactly the `project` it had before the fields existed.
     ("project", Json.mkObj ([("name", Json.str s.project.name),
                              ("title", Json.str s.project.title),
@@ -149,6 +150,8 @@ def Snapshot.toJson (s : Snapshot) : Json :=
       (if s.project.numbering.isEmpty then [] else
         [("numbering", Json.str s.project.numbering)]) ++
       (if s.project.pdfDetails then [] else [("pdfDetails", Json.bool false)]) ++
+      (if s.project.pdfScopes.isEmpty then [] else
+        [("pdfScopes", Json.arr (s.project.pdfScopes.map Json.str))]) ++
       (if s.project.logo.isEmpty then [] else
         [("logo", Json.str s.project.logo)] ++
         (if s.project.logoInk then [("logoInk", Json.bool true)] else [])) ++
@@ -315,6 +318,7 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
       theme := fieldStrD p "theme" ""
       numbering := fieldStrD p "numbering" ""
       pdfDetails := fieldBoolD p "pdfDetails" true
+      pdfScopes := fieldStrs p "pdfScopes"
       logo := fieldStrD p "logo" ""
       logoInk := fieldBoolD p "logoInk" false
       intro := fieldStrD intro "body" ""

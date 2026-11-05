@@ -3159,6 +3159,16 @@ if (ELK_PATH && fs.existsSync(ELK_PATH) && fs.existsSync(ELK_WORKER_PATH)) {
       'refines', { view: 'object', id: 'lem-complements', params: new URLSearchParams() }).id, 'proof/thm-fip', 'by default the lemma is read on its proof\'s page');
   });
 
+  await check('with pdfScopes, a section\'s page offers its chapter, and a statement\'s too', () => {
+    const snap = JSON.parse(fs.readFileSync(path.join(webDir, 'sample', 'paper', 'blueprint.json'), 'utf8'));
+    snap.project.pdfScopes = ['appendix'];
+    const m = modelMod.buildModel(snap);
+    const at = (view, id) => pdf.contextPart(m, 'refines', { view, id, params: new URLSearchParams() });
+    eq(at('document', 'covers').id, null, 'a section under no appendix: the whole blueprint');
+    eq(at('document', 'conventions').id, 'conventions', 'the appendix itself');
+    eq(at('object', 'notation').id, 'conventions', 'a remark in the appendix: the appendix');
+  });
+
   const pdfBytes = new TextEncoder().encode('%PDF-1.5\nfake but shaped like one\n%%EOF\n');
   const entry = (extra = {}) => ({ collapse: 'refines', scope: 'sec-main', depth: 'all', appendices: true, status: 'ok',
     pdf: 'aaaa.pdf', tex: 'aaaa.tex', fileName: 'compact-2-main', pages: 3, warnings: [], ...extra });

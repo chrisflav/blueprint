@@ -358,6 +358,11 @@ def decodeConfig (t : TValue) (defaultName : String) :
     | none => pure true
     | some (.bool b) => pure b
     | some v => throw s!"'[site] pdfDetails' must be a boolean, got a {v.typeName}"
+  let pdfScopes ← match site.bind (·.get? "pdfScopes") with
+    | none => pure #[]
+    | some v => match v.asStrings? with
+      | some ss => pure ss
+      | none => throw "'[site] pdfScopes' must be a string or an array of strings"
   let logo ← siteStr "logo"
   let logoInk ← match site.bind (·.get? "logoInk") with
     | none => pure false
@@ -426,7 +431,7 @@ def decodeConfig (t : TValue) (defaultName : String) :
     | some v => throw s!"'[site] comments' must be a table, got a {v.typeName}"
   let project : Project :=
     { name, title, dir, leanModules, leanDescend, katexMacros, theme, numbering, pdfDetails,
-      logo, logoInk,
+      pdfScopes, logo, logoInk,
       intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom,
       assets, blog, commentsZulip, commentsChannel, commentsServer }
   let mut schema := defaultSchema
@@ -449,6 +454,9 @@ def decodeConfig (t : TValue) (defaultName : String) :
     | none => throw s!"defaultCollapse names an unknown kind '{c}'"
     | some k => unless k.collapse do
         throw s!"defaultCollapse names '{c}', which is not declared collapse = true"
+  for k in project.pdfScopes do
+    if (schema.kind? k).isNone then
+      throw s!"'[site] pdfScopes' names an unknown kind '{k}'"
   return (project, schema)
 
 /-- Read `blueprint.toml` from `root`.  When there is no such file the default
