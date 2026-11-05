@@ -117,10 +117,13 @@ Everything below walks the graph iteratively and memoises, so a project with
 thousands of constants costs one pass over the reachable part.
 -/
 
-/-- The module a constant was declared in. -/
+/-- The module a constant was declared in.  Read from `header.modules` and not
+`header.moduleNames`, which is not a field but a function that maps over every
+imported module: called once per constant of the walk, that copy was most of
+the time `extract` took on a project of tens of thousands of modules. -/
 def moduleOf? (env : Environment) (n : Name) : Option Name := do
   let idx ← env.getModuleIdxFor? n
-  env.header.moduleNames[idx.toNat]?
+  return (← env.header.modules[idx.toNat]?).module
 
 /-- Sort names and drop duplicates.  The duplicates go first: `Array.qsort`
 partitions Lomuto style and is quadratic in a run of equal elements, and the
@@ -215,21 +218,38 @@ mapped, the union of the `below` of its direct dependencies when `descend n`
 dependency is still recorded when project code reaches it, but the walk never
 passes through a dependency's internals: a project declaration that uses
 `Finset.sum` does not depend on every mapped Mathlib lemma `Finset.sum` is
-built from. -/
-def mappedBelow (g : DepGraph) (mapped : Std.HashSet Name) (descend : Name → Bool) :
-    Std.HashMap Name (Array Name) := Id.run do
-  let mut m : Std.HashMap Name (Array Name) := {}
+built from.
+
+A set is a bitset over `mapped` (bit `i` is `mapped[i]`), kept as a `Nat`, so
+that the union at a node is one `|||` per edge.  Unions of name arrays, one
+per node, took the better part of an hour on weil-conjectures (342 000
+reachable constants, 1 077 mapped); so did a walk per question.  Constants
+whose set is empty are left out. -/
+def mappedBelow (g : DepGraph) (mapped : Array Name) (descend : Name → Bool) :
+    Std.HashMap Name Nat := Id.run do
+  let mut index : Std.HashMap Name Nat := {}
+  for h : i in [0:mapped.size] do
+    index := index.insert mapped[i] i
+  let mut m : Std.HashMap Name Nat := {}
   for n in g.order do
-    if mapped.contains n then
-      m := m.insert n #[n]
-    else if descend n then
-      let mut acc : Array Name := #[]
-      for d in g.direct.getD n #[] do
-        acc := acc ++ m.getD d #[]
-      m := m.insert n (sortDedupNames acc)
-    else
-      m := m.insert n #[]
+    match index[n]? with
+    | some i => m := m.insert n (1 <<< i)
+    | none =>
+      if descend n then
+        let mut acc : Nat := 0
+        for d in g.direct.getD n #[] do
+          acc := acc ||| m.getD d 0
+        if acc != 0 then
+          m := m.insert n acc
   return m
+
+/-- The names of a bitset over `mapped`, in the order of `mapped`. -/
+def bitsetNames (mapped : Array Name) (s : Nat) : Array Name := Id.run do
+  let mut out : Array Name := #[]
+  for h : i in [0:mapped.size] do
+    if s.testBit i then
+      out := out.push mapped[i]
+  return out
 
 /-- The module prefixes the dependency walk descends through: `descend` when
 it is given, else the first component of every imported module. -/
@@ -312,7 +332,9 @@ def declFactsOf (env : Environment) (names roots : Array Name) (srcPath : Search
     (cwd : System.FilePath) : IO (Array DeclFacts) := do
   let g := buildDepGraph env names
   let axs := axiomsOf env g
-  let below := mappedBelow g (Std.HashSet.ofArray names) (inModules env roots)
+  -- sorted, so that a bitset's names come out sorted
+  let mapped := sortDedupNames names
+  let below := mappedBelow g mapped (inModules env roots)
   -- resolve each module's source file once rather than once per constant
   let mut files : Std.HashMap Name String := {}
   for m in sortDedupNames (names.filterMap (moduleOf? env ·)) do
@@ -327,16 +349,15 @@ def declFactsOf (env : Environment) (names roots : Array Name) (srcPath : Search
       let axioms := axs.getD n #[]
       -- the mapped constants below the direct dependencies; a constant is
       -- never a dependency of itself
-      let mappedOf (ds : Array Name) : Array Name := Id.run do
-        let mut acc : Array Name := #[]
-        for d in ds do
-          acc := acc ++ below.getD d #[]
-        return (sortDedupNames acc).filter (· != n)
-      let deps := mappedOf (g.direct.getD n #[])
-      -- the same walk, started from the type alone and from the value alone
+      let mappedOf (ds : Array Name) : Array Name :=
+        let s := ds.foldl (init := 0) fun acc d => acc ||| below.getD d 0
+        (bitsetNames mapped s).filter (· != n)
+      -- the walk started from the type alone and from the value alone; the
+      -- direct dependencies are the two together, so `deps` is their union
       let (fromType, fromValue) := directDepsSplit env n
       let typeDeps := mappedOf fromType
       let valueDeps := mappedOf fromValue
+      let deps := sortDedupNames (typeDeps ++ valueDeps)
       let kind := declKind env n (← Meta.isInstance n)
       let signature ←
         try
