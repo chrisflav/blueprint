@@ -296,12 +296,19 @@ export function slugify(s, max = 48) {
 }
 
 /** The file name, without extension, an export is downloaded as. */
+/** An entry's number as it is read alone: a part's with its word, "Part I". */
+function shownNumber(e) {
+  if (!e || e.number == null) return e ? e.number : null;
+  const word = M.headingWord(e.object.kind);
+  return word ? word + ' ' + e.number : e.number;
+}
+
 export function exportFileName(model, req) {
   const project = slugify(model.project.name || model.project.title || 'blueprint', 32);
   let scope = 'whole';
   if (req.scope !== null) {
     const e = M.documentOutline(model, req.collapse).byId.get(req.scope);
-    scope = (e && e.number ? e.number.replace(/\./g, '-') + '-' : '') + slugify(e ? entryTitle(model, M.documentOutline(model, req.collapse), e) : req.scope);
+    scope = (e && e.number ? slugify(shownNumber(e).replace(/\./g, '-'), 24) + '-' : '') + slugify(e ? entryTitle(model, M.documentOutline(model, req.collapse), e) : req.scope);
   }
   const parts = [project, scope];
   if (req.depth !== 'all') parts.push('depth-' + req.depth);
@@ -656,6 +663,9 @@ export function exportLatex(model, request, options = {}) {
   };
 
   let lastWritten = null; // the entry written last, for a proof right after its statement
+  // The parts (`M.PART_KIND`) open around the entry being written: a part is
+  // set as `\part*`, and what is in it at the depth it would have without it.
+  let partsOpen = 0;
   const writeNode = (node) => {
     const e = node.entry;
     const o = e.object;
@@ -695,27 +705,45 @@ export function exportLatex(model, request, options = {}) {
       return;
     }
 
-    const level = node.rel - top;
+    const isPart = o.kind === M.PART_KIND;
+    const level = node.rel - top - partsOpen;
     const number = e.number;
     const isSection = M.isSectionKind(o.kind);
     const label = labelOf(o.id);
     comment(`object: ${o.id}` + (o.source && o.source.file ? ` (${o.source.file})` : '') + (node.hidden ? ', content hidden' : ''));
     current = o.id;
     const title = entryTitle(model, outline, e);
+    // A part is read with its word, "Part I", and has a line of its own in
+    // the contents, at the level of LaTeX's parts.
+    const shown = number == null ? null : isPart ? `Part ${number}` : number;
+    const partLead = shown == null ? '' : `${escapeText(shown)}\\quad `;
+    const partPlain = escapePdf((shown == null ? '' : shown + ' ') + plainTitle(title));
+    const partLine = () => {
+      tocLines += 1;
+      out.push(`\\addcontentsline{toc}{part}{\\texorpdfstring{${partLead}${titleTex(title)}}{${partPlain}}}`);
+    };
     if (node.hidden) {
       // Its line in the contents and a place for references to land, then
       // its children; nothing of its own.
       out.push(`\\phantomsection\\label{${label}}%`);
-      if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
+      if (isPart) partLine();
+      else if (level < 3) tocLine(level, texNumber(number), titleTex(title), plainTitle(title), number);
+      if (isPart) partsOpen += 1;
       for (const c of node.children) writeNode(c);
+      if (isPart) partsOpen -= 1;
       if (node.omitted) {
         const n = node.omitted;
-        out.push(`\\bpomitted{${n} ${n === 1 ? 'entry' : 'entries'} below ${number == null ? titleTex(title) : escapeText(number)} ${n === 1 ? 'is' : 'are'} left out at this detail level.}`);
+        out.push(`\\bpomitted{${n} ${n === 1 ? 'entry' : 'entries'} below ${shown == null ? titleTex(title) : escapeText(shown)} ${n === 1 ? 'is' : 'are'} left out at this detail level.}`);
       }
       out.push('');
       return;
     }
-    if (isSection) {
+    if (isPart) {
+      // "Part I  The six operations".
+      out.push(`\\part*{\\texorpdfstring{${partLead}${titleTex(title)}}{${partPlain}}}`);
+      out.push(`\\phantomsection\\label{${label}}%`);
+      partLine();
+    } else if (isSection) {
       const cmd = HEADINGS[Math.min(level, HEADINGS.length - 1)];
       out.push(`\\${cmd}*{\\texorpdfstring{${number == null ? '' : escapeText(number) + '\\quad '}${titleTex(title)}}{${escapePdf(numPrefix(number) + plainTitle(title))}}}`);
       out.push(`\\phantomsection\\label{${label}}%`);
@@ -760,7 +788,9 @@ export function exportLatex(model, request, options = {}) {
 
     for (const p of outline.proofs.get(o.id) || []) writeProof(p);
     writeSteps(o.id, new Set());
+    if (isPart) partsOpen += 1;
     for (const c of node.children) writeNode(c);
+    if (isPart) partsOpen -= 1;
     if (node.omitted) {
       const n = node.omitted;
       out.push(`\\bpomitted{${n} ${n === 1 ? 'entry' : 'entries'} below ${number == null ? titleTex(title) : escapeText(number)} ${n === 1 ? 'is' : 'are'} left out at this detail level.}`);
@@ -807,7 +837,7 @@ export function exportLatex(model, request, options = {}) {
   });
 
   const title = titleTex(project);
-  const pdfTitle = escapePdf(plainTitle(project) + (scopeEntry ? ' — ' + numPrefix(scopeEntry.number) + plainTitle(entryTitle(model, outline, scopeEntry)) : ''));
+  const pdfTitle = escapePdf(plainTitle(project) + (scopeEntry ? ' — ' + numPrefix(shownNumber(scopeEntry)) + plainTitle(entryTitle(model, outline, scopeEntry)) : ''));
   const frontMatter = [
     '\\begin{document}',
     '\\pagestyle{plain}',

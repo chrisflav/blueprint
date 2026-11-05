@@ -594,7 +594,7 @@ countable  = false
 sugar      = true
 color      = "#4a7"
 arrow      = "reverse"              # "forward" (src -> tgt) | "reverse" (tgt -> src)
-graph      = "always"               # "always" | "optional" | "never"
+graph      = "always"               # "always" | "optional" | "never" | "through"
 ```
 
 `arrow` only changes the picture: which end of a binary kind's arc carries the
@@ -607,9 +607,12 @@ default) draws objects of the kind, `optional` draws them unless the reader
 ticks *hide appendix* in the graph's toolbar, and `never` leaves them to the
 document alone.  An object the graph leaves out takes along everything below
 it in every collapse order, everything attached to it (its proofs), and every
-relation with it on its boundary.  The built-in `appendix` is `optional`,
-the built-in `matter`, `hidden` and `reference` are `never`; every other
-built-in kind is `always`.
+relation with it on its boundary.  `through` leaves out the object and every
+relation with it on its boundary, but not what is below it, which the graph
+then draws as if the object were not there: the chapters of a part stand at
+the top.  The built-in `part` is `through`, `appendix` is `optional`, the
+built-in `matter`, `hidden` and `reference` are `never`; every other built-in
+kind is `always`.
 
 A `[kinds.X]` table *extends* the built-in kind `X` if there is one: keys you
 do not mention keep their default.  Giving `boundary` replaces the whole role
@@ -652,6 +655,14 @@ numbered within the one it lies in, `2.3.1`, `2.3.2`, … under `2.3`, and the
 chapter's statements keep the numbers they have without their details.
 Headings and statements directly under headings are numbered as before.
 `blueprint build` copies it into the snapshot as `project.numbering`.
+
+A `part` is a heading above chapters, "Part I", "Part II", …: numbered in a
+series of its own, in Roman numerals, and otherwise not there for the
+numbers, so what is in it is numbered as if it stood where the part stands.
+The chapters of a book in parts count on from one part to the next, as with
+LaTeX's `\part`, and a statement in a chapter is numbered in its chapter.  A
+chapter is put in a part by `refines`.  `serial = false` leaves a part
+unnumbered ("Appendices"); a `serial` of its own replaces its numeral.
 
 An entry's own number is set by `serial` in its front matter, an attribute
 every kind accepts.  A string or a whole number is its number (`serial =
@@ -783,6 +794,7 @@ the comment server answers no other site (`--allow-origin`, repeatable).
 
 | kind | boundary | notes |
 |------|----------|-------|
+| `part` | — | a heading above chapters, "Part I": numbered in a series of its own with what is in it numbered as if it were not there; the graph draws what is in it but not it (`graph = "through"`) |
 | `chapter` | — | a heading, as a section is |
 | `section` | — | |
 | `subsection` | — | a heading, as a section is |

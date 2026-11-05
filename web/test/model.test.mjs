@@ -1596,6 +1596,61 @@ check('matter is a section to the reader and nothing to the graph', () => {
   eq(M.kindWord('matter'), 'Section', 'its lead word');
 });
 
+check('a part is a heading in a series of its own, and to the graph and the numbers it is not there', () => {
+  const node = (id, kind, attrs = {}) => ({ id, kind, boundary: [], attrs: { title: id, ...attrs }, body: 'text', depth: 0 });
+  const edge = (kind, src, tgt) => ({ id: `${kind}/${src}/${tgt}`, kind, attrs: {}, body: '', depth: 1,
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }] });
+  const binary = { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } } };
+  const m = M.buildModel({
+    version: 1,
+    schema: { defaultCollapse: 'refines', kinds: {
+      part: { boundary: {}, graph: 'through' }, chapter: { boundary: {} }, matter: { boundary: {}, graph: 'never' },
+      appendix: { boundary: {}, graph: 'optional' }, theorem: { boundary: {}, countable: true },
+      lemma: { boundary: {}, countable: true }, refines: { ...binary, collapse: true }, uses: binary } },
+    objects: [
+      node('intro', 'matter', { order: 1 }),
+      node('p1', 'part', { order: 2, title: 'The six operations' }),
+      node('ch1', 'chapter', { order: 3 }), node('ch2', 'chapter', { order: 4 }), node('thm', 'theorem'),
+      node('p2', 'part', { order: 5 }), node('ch3', 'chapter', { order: 6 }),
+      node('apx', 'part', { order: 7, serial: false, title: 'Appendices' }),
+      node('app', 'appendix', { order: 8, serial: 'A' }), node('lem', 'lemma'),
+      edge('refines', 'ch1', 'p1'), edge('refines', 'ch2', 'p1'), edge('refines', 'ch3', 'p2'),
+      edge('refines', 'app', 'apx'), edge('refines', 'thm', 'ch1'), edge('refines', 'lem', 'app'),
+      edge('uses', 'thm', 'lem'),
+    ],
+  });
+  ok(M.isSectionKind('part'), 'a heading');
+  eq(M.graphHint(m, 'part'), 'through', 'drawn through');
+  sameSet(M.outOfGraph(m), ['intro', 'p1', 'p2', 'apx', 'refines/ch1/p1', 'refines/ch2/p1', 'refines/ch3/p2',
+    'refines/app/apx'], 'the parts and the relations touching them, not what is in them');
+  const gm = M.graphModel(m);
+  ok(['ch1', 'ch2', 'ch3', 'app', 'thm', 'lem', 'uses/thm/lem'].every((id) => gm.byId.has(id)), 'what is in them is drawn');
+  const order = M.collapseOrder(gm, 'refines');
+  eq(M.childrenOf(order, 'ch1').join(), 'thm', 'a chapter keeps what is in it');
+  ok(!gm.objects.some((o) => o.kind === 'refines' && o.boundary.some((b) => b.role === 'src' && b.id === 'ch1')),
+    'and is a root, as if the part were not there');
+  eq(M.outOfGraph(m, { hideOptional: true }).has('app'), true, 'an appendix in a part can still be hidden');
+  const outline = M.documentOutline(m, 'refines');
+  const num = (id) => outline.byId.get(id).number;
+  eq(num('intro'), '1', 'the introduction');
+  eq(num('p1'), 'I', 'the first part');
+  eq(num('ch1'), '2', 'its chapters count on from the introduction');
+  eq(num('ch2'), '3', 'one after the other');
+  eq(num('p2'), 'II', 'the second part');
+  eq(num('ch3'), '4', 'whose chapters count on across the parts');
+  eq(num('apx'), null, 'an unnumbered part');
+  eq(num('app'), 'A', 'an appendix in it by its serial');
+  eq(num('thm'), '2.1', 'a statement numbered in its chapter, the part not there');
+  eq(num('lem'), 'A.1', 'and in its appendix');
+  eq(outline.byId.get('ch1').parent.id, 'p1', 'the document reads the chapter in its part');
+  ok(M.isContentsEntry(outline.byId.get('p1')), 'a row in the contents');
+  const r = M.referenceOf(outline, 'p2');
+  eq(r.word + ' ' + r.number, 'Part II', 'referred to as a part');
+  eq(M.headingWord('part'), 'Part', 'its number is read with its word');
+  eq(M.headingWord('chapter'), null, 'a chapter\'s is not');
+  eq([1, 4, 9, 14, 40].map(M.romanNumeral).join(' '), 'I IV IX XIV XL', 'Roman numerals');
+});
+
 check('the arcs between nodes are exactly the rule, in every expanded set', () => {
   // For nodes A and B of a view: A -> B exactly when A, or something inside
   // A, has an edge to B itself, or A itself has one to B or to something

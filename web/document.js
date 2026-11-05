@@ -253,7 +253,7 @@ export function render(root, app) {
     const head = el('div.head',
       el('h' + hLevel, el('a.doc-title', { href: href(pageId, o.id), 'data-here': o.id },
         isSection ? null : [el('span.kindword', M.kindWord(o.kind)), ' '],
-        numbered(el, num),
+        numbered(el, num, o.kind),
         el('span.doc-title-text', M.titleOf(o)))),
       // An entry whose children are on a page of their own leads on there,
       // beside its title.
@@ -294,7 +294,7 @@ export function render(root, app) {
       // Written out once, under its first parent; here it is a pointer there.
       const first = outline.byId.get(o.id);
       const where = first.parent
-        ? [numbered(null, first.parent.number), M.titleOf(first.parent.object)]
+        ? [numbered(null, first.parent.number, first.parent.object.kind), M.titleOf(first.parent.object)]
         : ['the top level'];
       const back = el('p.muted.small', 'Written out under ',
         el('a', { href: levelHref(o.id) }, ...where), '.');
@@ -407,10 +407,10 @@ function breadcrumbs(app, outline, pageEntry, href) {
     el('a', { href: href(null) }, m.project.title || m.project.name || 'Contents'),
     ...chain.map((e) => [
       el('span.sep', '›'),
-      el('a', { href: href(e.id) }, numbered(null, e.number), M.titleOf(e.object)),
+      el('a', { href: href(e.id) }, numbered(null, e.number, e.object.kind), M.titleOf(e.object)),
     ]),
     el('span.sep', '›'),
-    el('span.here', numbered(null, pageEntry.number), M.titleOf(pageEntry.object)));
+    el('span.here', numbered(null, pageEntry.number, pageEntry.object.kind), M.titleOf(pageEntry.object)));
   app.renderMath(nav);
   return nav;
 }
@@ -424,7 +424,7 @@ function pager(app, outline, pageEntry, href) {
   const i = siblings.indexOf(pageEntry);
   const prev = i > 0 ? siblings[i - 1] : null;
   const next = i >= 0 && i + 1 < siblings.length ? siblings[i + 1] : null;
-  const label = (e) => [numbered(el, e.number), M.titleOf(e.object)];
+  const label = (e) => [numbered(el, e.number, e.object.kind), M.titleOf(e.object)];
   const nav = el('nav.doc-pager',
     prev ? el('a.prev', { href: href(prev.id), rel: 'prev' }, '← ', ...label(prev)) : el('span'),
     el('a.up', { href: href(pageEntry.parent ? pageEntry.parent.id : null) },
@@ -642,7 +642,7 @@ function levelSidebar(app, outline, pageEntry, focus, pageHref, toc) {
     class: cls + (kids(e).length ? ' has-kids' : '') + (e === pageEntry ? ' current' : '') +
       (e === opened ? ' open' : '') + (e === pageEntry && shut ? ' shut' : ''),
   }, el('a', { href: pageHref(e.id), 'data-id': e.id, onclick: go(e) },
-    numbered(el, e.number), M.titleOf(e.object)));
+    numbered(el, e.number, e.object.kind), M.titleOf(e.object)));
 
   // The contents unfolded down to the level: the chain, `toc-up`, unfolded
   // where it stands among its siblings, and the opened entry; the page's own
@@ -720,10 +720,13 @@ function pickLevels(app) {
 /**
  * An entry's number and the space after it, before its title; nothing for an
  * entry its `serial` leaves unnumbered.  In a `span.num` when `el` is given.
+ * A part's number is read with its word, "Part I" (`M.headingWord`).
  */
-function numbered(el, number) {
+function numbered(el, number, kind) {
   if (number == null) return null;
-  return [el ? el('span.num', number) : number, ' '];
+  const word = kind ? M.headingWord(kind) : null;
+  const text = word ? word + ' ' + number : number;
+  return [el ? el('span.num', text) : text, ' '];
 }
 
 function cssId(id) {

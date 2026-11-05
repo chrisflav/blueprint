@@ -93,7 +93,7 @@ export function render(root, app) {
     const prog = M.progressMixOf(m, kind, o.id);
     const status = M.badgeStatusOf(m, o.id);
     const a = el('a.contents-link', { href: app.documentPageHref(outline, kind, o.id) || app.objectHref(o.id) },
-      el('span.num', e.number),
+      el('span.num', e.number != null && M.headingWord(o.kind) ? M.headingWord(o.kind) + ' ' + e.number : e.number),
       el('span.contents-title',
         isSection ? null : [el('span.kindword', M.kindWord(o.kind)), ' '],
         M.titleOf(o)),

@@ -241,6 +241,26 @@ def structuralChecks (b : Blueprint) : Array Check := Id.run do
 
 /-! ## View consistency lints -/
 
+/-- The blueprint as the website's graph has it for its stories: without the
+objects of a kind with `graph = "through"` (a part of the document) and the
+relations touching them, so what is in a part stands as if it were not
+there. -/
+def withoutThrough (b : Blueprint) : Blueprint := Id.run do
+  let through (o : Object) : Bool := (b.schema.kind? o.kind).any (·.graph == "through")
+  let mut gone : Std.HashSet String := {}
+  for o in b.objects do
+    if through o then gone := gone.insert o.id
+  if gone.isEmpty then return b
+  -- A relation touching one is gone too, and so is one touching that.
+  let mut changed := true
+  while changed do
+    changed := false
+    for o in b.objects do
+      if !gone.contains o.id && o.boundary.any (fun e => gone.contains e.id) then
+        gone := gone.insert o.id
+        changed := true
+  return Blueprint.ofObjects b.project b.schema (b.objects.filter fun o => !gone.contains o.id)
+
 /-- `undeclared-edge` and `unwitnessed-edge` for a collapse kind, computed at
 the fully collapsed view and at each view expanding a single root. -/
 def consistencyChecks (b : Blueprint) (collapseKind : String) : Array Check := Id.run do
@@ -436,7 +456,7 @@ def analyse (b : Blueprint) (parseChecks : Array Check) (facts : Option Facts :=
     | some k => some k
     | none => b.schema.mainCollapse?
   let viewChecks := match collapseKind with
-    | some k => if (b.schema.kind? k).any KindSpec.collapse then consistencyChecks b k else
+    | some k => if (b.schema.kind? k).any KindSpec.collapse then consistencyChecks (withoutThrough b) k else
         #[Check.error "unknown-kind" s!"'{k}' is not a collapsible kind"]
     | none => #[]
   let factChecks := match facts with
