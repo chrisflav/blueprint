@@ -869,9 +869,12 @@ export function exportLatex(model, request, options = {}) {
   const scopeTex = scopeEntry
     ? `${escapeText(M.kindWord(scopeEntry.object.kind))}${scopeEntry.number == null ? '' : ' ' + escapeText(scopeEntry.number)}: ${titleTex(entryTitle(model, outline, scopeEntry))}`
     : 'The complete blueprint';
-  const detailBits = [escapeText(described.detail.charAt(0).toUpperCase() + described.detail.slice(1))];
-  detailBits.push(`read along the \\texttt{${escapeText(req.collapse)}} order`);
-  if (described.appendices) detailBits.push(escapeText(described.appendices));
+  // What the dialog does not ask is said only when the command line chose it:
+  // fewer levels, another hierarchy.
+  const detailBits = [];
+  if (req.depth !== 'all') detailBits.push(escapeText(described.detail.charAt(0).toUpperCase() + described.detail.slice(1)));
+  if (req.collapse !== (model.defaultCollapse || model.collapseKinds[0])) detailBits.push(`read along the \\texttt{${escapeText(req.collapse)}} order`);
+  if (described.appendices) detailBits.push(escapeText(described.appendices.charAt(0).toUpperCase() + described.appendices.slice(1)));
   const snapshotLabel = options.snapshot && options.snapshot.label ? options.snapshot.label : null;
 
   // The entries of the works cited from outside the export, each written once;
@@ -928,7 +931,7 @@ export function exportLatex(model, request, options = {}) {
     '\\vspace{0.7em}',
     `{\\large ${scopeTex}\\par}`,
     '\\vspace{0.5em}',
-    `{\\small\\color{bpmuted}${detailBits.join(' \\textperiodcentered{} ')}\\par}`,
+    detailBits.length ? `{\\small\\color{bpmuted}${detailBits.join(' \\textperiodcentered{} ')}\\par}` : null,
     snapshotLabel ? `{\\small\\color{bpmuted}${escapeText(snapshotLabel)}\\par}` : null,
     '\\end{center}',
     tocLines >= 2 ? '\\vspace{0.5em}\n{\\small\\tableofcontents}\n\\bigskip\\hrule\\bigskip' : '\\bigskip',

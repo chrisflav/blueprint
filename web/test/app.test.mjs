@@ -3121,12 +3121,12 @@ if (ELK_PATH && fs.existsSync(ELK_PATH) && fs.existsSync(ELK_WORKER_PATH)) {
     const titles = d.querySelectorAll('.export-part-title').map((x) => x.textContent);
     eq(titles[0], 'Section 2 ' + M_title('sec-main'), 'named by its number and title, not its id');
     ok(d.querySelector('input[value="whole"]'), 'the whole blueprint is one choice away');
-    ok(/Section 2 .*all levels: \d+ entries/.test(d.querySelector('.export-summary').textContent), 'it says what the export holds');
-    const depths = d.querySelector('select.export-depth').querySelectorAll('option').map((o) => o.getAttribute('value'));
-    eq(depths[0], 'all', 'all levels first, and chosen');
-    ok(depths.includes('1'), 'and fewer');
+    ok(/Section 2 [^:]*: \d+ entries/.test(d.querySelector('.export-summary').textContent), 'it says what the export holds');
+    ok(!/levels/.test(d.querySelector('.export-summary').textContent), 'and nothing of levels');
+    eq(d.querySelector('select.export-depth'), null, 'no Detail to choose: a PDF has every level');
+    ok(!d.querySelectorAll('.export-field span').some((x) => x.textContent === 'Hierarchy'), 'nor a Hierarchy');
     fire(d.querySelector('input[value="whole"]'), 'change');
-    ok(/The whole blueprint, all levels/.test(dialogEl().querySelector('.export-summary').textContent), 'switching to the whole blueprint says so');
+    ok(/The whole blueprint/.test(dialogEl().querySelector('.export-summary').textContent), 'switching to the whole blueprint says so');
     pdf.closeExport();
     eq(dialogEl(), null, 'closed');
   });
