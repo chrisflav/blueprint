@@ -557,7 +557,6 @@ descend = ["MyProject", "MyLib"]    # optional: where the dependency walk goes
 "\\poly" = "#1[T]"
 
 [site]
-theme   = "outline"                 # the style the website opens in
 numbering = "nested"                # statements inside statements: n.m.k, default "flat"
 pdfDetails = false                  # PDFs leave the details out, default true
 pdfScopes = ["part", "chapter"]     # PDFs only of these kinds or ids, besides the whole; default every page
@@ -646,13 +645,8 @@ the website picks it up, and `blueprint import-latex --toml` writes the table
 from the `\newcommand`s of a LaTeX blueprint.  Nothing in the core expands
 them.
 
-`[site] theme` names the style the website opens in for a reader who has
-not picked one in its *Style* menu: one of the ids of `THEMES` in
-`web/app.js` (`drafting`, `article`, `textbook`, `pretext`, `outline`).  It
-is optional and defaults to the website's default style; the menu keeps
-every style.  `blueprint build` copies it into the snapshot as
-`project.theme`, and the website reads an id it does not know as its
-default.
+The website has one style, so there is no `[site] theme` to choose one; a
+`theme` left in `[site]` from when it had a style menu is ignored.
 
 `[site] numbering` says how the document numbers a statement that lies
 inside another statement, a detail under the statement it refines.  With
@@ -1112,8 +1106,9 @@ merge.  `Topology.coverChoice` is a custom axiom (`proved_with_axioms`),
   nodes, so `check` agrees with it by skipping `$…$` and `$$…$$` in the body.
 * **`project.katexMacros` is left out of the snapshot when it is empty**, so
   that a project without `[katex.macros]` gets exactly the `project` object
-  it got before the field existed.  So is `project.theme` when `[site] theme`
-  is not given, `project.numbering` when `[site] numbering` is not given, and `project.intro` when there is no `[site.intro]`.
+  it got before the field existed.  So is `project.numbering` when
+  `[site] numbering` is not given, and `project.intro` when there is no
+  `[site.intro]`.
   `project.pdfDetails` is written only when it is `false`, and
   `project.pdfScopes` only when it names a kind or an object, and
   `project.pdfReferences` only when it is set.
