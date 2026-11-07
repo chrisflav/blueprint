@@ -249,6 +249,10 @@ function leanPanel(app, o, facts, want) {
       badge);
     const real = fact && fact.exists !== false;
     const r = real ? fact.range : null;
+    // The source range, linked to its lines on GitHub when the snapshot knows
+    // the package's repository and revision (`project.sources`).
+    const src = r ? M.sourceUrl(app.model.project && app.model.project.sources, r) : null;
+    const where = r ? el('code', `${r.file}:${r.startLine}–${r.endLine}`) : null;
     return el('div.lean-decl', { id: 'lean-' + cssId(name), 'data-lean': name },
       el('div.lean-decl-head',
         el('span.lean-num', { 'aria-label': 'Declaration ' + (i + 1) }, String(i + 1)),
@@ -257,7 +261,9 @@ function leanPanel(app, o, facts, want) {
       real && (fact.module || r)
         ? el('div.where',
             fact.module ? el('span', 'module ', el('code', fact.module)) : null,
-            r ? el('span', ' · ', el('code', `${r.file}:${r.startLine}–${r.endLine}`)) : null)
+            r ? el('span', ' · ', src
+              ? el('a', { href: src, target: '_blank', rel: 'noopener', title: 'The source on GitHub' }, where)
+              : where) : null)
         : null,
       real && Array.isArray(fact.axioms) && fact.axioms.length
         ? el('div.where', 'axioms: ', ...fact.axioms.map((a) => el('code', a)))

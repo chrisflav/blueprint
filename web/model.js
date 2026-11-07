@@ -2662,6 +2662,28 @@ export function docgenUrl(base, name) {
   return `${b}${parts.join('/')}.html#${encodeURIComponent(name)}`;
 }
 
+/**
+ * Where a declaration's source range is on GitHub, from the snapshot's
+ * `project.sources` (the packages of `lake-manifest.json`: directory under the
+ * root, repository, pinned revision): the lines of the file in the package
+ * whose directory the range's file lies in, the deepest such directory if
+ * several do.  `null` when no package holds the file, or there are no sources.
+ */
+export function sourceUrl(sources, range) {
+  if (!sources || typeof sources !== 'object' || !range || typeof range.file !== 'string') return null;
+  let best = null;
+  for (const dir of Object.keys(sources)) {
+    if (range.file.startsWith(dir) && (!best || dir.length > best.length)) best = dir;
+  }
+  if (best === null) return null;
+  const { url, rev } = sources[best] || {};
+  if (typeof url !== 'string' || typeof rev !== 'string' || !url || !rev) return null;
+  const path = range.file.slice(best.length).split('/').map(encodeURIComponent).join('/');
+  const a = range.startLine, b = range.endLine;
+  const lines = Number.isInteger(a) ? (Number.isInteger(b) && b > a ? `#L${a}-L${b}` : `#L${a}`) : '';
+  return `${url.replace(/\/+$/, '')}/blob/${rev}/${path}${lines}`;
+}
+
 /** `[slug]` links in a body, as a list of slugs (duplicates removed). */
 export function bodyLinks(body) {
   const out = [];

@@ -30,9 +30,34 @@ structure Loaded where
   checks : Array Check
   deriving Inhabited
 
+/-- The GitHub packages of `lake-manifest.json` under `root`, for
+`Project.sources`: the directory each one's sources sit in, relative to the
+root (`packagesDir`, `.lake/packages` by default, then the package name and
+a slash), its repository without a trailing `.git`, and its pinned revision.
+Packages that are not git checkouts of a `https://github.com/` repository are
+left out, as is everything when there is no manifest or it does not parse. -/
+def readLakeSources (root : System.FilePath) : IO (Array (String × String × String)) := do
+  let file := root / "lake-manifest.json"
+  unless ← file.pathExists do return #[]
+  let some j := (Json.parse (← IO.FS.readFile file)).toOption | return #[]
+  let str (o : Json) (k : String) : Option String := ((o.getObjVal? k).bind (·.getStr?)).toOption
+  let packagesDir := (str j "packagesDir").getD ".lake/packages"
+  let some (.arr pkgs) := (j.getObjVal? "packages").toOption | return #[]
+  let mut out := #[]
+  for p in pkgs do
+    let (some "git", some name, some url, some rev) :=
+        (str p "type", str p "name", str p "url", str p "rev") | continue
+    let url := (url.dropSuffix ".git").copy
+    unless "https://github.com/".isPrefixOf url do continue
+    -- Lake quotes names that are not identifiers, `«weil-conjectures»`.
+    let name := ((name.dropPrefix "«").dropSuffix "»").copy
+    out := out.push (s!"{packagesDir}/{name}/", url, rev)
+  return out.qsort (fun a b => a.1 < b.1)
+
 /-- Read `blueprint.toml` and every Markdown source under the project root. -/
 def load (root : System.FilePath) : IO Loaded := do
   let (project, schema) ← loadConfig root
+  let project := { project with sources := ← readLakeSources root }
   let r ← parseProject root project schema
   return { blueprint := Blueprint.ofObjects project schema r.objects, checks := r.checks }
 

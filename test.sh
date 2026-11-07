@@ -170,6 +170,31 @@ else
   bad "an unknown arrow is rejected"; cat "$TMP/arrow.check"
 fi
 
+head_ "project.sources from lake-manifest.json"
+if ! grep -q '"sources"' "$TMP/minimal.json"; then
+  ok "no lake-manifest.json, no project.sources"
+else
+  bad "no lake-manifest.json, no project.sources"
+fi
+cp -r examples/minimal "$TMP/sources"
+cat > "$TMP/sources/lake-manifest.json" <<'JSON'
+{"version": "1.2.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/org/my-project.git", "type": "git", "rev": "abc123",
+   "name": "«my-project»", "inputRev": "main"},
+  {"url": "https://gitlab.com/org/other", "type": "git", "rev": "def456", "name": "other"},
+  {"type": "path", "dir": "../local", "name": "local"}]}
+JSON
+"$BP" build --root "$TMP/sources" -o "$TMP/sources.json" > /dev/null 2>&1
+wants "$TMP/sources.json" \
+  '"sources": {".lake/packages/my-project/": {"url": "https://github.com/org/my-project", "rev": "abc123"}}'
+if ! grep -q 'gitlab\|"local"' "$TMP/sources.json"; then
+  ok "only GitHub git packages become sources"
+else
+  bad "only GitHub git packages become sources"
+fi
+
 head_ "kinds: the graph display hint, part, appendix, matter, hidden and reference"
 if [ "$(grep -c '"graph"' "$TMP/induction.json")" = 5 ] \
    && [ "$(grep -c '"graph": "through"' "$TMP/induction.json")" = 1 ] \
