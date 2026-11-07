@@ -135,7 +135,7 @@ def Project.introJson (p : Project) : Json :=
 def Snapshot.toJson (s : Snapshot) : Json :=
   Json.mkObj [
     ("version", Json.num (JsonNumber.fromInt s.version)),
-    -- `katexMacros`, `numbering`, `logo` and `intro` are left out when the project
+    -- `katexMacros`, `numbering`, `logo`, `sources` and `intro` are left out when the project
     -- declares none, `pdfDetails` unless it is `false`, `pdfScopes` unless it
     -- names a kind or an object and `pdfReferences` unless it is set, so that a blueprint
     -- without them has exactly the `project` it had before the fields existed.
@@ -155,6 +155,9 @@ def Snapshot.toJson (s : Snapshot) : Json :=
       (if s.project.logo.isEmpty then [] else
         [("logo", Json.str s.project.logo)] ++
         (if s.project.logoInk then [("logoInk", Json.bool true)] else [])) ++
+      (if s.project.sources.isEmpty then [] else
+        [("sources", objOf (s.project.sources.map fun (dir, url, rev) =>
+          (dir, Json.mkObj [("url", Json.str url), ("rev", Json.str rev)])))]) ++
       (if s.project.intro.isEmpty then [] else
         [("intro", s.project.introJson)]))),
     ("schema", s.schema.toJson),
@@ -321,6 +324,10 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
       pdfReferences := fieldStrD p "pdfReferences" ""
       logo := fieldStrD p "logo" ""
       logoInk := fieldBoolD p "logoInk" false
+      sources := match field? p "sources" with
+        | some m => (objEntries m).map fun (dir, v) =>
+          (dir, fieldStrD v "url" "", fieldStrD v "rev" "")
+        | none => #[]
       intro := fieldStrD intro "body" ""
       introMs := introNat "durationMs"
       introBackground := fieldStrD intro "background" ""

@@ -343,6 +343,15 @@ structure Project where
   that a one-colour logo follows the style and dark mode; otherwise it is
   shown with its own colours.  Handed to the website as `project.logoInk`. -/
   logoInk : Bool := false
+  /-- Where the Lean sources of the packages pinned in `lake-manifest.json`,
+  next to `blueprint.toml`, are on GitHub: the directory a package's sources
+  sit in under the root (`.lake/packages/<name>/`), its repository
+  (`https://github.com/owner/repo`) and the revision it is pinned to.  A
+  declaration's file in the Lean facts is relative to the root, so one below
+  such a directory is that file of the repository at that revision.  Read by
+  `load` from the manifest, not from `blueprint.toml`; empty without one.
+  Handed to the website as `project.sources`. -/
+  sources : Array (String × String × String) := #[]
   /-- What the website shows in the middle of the screen as it opens, before
   the graph: `[site.intro]` in `blueprint.toml`, Markdown with maths, pictures
   and HTML, read from its `file` or given as its `body`.  Empty for none.

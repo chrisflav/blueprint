@@ -25,6 +25,9 @@ by editing this file first. Version 1.
     "pdfReferences": "all",                      // optional, see below
     "logo": "assets/logo.svg",                   // optional, see below
     "logoInk": true,                             // optional
+    "sources": {                                 // optional, see below
+      ".lake/packages/mathlib/": { "url": "https://github.com/leanprover-community/mathlib4", "rev": "0df444a3…" }
+    },
     "intro": {                                   // optional, see below
       "body": "![](assets/logo.png)\n\n## Welcome …",
       "durationMs": 4000,                        // optional
@@ -135,6 +138,15 @@ Notes
   directory holding the snapshot.  `project.logoInk`, `[site] logoInk`, says
   to draw only its shape, in the title's colour.  Both are left out when the
   project has no logo, and `logoInk` when it is false.
+- `project.sources` is not from `blueprint.toml` but from the
+  `lake-manifest.json` next to it: for every package that is a git checkout
+  of a `https://github.com/` repository, the directory its sources sit in
+  under the root (`packagesDir`, then the package name and a slash) maps to
+  its repository (without `.git`) and the revision it is pinned to.  A
+  declaration's `range.file` in the Lean facts is relative to the root, so
+  the website links one below such a directory to its lines on GitHub
+  (`sourceUrl` in `web/model.js`).  Left out when there is no manifest or no
+  such package.
 - `project.intro` is `[site.intro]` of `blueprint.toml`: what the website
   shows in the middle of the screen as it opens, before the graph.  `body`
   is Markdown, rendered as an object's prose is (maths, `[slug]`

@@ -1951,6 +1951,23 @@ check('a proof is read where its file puts it, as any node is, and stays with it
   eq(M.parentsOf(M.collapseOrder(m, 'refines'), 'proof/lem').length, 0, 'below nothing in the collapse order');
 });
 
+check('sourceUrl: a declaration\'s lines on GitHub, by the package that holds its file', () => {
+  const sources = {
+    '.lake/packages/mathlib/': { url: 'https://github.com/leanprover-community/mathlib4', rev: 'aaa111' },
+    '.lake/packages/weil-conjectures/': { url: 'https://github.com/org/weil-conjectures/', rev: 'bbb222' },
+  };
+  eq(M.sourceUrl(sources, { file: '.lake/packages/weil-conjectures/WeilConjectures/Statement.lean', startLine: 83, endLine: 95 }),
+    'https://github.com/org/weil-conjectures/blob/bbb222/WeilConjectures/Statement.lean#L83-L95', 'a range');
+  eq(M.sourceUrl(sources, { file: '.lake/packages/mathlib/Mathlib/A B.lean', startLine: 7, endLine: 7 }),
+    'https://github.com/leanprover-community/mathlib4/blob/aaa111/Mathlib/A%20B.lean#L7', 'one line, a space escaped');
+  eq(M.sourceUrl(sources, { file: 'Local/File.lean', startLine: 1, endLine: 2 }), null, 'in no package');
+  eq(M.sourceUrl(undefined, { file: '.lake/packages/mathlib/X.lean', startLine: 1, endLine: 2 }), null, 'no sources');
+  eq(M.sourceUrl(sources, null), null, 'no range');
+  // The deepest directory wins, for a package inside another's directory.
+  const nested = { 'a/': { url: 'https://github.com/o/outer', rev: 'r1' }, 'a/b/': { url: 'https://github.com/o/inner', rev: 'r2' } };
+  eq(M.sourceUrl(nested, { file: 'a/b/F.lean', startLine: 3, endLine: 4 }), 'https://github.com/o/inner/blob/r2/F.lean#L3-L4', 'deepest package');
+});
+
 // ---------------------------------------------------------------------------
 
 if (failures.length) {
