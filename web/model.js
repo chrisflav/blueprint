@@ -2653,13 +2653,16 @@ export function leanFactsFor(model, object) {
 
 /**
  * Where doc-gen4 documents a Lean declaration, under `base` (the snapshot's
- * `project.docgen`): the page of its module, at its anchor.
+ * `project.docgen`): the page of the module it is declared in, at the anchor
+ * doc-gen4 gives it, its full name.  The module comes from the Lean facts
+ * (`fact.module`), not the name: `AlgebraicGeometry.Scheme.weil_conjectures`
+ * lives in `WeilConjectures.Statement`.  `null` without a base or a module.
  */
-export function docgenUrl(base, name) {
-  const parts = String(name).split('.');
-  parts.pop();
+export function docgenUrl(base, name, module) {
+  if (typeof base !== 'string' || !base || typeof module !== 'string' || !module) return null;
   const b = base.endsWith('/') ? base : base + '/';
-  return `${b}${parts.join('/')}.html#${encodeURIComponent(name)}`;
+  const path = module.split('.').map(encodeURIComponent).join('/');
+  return `${b}${path}.html#${encodeURIComponent(name)}`;
 }
 
 /**

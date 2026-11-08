@@ -366,6 +366,9 @@ def decodeConfig (t : TValue) (defaultName : String) :
   unless pdfReferences ∈ ["", "cited", "all"] do
     throw s!"'[site] pdfReferences' must be \"cited\" or \"all\", got \"{pdfReferences}\""
   let logo ← siteStr "logo"
+  let docgen ← siteStr "docgen"
+  unless docgen.isEmpty || docgen.startsWith "https://" || docgen.startsWith "http://" do
+    throw s!"'[site] docgen' must be an http(s) address, got {docgen}"
   let logoInk ← match site.bind (·.get? "logoInk") with
     | none => pure false
     | some (.bool b) => pure b
@@ -433,7 +436,7 @@ def decodeConfig (t : TValue) (defaultName : String) :
     | some v => throw s!"'[site] comments' must be a table, got a {v.typeName}"
   let project : Project :=
     { name, title, dir, leanModules, leanDescend, katexMacros, numbering, pdfDetails,
-      pdfScopes, pdfReferences, logo, logoInk,
+      pdfScopes, pdfReferences, logo, logoInk, docgen,
       intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom,
       assets, blog, commentsZulip, commentsChannel, commentsServer }
   let mut schema := defaultSchema
