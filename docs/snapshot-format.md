@@ -25,6 +25,7 @@ by editing this file first. Version 1.
     "pdfReferences": "all",                      // optional, see below
     "logo": "assets/logo.svg",                   // optional, see below
     "logoInk": true,                             // optional
+    "docgen": "https://org.github.io/proj/",     // optional, see below
     "sources": {                                 // optional, see below
       ".lake/packages/mathlib/": { "url": "https://github.com/leanprover-community/mathlib4", "rev": "0df444a3…" }
     },
@@ -138,6 +139,12 @@ Notes
   directory holding the snapshot.  `project.logoInk`, `[site] logoInk`, says
   to draw only its shape, in the title's colour.  Both are left out when the
   project has no logo, and `logoInk` when it is false.
+- `project.docgen` is `[site] docgen` of `blueprint.toml`: the address the
+  doc-gen4 documentation of the Lean code hangs off.  The website links a
+  declaration's name to the page of the module it is declared in, at its
+  full name: `<docgen>/<module, dots as slashes>.html#<name>`
+  (`docgenUrl` in `web/model.js`), the module being the Lean facts'
+  `module`; a declaration without facts gets no link.  Left out when unset.
 - `project.sources` is not from `blueprint.toml` but from the
   `lake-manifest.json` next to it: for every package that is a git checkout
   of a `https://github.com/` repository, the directory its sources sit in

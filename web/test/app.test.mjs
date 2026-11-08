@@ -1629,7 +1629,7 @@ await check('resting on the object link opens a card of its Lean declarations', 
   eq(names.map((li) => li.querySelector('code').textContent).join(' '), 'Compact.Filter Compact.Ultrafilter', 'the names');
   eq(names[0].querySelector('a.lean-name').getAttribute('href'), '#/object/def-filter?lean=Compact.Filter', 'each name leads to its declaration on the object page');
   eq(names[0].querySelector('a.lean-docs').getAttribute('href'),
-    'https://example.github.io/compact/docs/Compact.html#Compact.Filter', 'and to its documentation');
+    'https://example.github.io/compact/docs/Compact/Basic.html#Compact.Filter', 'and to its documentation, on the page of its module');
   eq(card.querySelector('.preview-lead').textContent, 'Lean declarations (2)', 'the head counts them');
   preview.hover(root);
   await tick(GONE);

@@ -352,6 +352,12 @@ structure Project where
   `load` from the manifest, not from `blueprint.toml`; empty without one.
   Handed to the website as `project.sources`. -/
   sources : Array (String × String × String) := #[]
+  /-- `[site] docgen`: where the doc-gen4 documentation of the Lean code is
+  served, the address its module pages hang off
+  (`<docgen>/Mathlib/Order/Basic.html`).  The website links a declaration's
+  name to `<docgen>/<its module, as a path>.html#<its name>`; empty for no
+  links.  Handed to the website as `project.docgen`. -/
+  docgen : String := ""
   /-- What the website shows in the middle of the screen as it opens, before
   the graph: `[site.intro]` in `blueprint.toml`, Markdown with maths, pictures
   and HTML, read from its `file` or given as its `body`.  Empty for none.

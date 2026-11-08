@@ -195,6 +195,19 @@ else
   bad "only GitHub git packages become sources"
 fi
 
+head_ "[site] docgen"
+cp -r examples/minimal "$TMP/docgen"
+printf '\n[site]\ndocgen = "https://org.github.io/proj/"\n' >> "$TMP/docgen/blueprint.toml"
+"$BP" build --root "$TMP/docgen" -o "$TMP/docgen.json" > /dev/null 2>&1
+wants "$TMP/docgen.json" '"docgen": "https://org.github.io/proj/"'
+sed -i 's|^docgen = .*|docgen = "docs/"|' "$TMP/docgen/blueprint.toml"
+if ! "$BP" check --root "$TMP/docgen" > "$TMP/docgen.check" 2>&1 \
+   && grep -q "'\[site\] docgen' must be an http(s) address" "$TMP/docgen.check"; then
+  ok "a docgen that is not an http(s) address is rejected"
+else
+  bad "a docgen that is not an http(s) address is rejected"; cat "$TMP/docgen.check"
+fi
+
 head_ "kinds: the graph display hint, part, appendix, matter, hidden and reference"
 if [ "$(grep -c '"graph"' "$TMP/induction.json")" = 5 ] \
    && [ "$(grep -c '"graph": "through"' "$TMP/induction.json")" = 1 ] \

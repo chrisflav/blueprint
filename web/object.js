@@ -225,8 +225,9 @@ function leanPanel(app, o, facts, want) {
   const docgen = app.model.project && app.model.project.docgen;
   const items = facts.map(({ name, fact }, i) => {
     const code = el('code', name);
-    const link = docgen
-      ? el('a', { href: M.docgenUrl(docgen, name), target: '_blank', rel: 'noopener' }, code)
+    const docs = docgen && fact && fact.exists !== false ? M.docgenUrl(docgen, name, fact.module) : null;
+    const link = docs
+      ? el('a', { href: docs, target: '_blank', rel: 'noopener', title: 'Its documentation' }, code)
       : code;
     // Whether the declaration is there at all is progress too, hidden with it.
     const quiet = !fact || fact.exists === false ? !app.showProgress : false;

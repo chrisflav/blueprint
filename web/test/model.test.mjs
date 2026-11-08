@@ -1951,6 +1951,19 @@ check('a proof is read where its file puts it, as any node is, and stays with it
   eq(M.parentsOf(M.collapseOrder(m, 'refines'), 'proof/lem').length, 0, 'below nothing in the collapse order');
 });
 
+check('docgenUrl: the page of the declaration\'s module, at its full name', () => {
+  const base = 'https://org.github.io/proj/';
+  eq(M.docgenUrl(base, 'AlgebraicGeometry.Scheme.weil_conjectures', 'WeilConjectures.Statement'),
+    'https://org.github.io/proj/WeilConjectures/Statement.html#AlgebraicGeometry.Scheme.weil_conjectures',
+    'the module, not the namespace');
+  eq(M.docgenUrl('https://org.github.io/proj', 'Nat.add', 'Init.Prelude'),
+    'https://org.github.io/proj/Init/Prelude.html#Nat.add', 'a base without its slash');
+  eq(M.docgenUrl(base, 'Foo.bar', ''), null, 'no module, no link');
+  eq(M.docgenUrl(base, 'Foo.bar', undefined), null, 'no fact, no link');
+  eq(M.docgenUrl('', 'Foo.bar', 'Foo'), null, 'no docgen, no link');
+  eq(M.docgenUrl(base, 'Foo.α_def', 'Foo.Bar'), 'https://org.github.io/proj/Foo/Bar.html#Foo.%CE%B1_def', 'unicode escaped in the anchor');
+});
+
 check('sourceUrl: a declaration\'s lines on GitHub, by the package that holds its file', () => {
   const sources = {
     '.lake/packages/mathlib/': { url: 'https://github.com/leanprover-community/mathlib4', rev: 'aaa111' },

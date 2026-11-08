@@ -127,8 +127,8 @@ export function leanCard(ctx, id) {
       : !fact ? el('span.badge.status-absent', el('span.dot'), 'no facts')
         : fact.exists === false ? el('span.badge.status-missing', el('span.dot'), 'does not exist')
           : fact.status ? ctx.statusBadge(fact.status) : null,
-    docgen
-      ? el('a.lean-docs', { href: M.docgenUrl(docgen, name), target: '_blank', rel: 'noopener' }, 'docs \u2197')
+    docgen && fact && fact.exists !== false && M.docgenUrl(docgen, name, fact.module)
+      ? el('a.lean-docs', { href: M.docgenUrl(docgen, name, fact.module), target: '_blank', rel: 'noopener' }, 'docs \u2197')
       : null));
   const card = el('div.preview.lean-card', {
     role: 'dialog', 'aria-label': `Lean declarations of ${M.titleOf(o)}`, 'data-preview': id,
