@@ -1017,6 +1017,32 @@ export function watchBrand(brand = typeof document !== 'undefined' && document.q
   });
 }
 
+/**
+ * A link to a place on the page, `#name` in prose (a post's citation to its
+ * own reference list, say), scrolls to the element with that id.  Every other
+ * fragment is a route (`#/graph`), so followed it would open the graph.  A
+ * click that opens the link elsewhere (a new tab), or whose target is not on
+ * the page, is left alone.
+ */
+export function watchAnchors(root = typeof document !== 'undefined' && document) {
+  if (!root) return;
+  root.addEventListener('click', (ev) => {
+    const a = ev.target && ev.target.closest && ev.target.closest('a[href^="#"]');
+    if (!a || ev.defaultPrevented) return;
+    if (ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    const href = a.getAttribute('href');
+    if (href === '#' || href.startsWith('#/')) return;
+    let id = href.slice(1);
+    try {
+      id = decodeURIComponent(id);
+    } catch (e) { /* not encoded: the id as written */ }
+    const target = document.getElementById(id);
+    if (!target) return;
+    ev.preventDefault();
+    target.scrollIntoView({ block: 'start' });
+  });
+}
+
 /** Say on the top bar's icon what a click on it does, when it replays the intro. */
 function brandTitle(project) {
   const brand = typeof document !== 'undefined' && document.querySelector('.brand');
@@ -1306,6 +1332,7 @@ function scriptsReady() {
 async function boot() {
   watchTopbar();
   watchBrand();
+  watchAnchors();
   applyShowProgress(currentShowProgress());
   const url = dataUrlFromQuery();
   app.dataUrlOriginal = url;
