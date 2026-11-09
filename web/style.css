@@ -932,6 +932,8 @@ dl.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .body-prose { overflow-wrap: break-word; }
 .body-prose p:first-child { margin-top: 0; }
 .body-prose img { max-width: 100%; }
+/* Where an in-page link (`#name`, app.js `watchAnchors`) lands: below the top bar. */
+.body-prose [id] { scroll-margin-top: calc(var(--topbar-h) + 1rem); }
 .body-prose blockquote {
   margin: 1em 0;
   padding: .1em 1em;

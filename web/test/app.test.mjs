@@ -2026,6 +2026,35 @@ await check('the top bar\'s icon replays the intro, and the toolbar has no Repla
   }
 });
 
+await check('a link to a place on the page scrolls there, a route is still followed', async () => {
+  const { watchAnchors } = await import(path.join(webDir, 'app.js'));
+  const prose = dom.document.createElement('div');
+  const link = (href) => {
+    const a = dom.document.createElement('a');
+    a.setAttribute('href', href);
+    prose.appendChild(a);
+    return a;
+  };
+  const target = dom.document.createElement('span');
+  target.id = 'ref-D2';
+  let scrolled = 0;
+  target.scrollIntoView = () => { scrolled += 1; };
+  dom.document.body.appendChild(target);
+  watchAnchors(prose);
+  const click = (node, ev = {}) => fire(prose, 'click', { target: node, ...ev });
+  try {
+    ok(click(link('#ref-D2')).defaultPrevented, 'the link is not followed as a route');
+    eq(scrolled, 1, 'the page scrolls to the reference');
+    ok(click(link('#ref-D%32')).defaultPrevented && scrolled === 2, 'an encoded id');
+    ok(!click(link('#/graph')).defaultPrevented, 'a route is followed');
+    ok(!click(link('#nowhere')).defaultPrevented, 'a name not on the page is left alone');
+    ok(!click(link('#ref-D2'), { metaKey: true }).defaultPrevented, 'a click for a new tab');
+    eq(scrolled, 2, 'none of those scrolls');
+  } finally {
+    target.parentNode.removeChild(target);
+  }
+});
+
 await check('`/` focuses the top bar\'s search, and on the graph the graph\'s own', async () => {
   const focused = [];
   const spy = (e, name) => { e.focus = () => focused.push(name); e.select = () => {}; };
