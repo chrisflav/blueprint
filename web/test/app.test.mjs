@@ -975,9 +975,16 @@ await check('a site with [site] visits counts a visit once per tab and shows the
   const thread = 'api/comments/' + encodeURIComponent(comments.VISIT_THREAD);
   let config = { visits: true };
   let posts = 0;
+  const postPosts = [];
   routes.push((u, init) => {
     if (u === 'comments-config.json') return [200, JSON.stringify(config), 'application/json'];
+    if (u === thread + '?post=01-hello') return [200, '{"visits": 7, "post": "01-hello"}', 'application/json'];
     if (u !== thread) return null;
+    const post = init.method === 'POST' ? JSON.parse(init.body).post : undefined;
+    if (post) {
+      postPosts.push(post);
+      return [201, '{"visits": 7, "post": "01-hello"}', 'application/json'];
+    }
     if (init.method === 'POST') posts += 1;
     return [init.method === 'POST' ? 201 : 200, '{"visits": 42}', 'application/json'];
   });
@@ -998,6 +1005,19 @@ await check('a site with [site] visits counts a visit once per tab and shows the
     eq(stat.querySelector('.n').textContent, '42', 'as a figure');
     eq(stat.querySelector('.l').textContent, 'Visits', 'of visits');
 
+    await go('#/blog/01-hello');
+    await tick(5);
+    const head = root.querySelector('.blog-head .blog-visits');
+    ok(head && !head.hidden, 'a post shows its visits');
+    eq(head.textContent, '7 visits', 'under its title');
+    eq(postPosts.join(' '), '01-hello', 'opening it is a visit of it');
+    await go('#/blog/02-paper');
+    await go('#/blog/01-hello');
+    await tick(5);
+    eq(postPosts.filter((p) => p === '01-hello').length, 1, 'once per tab');
+    eq(root.querySelector('.blog-head .blog-visits').textContent, '7 visits', 'and still said');
+    eq(posts, 2, 'not a visit of the site');
+
     config = {};
     tab.clear();
     comments.resetCommentsConfig();
@@ -1008,6 +1028,9 @@ await check('a site with [site] visits counts a visit once per tab and shows the
     await go('#/progress');
     await tick(5);
     ok(root.querySelector('.visit-row').hidden, 'nor a figure on the Progress page');
+    await go('#/blog/01-hello');
+    await tick(5);
+    ok(root.querySelector('.blog-head .blog-visits').hidden, 'nor on a post');
   } finally {
     routes.length = 0;
     delete global.sessionStorage;

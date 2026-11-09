@@ -1176,6 +1176,7 @@ ul.objlist .role {
 .blog-author { font-size: .92rem; }
 .blog-head .blog-author { margin: .3rem 0 0; font-size: 1rem; }
 .blog-head .blog-date { margin: .3rem 0 0; }
+.blog-head .blog-visits { margin: .2rem 0 0; color: var(--muted); font-size: .86rem; font-variant-numeric: tabular-nums; }
 .blog-tag {
   font-size: .72rem; color: var(--muted); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 0 .4em;

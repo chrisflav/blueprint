@@ -1447,6 +1447,29 @@ if command -v node > /dev/null 2>&1; then
     else
       bad "the visit API counts each visit, keeps numbers alone, and limits one address"; cat "$TMP/api.visit"; tail "$TMP/api.log"
     fi
+    # A post's visits: counted apart from the site's, a post of the site's
+    # blog.json only (a fresh server, the address above having used its hour).
+    pport=$((port + 1))
+    mkdir -p "$TMP/site.posts"
+    printf '{"posts":[{"id":"01-hello","title":"Hello"}]}' > "$TMP/site.posts/blog.json"
+    python3 web/comments-server.py --port "$pport" --directory "$TMP/site.posts" \
+      --comments "$TMP/comments.posts" > "$TMP/posts.log" 2>&1 &
+    posts_server=$!
+    for _ in $(seq 1 50); do curl -s "http://127.0.0.1:$pport/api/comments/%3Avisits" > /dev/null 2>&1 && break; sleep 0.1; done
+    pvisit () { curl -s -o "$TMP/api.pvisit" -w '%{http_code}' -H 'Content-Type: application/json' \
+      --data "$1" "http://127.0.0.1:$pport/api/comments/%3Avisits"; }
+    if [ "$(pvisit '{"post":"01-hello"}')" = 201 ] && [ "$(pvisit '{"post":"01-hello"}')" = 201 ] \
+       && grep -q '"visits": 2' "$TMP/api.pvisit" \
+       && [ "$(pvisit '{"post":"no-such"}')" = 404 ] && [ "$(pvisit '{"post":""}')" = 400 ] \
+       && curl -s "http://127.0.0.1:$pport/api/comments/%3Avisits?post=01-hello" | grep -q '"visits": 2' \
+       && curl -s "http://127.0.0.1:$pport/api/comments/%3Avisits" | grep -q '"visits": 0' \
+       && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["posts"]["01-hello"]["total"] == 2 and d["total"] == 0' \
+            "$TMP/comments.posts/visits.json"; then
+      ok "a post's visits are counted apart, for the posts of blog.json alone"
+    else
+      bad "a post's visits are counted apart, for the posts of blog.json alone"; cat "$TMP/api.pvisit"; tail "$TMP/posts.log"
+    fi
+    kill "$posts_server" 2>/dev/null; wait "$posts_server" 2>/dev/null
     # Only a site named by --allow-origin may use the comment API from another origin.
     if [ "$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS -H 'Origin: https://elsewhere.example' \
              "http://127.0.0.1:$port/api/comments/products")" = 403 ] \

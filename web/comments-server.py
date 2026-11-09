@@ -33,15 +33,18 @@ the page and Zulip, so the bot's key never leaves it.  `--allow-origin` lets a s
 served elsewhere (a static host that cannot keep a secret) use this server
 for its comments, `[site.comments] server` saying where it is.
 
-    GET  /api/comments/:visits -> {"visits": n}
-    POST /api/comments/:visits <- {} -> {"visits": n}
+    GET  /api/comments/:visits             -> {"visits": n}
+    GET  /api/comments/:visits?post=<id>   -> {"visits": n, "post": "<id>"}
+    POST /api/comments/:visits <- {} or {"post": "<id>"} -> the same
 
-for the number of visits of a site with `[site] visits`: the page posts once
-each time the site is opened in a browser tab, and the server counts.  It
-keeps the number alone, in all and per day, in `<comments dir>/visits.json`,
-and no address; an address may bring at most `VISITS_PER_HOUR` visits an
-hour, so a script cannot inflate the count quickly.  `:visits`, like
-`DOCUMENT_THREAD`, names no object.
+for the number of visits of a site with `[site] visits`, and of each post of
+its blog: the page posts once each time the site is opened in a browser tab,
+and once each time a tab opens a post, and the server counts.  It keeps the
+numbers alone, in all and per day, in `<comments dir>/visits.json`, and no
+address; an address may bring at most `VISITS_PER_HOUR` visits an hour, so a
+script cannot inflate the counts quickly.  A post is one of the site's
+`blog.json` when it has one, and otherwise any of at most `MAX_POSTS` names.
+`:visits`, like `DOCUMENT_THREAD`, names no object.
 
     GET  /api/export          -> {"available": true|false, "reason": "..."}
     POST /api/export          <- {"snapshot": "blueprint.json" | "data/<sha>.json",
@@ -96,7 +99,8 @@ DOCUMENT_THREAD = ":document"
 VISIBILITIES = ("public", "private")
 # The number of visits, which is no object either (`Visits`).
 VISIT_THREAD = ":visits"
-VISITS_PER_HOUR = 120  # visits one address may bring in an hour
+VISITS_PER_HOUR = 120  # visits one address may bring in an hour, posts included
+MAX_POSTS = 500  # posts counted, on a server that cannot read the site's blog.json
 MAX_PAGE = 2000  # the address of the page a comment was written on
 PAGE_RE = re.compile(r"^https?://[^\s()<>]+$")
 
@@ -147,15 +151,52 @@ class KnownIds:
         return t if isinstance(t, str) and t else object_id
 
 
+class BlogIds:
+    """The post ids of the site's blog.json, reread when it changes; None
+    without one (a server that relays for a site served elsewhere)."""
+
+    def __init__(self, path):
+        self.path = path
+        self.mtime = None
+        self.ids = None
+        self.lock = threading.Lock()
+
+    def get(self):
+        with self.lock:
+            try:
+                mtime = os.stat(self.path).st_mtime
+            except OSError:
+                return None
+            if mtime != self.mtime:
+                try:
+                    with open(self.path, encoding="utf-8") as f:
+                        posts = (json.load(f) or {}).get("posts") or []
+                except (OSError, ValueError, AttributeError):
+                    posts = []
+                self.ids = {p.get("id") for p in posts if isinstance(p, dict)}
+                self.mtime = mtime
+            return self.ids
+
+
+def tally(entry):
+    """`{"total": n, "days": {...}}` as kept, whatever was there."""
+    entry = entry if isinstance(entry, dict) else {}
+    total, days = entry.get("total"), entry.get("days")
+    return {"total": total if isinstance(total, int) else 0, "days": days if isinstance(days, dict) else {}}
+
+
 class Visits:
-    """The visits of the site: their number, in all and per day, in
-    `visits.json` of the comments directory, written atomically."""
+    """The visits of the site and of each post of its blog: their numbers, in
+    all and per day, in `visits.json` of the comments directory, written
+    atomically."""
 
     def __init__(self, directory):
         self.directory = directory
         self.path = os.path.join(directory, "visits.json")
         self.lock = threading.Lock()
-        self.data = None  # {"total": n, "days": {"YYYY-MM-DD": n}}, read on first use
+        # {"total": n, "days": {"YYYY-MM-DD": n}, "posts": {id: {"total", "days"}}},
+        # read on first use
+        self.data = None
         self.recent = {}  # address -> times of its visits this hour
 
     def load(self):
@@ -165,21 +206,24 @@ class Visits:
                     data = json.load(f)
             except FileNotFoundError:
                 data = {}
-            total = data.get("total") if isinstance(data, dict) else None
-            days = data.get("days") if isinstance(data, dict) else None
-            self.data = {"total": total if isinstance(total, int) else 0,
-                         "days": days if isinstance(days, dict) else {}}
+            data = data if isinstance(data, dict) else {}
+            posts = data.get("posts") if isinstance(data.get("posts"), dict) else {}
+            self.data = {**tally(data), "posts": {k: tally(v) for k, v in posts.items()}}
         return self.data
 
-    def count(self):
-        with self.lock:
-            return self.load()["total"]
-
-    def add(self, address):
-        """The number of visits with one more, or None when its address has
-        brought too many this hour."""
+    def count(self, post=None):
         with self.lock:
             data = self.load()
+            return (data["posts"].get(post) or {"total": 0})["total"] if post else data["total"]
+
+    def add(self, address, post=None):
+        """The number of visits of the site, or of `post`, with one more; None
+        when its address has brought too many this hour, False when `post`
+        would be one too many to keep."""
+        with self.lock:
+            data = self.load()
+            if post and post not in data["posts"] and len(data["posts"]) >= MAX_POSTS:
+                return False
             now = time.monotonic()
             times = [t for t in self.recent.get(address, []) if now - t < 3600]
             if len(times) >= VISITS_PER_HOUR:
@@ -191,19 +235,20 @@ class Visits:
             for a in [a for a, ts in self.recent.items() if a != address and all(now - t >= 3600 for t in ts)]:
                 del self.recent[a]
             day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
-            data["total"] += 1
-            data["days"][day] = data["days"].get(day, 0) + 1
+            entry = data["posts"].setdefault(post, tally(None)) if post else data
+            entry["total"] += 1
+            entry["days"][day] = entry["days"].get(day, 0) + 1
             os.makedirs(self.directory, exist_ok=True)
             fd, tmp = tempfile.mkstemp(dir=self.directory, prefix=".tmp-", suffix=".json")
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2, sort_keys=True)
+                    json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
                     f.write("\n")
                 os.replace(tmp, self.path)
             except BaseException:
                 os.unlink(tmp)
                 raise
-            return data["total"]
+            return entry["total"]
 
 
 class Exporter:
@@ -531,6 +576,7 @@ class Handler(SimpleHTTPRequestHandler):
     comments_dir = None
     known = None
     visits = None
+    blog = None  # the site's post ids (`BlogIds`)
     exporter = None
     zulip = None  # a Zulip, when the comments are kept there
     allowed_origins = frozenset()  # sites served elsewhere that may use the comment API
@@ -628,7 +674,12 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.is_api():
             return super().do_GET()
         if self.thread() == VISIT_THREAD:
-            return self.send_json(200, {"visits": self.visits.count()})
+            post = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("post", [None])[0]
+            if post is None:
+                return self.send_json(200, {"visits": self.visits.count()})
+            if self.bad_post(post):
+                return
+            return self.send_json(200, {"visits": self.visits.count(post), "post": post})
         object_id = self.object_id()
         if object_id is not None:
             self.send_comments(200, object_id)
@@ -724,14 +775,32 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(201, {"comments": public_list(comments), "maxBody": MAX_BODY, **shown})
 
 
+    def bad_post(self, post):
+        """Whether `post` names no post of the blog, after replying so."""
+        if not isinstance(post, str) or not post or len(post) > MAX_ID \
+                or any(ord(c) < 32 for c in post):
+            self.send_json(400, {"error": "post must be the id of a post of the blog"})
+            return True
+        ids = self.blog.get()
+        if ids is not None and post not in ids:
+            self.send_json(404, {"error": f"no post '{post}' in this blog"})
+            return True
+        return False
+
     def count_visit(self):
-        """A visit: the site opened in a browser tab."""
-        if self.read_json(1024) is None:
+        """A visit: the site, or one of its posts, opened in a browser tab."""
+        data = self.read_json(1024)
+        if data is None:
             return
-        n = self.visits.add(self.client())
+        post = data.get("post") if isinstance(data, dict) else None
+        if post is not None and self.bad_post(post):
+            return
+        n = self.visits.add(self.client(), post)
         if n is None:
             return self.send_json(429, {"error": "too many visits from one address; try later"})
-        self.send_json(201, {"visits": n})
+        if n is False:
+            return self.send_json(507, {"error": "too many posts counted already"})
+        self.send_json(201, {"visits": n, **({"post": post} if post else {})})
 
 
 def main(argv=None):
@@ -751,6 +820,7 @@ def main(argv=None):
     Handler.comments_dir = os.path.abspath(args.comments)
     Handler.known = KnownIds(os.path.join(site, "blueprint.json"))
     Handler.visits = Visits(Handler.comments_dir)
+    Handler.blog = BlogIds(os.path.join(site, "blog.json"))
     Handler.exporter = Exporter(site, os.path.abspath(args.assets_root) if args.assets_root else None)
     Handler.zulip = zulip_from(site)
     Handler.allowed_origins = frozenset(o.rstrip("/") for o in args.allow_origin)

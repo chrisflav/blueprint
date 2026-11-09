@@ -24,9 +24,10 @@
 // A site with `[site] visits` (comments-config.json `"visits": true`) counts
 // its visits with the same server, on the thread `VISIT_THREAD`: the page
 // posts once each time the site is opened in a browser tab (`countVisit`),
-//   POST api/comments/:visits  <- {} -> {"visits": n}
-//   GET  api/comments/:visits  -> {"visits": n}
-// and the Progress page shows the number (`visitCount`).
+// and once each time a tab opens a post of the blog (`postVisits`),
+//   POST api/comments/:visits  <- {} or {"post": id} -> {"visits": n}
+//   GET  api/comments/:visits[?post=<id>]          -> {"visits": n}
+// and the Progress page shows the site's number (`visitCount`), a post its own.
 //
 // One object has one thread, wherever it is read: an object page and the
 // document's page of the same object show the same comments.  The top of the
@@ -106,14 +107,45 @@ export async function countVisit() {
   } catch (e) { /* no server: not counted */ }
 }
 
+/** A number of visits as the server says it, or null. */
+async function visitsOf(res) {
+  const n = res.ok ? (await res.json()).visits : null;
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+/**
+ * Count a visit of the blog's post `id`, once per browser tab as the site's
+ * own (`sessionStorage`), and say how many it has had: null on a site that
+ * does not count them or cannot say.  Never throws.
+ */
+export async function postVisits(id) {
+  try {
+    const url = await visitsUrl();
+    if (!url) return null;
+    const key = VISIT_KEY + ':blog/' + id;
+    let counted = false;
+    try { counted = sessionStorage.getItem(key) === '1'; } catch (e) { /* counted again */ }
+    if (!counted) {
+      const res = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ post: id }),
+      });
+      if (res.ok) {
+        try { sessionStorage.setItem(key, '1'); } catch (e) { /* counted again on reload */ }
+        return await visitsOf(res);
+      }
+    }
+    return await visitsOf(await fetch(url + '?post=' + encodeURIComponent(id), { cache: 'no-store' }));
+  } catch (e) {
+    return null;
+  }
+}
+
 /** The number of visits, or null on a site that does not count them or cannot say. */
 export async function visitCount() {
   try {
     const url = await visitsUrl();
     if (!url) return null;
-    const res = await fetch(url, { cache: 'no-store' });
-    const n = res.ok ? (await res.json()).visits : null;
-    return Number.isInteger(n) && n >= 0 ? n : null;
+    return await visitsOf(await fetch(url, { cache: 'no-store' }));
   } catch (e) {
     return null;
   }
