@@ -360,7 +360,8 @@ A project with `[site] blog` in `blueprint.toml` has a *Blog* tab after
 `blueprint site` lists the posts in `blog.json` beside the snapshot,
 
 ```jsonc
-{ "posts": [ { "id": "02-paper", "title": "Notes on a paper", "date": "2026-11-05",
+{ "posts": [ { "id": "02-paper", "title": "Notes on a paper", "author": "A. Author",
+               "date": "2026-11-05",
                "body": "Markdown", "pdf": "02-paper.pdf" } ] }
 ```
 
@@ -368,9 +369,9 @@ each field but `id` and `title` left out when the post has none, and copies
 the directory into the site as `blog/`. The page is set as the document's:
 the posts in the sidebar on the left (`.doc-layout`, `nav.toc` and
 `ul.toc-levels`, set as the document's), one row
-each, the one open marked `current`. `#/blog` lists them with their dates
-and a *PDF* tag on those that hold one. `#/blog/<id>` is the post: its title
-and date, its words rendered as an object's prose is (`renderBody`), every
+each, the one open marked `current`. `#/blog` lists them with their authors
+and dates and a *PDF* tag on those that hold one. `#/blog/<id>` is the post: its title,
+author and date, its words rendered as an object's prose is (`renderBody`), every
 address in them read in `blog/` (`resolveUrls` in `intro.js`), then its PDF
 in an `<iframe>`, the browser's own viewer, with *Open the PDF* and
 *Download* links above it for a browser that shows none, and at the foot the

@@ -680,7 +680,8 @@ next chapter is `1`.  `check` reports `bad-attr` for any other value.
 shows on a *Blog* page, a tab after *Progress*. Each `*.md` at its top is a
 post: Markdown, rendered as an object's prose is (maths, `[slug]`
 references, pictures, HTML), with optional TOML front matter between `+++`
-lines, `title` and `date` (a string or a TOML date, shown as written). Without
+lines, `title`, `author` (shown under the title) and `date` (a string or a
+TOML date, shown as written). Without
 a `title` its first line is the title when it is a `# ` heading, and its file
 name otherwise. Each `*.pdf` at its top is a post too, read in the page
 under its file name; a post and a PDF of the same name, `paper.md` and
