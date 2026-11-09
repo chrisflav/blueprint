@@ -397,7 +397,8 @@ Assembles the static website:
   `<dir>/comments-config.json`, which says where the website's comments go:
   the Zulip and channel the comment server posts them to, and the comment
   server of a site served elsewhere (see `[site.comments]` below), but nothing
-  of the bot; otherwise removes it.
+  of the bot; with `[site] visits`, it says so there too; otherwise removes
+  it.
 
 With `--pdf` it then prepares the PDFs the website's *Export PDF* button
 hands out (`docs/pdf-export.md`): every choice its dialog offers — each
@@ -565,6 +566,7 @@ assets  = "site-assets"             # copied into the site as assets/
 blog    = "blog"                    # posts, Markdown and PDFs, on the Blog page
 logo    = "assets/logo.svg"         # left of the title in the top bar
 logoInk = true                      # drawn in the title's colour, default false
+visits  = true                     # count the visits (comment server): the site's on the Progress page, a post's on its page; default false
 
 [site.intro]                        # shown as the website opens, then the graph
 file     = "intro.md"               # Markdown; or body = """…""" inline
@@ -827,6 +829,19 @@ browser, so a reader cannot see or use the bot.  `blueprint.toml` refuses an
 `comments-config.json` holds the Zulip, the channel and `server`, where the
 comment server reads them.  Without the two variables the comment server says
 so and keeps the comments in its files.
+
+`[site] visits = true` counts the visits of the site and shows the number on
+the Progress page.  A visit is the site opened in a browser tab: the page
+tells the comment server once (`POST api/comments/:visits`), and moving
+around the site or reloading it in the same tab is the same visit
+(`sessionStorage`), while a new tab or a later return is a new one.  Each
+post of the blog counts its own visits the same way, once per tab that opens
+it, and shows the number on its page under its date.  The server keeps the
+numbers alone, in all and per day, in `visits.json` of its `--comments`
+directory, and no address; one address may bring at most 120 visits an hour,
+posts included.  It counts a post of the site's `blog.json` only, or, served
+apart from the site (without one), at most 500 posts.  It needs the comment
+server, like the comments.
 
 A site needs its comment server to have comments, on Zulip or not: a static
 host cannot keep the bot's key secret.  For a site served elsewhere (GitHub

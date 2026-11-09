@@ -888,6 +888,27 @@ else
   bad "[site.comments] writes comments-config.json with where the comments go, never the bot"
   cat "$TMP/zulip.out" "$TMP/zulip2.out" "$TMP/zulip.site/comments-config.json"
 fi
+# `[site] visits` says in comments-config.json that the comment server
+# counts the visits, with or without `[site.comments]`; it is a boolean.
+cp -r examples/minimal "$TMP/visits"
+printf '\n[site]\nvisits = true\n' >> "$TMP/visits/blueprint.toml"
+cp -r "$TMP/zulip" "$TMP/visits-zulip"
+sed -i 's/^\[site.comments\]$/[site]\nvisits = true\n\n[site.comments]/' "$TMP/visits-zulip/blueprint.toml"
+cp -r examples/minimal "$TMP/visits-bad"
+printf '\n[site]\nvisits = "yes"\n' >> "$TMP/visits-bad/blueprint.toml"
+if "$BP" site --root "$TMP/visits" -o "$TMP/visits.site" > "$TMP/visits.out" 2>&1 \
+   && grep -qxF '{"visits":true}' "$TMP/visits.site/comments-config.json" \
+   && "$BP" site --root "$TMP/visits-zulip" -o "$TMP/visits-zulip.site" > "$TMP/visits-zulip.out" 2>&1 \
+   && grep -qxF '{"server":"https://comments.example/","visits":true,"zulip":{"channel":"blueprint comment","site":"https://zulip.example"}}' \
+        "$TMP/visits-zulip.site/comments-config.json" \
+   && ! "$BP" site --root "$TMP/visits-bad" -o "$TMP/visits-bad.site" > "$TMP/visits-bad.out" 2>&1 \
+   && grep -q "'\[site\] visits' must be a boolean" "$TMP/visits-bad.out"; then
+  ok "[site] visits is said in comments-config.json, and must be a boolean"
+else
+  bad "[site] visits is said in comments-config.json, and must be a boolean"
+  cat "$TMP/visits.out" "$TMP/visits-zulip.out" "$TMP/visits-bad.out"
+  cat "$TMP/visits.site/comments-config.json" "$TMP/visits-zulip.site/comments-config.json"
+fi
 for bad_comments in 'channel = "c"|needs a .zulip.' \
                     'zulip = "https://z"|needs a .channel.' \
                     'zulip = "z.example"\nchannel = "c"|must be an http(s) address' \
@@ -1407,6 +1428,48 @@ if command -v node > /dev/null 2>&1; then
     else
       bad "a private comment is kept with the comments and never listed"; cat "$TMP/api.list"
     fi
+    # The visits: each POST is one, kept as numbers alone (in all and per
+    # day); one address brings at most 120 an hour.
+    visit () { curl -s -o "$TMP/api.visit" -w '%{http_code}' -H 'Content-Type: application/json' \
+      --data '{}' "http://127.0.0.1:$port/api/comments/%3Avisits"; }
+    if [ "$(visit)" = 201 ] && [ "$(visit)" = 201 ] && grep -q '"visits": 2' "$TMP/api.visit" \
+       && curl -s "http://127.0.0.1:$port/api/comments/%3Avisits" | grep -q '"visits": 2' \
+       && grep -q '"total": 2' "$TMP/comments.api/visits.json" \
+       && grep -q "\"$(date -u +%F)\": 2" "$TMP/comments.api/visits.json"; then
+      codes=""
+      for i in $(seq 1 119); do codes="$codes $(visit)"; done
+      if [ "$(echo $codes | tr ' ' '\n' | grep -c 201)" = 118 ] && [ "$(echo $codes | tr ' ' '\n' | grep -c 429)" = 1 ] \
+         && curl -s "http://127.0.0.1:$port/api/comments/%3Avisits" | grep -q '"visits": 120'; then
+        ok "the visit API counts each visit, keeps numbers alone, and limits one address"
+      else
+        bad "the visit API counts each visit, keeps numbers alone, and limits one address"
+      fi
+    else
+      bad "the visit API counts each visit, keeps numbers alone, and limits one address"; cat "$TMP/api.visit"; tail "$TMP/api.log"
+    fi
+    # A post's visits: counted apart from the site's, a post of the site's
+    # blog.json only (a fresh server, the address above having used its hour).
+    pport=$((port + 1))
+    mkdir -p "$TMP/site.posts"
+    printf '{"posts":[{"id":"01-hello","title":"Hello"}]}' > "$TMP/site.posts/blog.json"
+    python3 web/comments-server.py --port "$pport" --directory "$TMP/site.posts" \
+      --comments "$TMP/comments.posts" > "$TMP/posts.log" 2>&1 &
+    posts_server=$!
+    for _ in $(seq 1 50); do curl -s "http://127.0.0.1:$pport/api/comments/%3Avisits" > /dev/null 2>&1 && break; sleep 0.1; done
+    pvisit () { curl -s -o "$TMP/api.pvisit" -w '%{http_code}' -H 'Content-Type: application/json' \
+      --data "$1" "http://127.0.0.1:$pport/api/comments/%3Avisits"; }
+    if [ "$(pvisit '{"post":"01-hello"}')" = 201 ] && [ "$(pvisit '{"post":"01-hello"}')" = 201 ] \
+       && grep -q '"visits": 2' "$TMP/api.pvisit" \
+       && [ "$(pvisit '{"post":"no-such"}')" = 404 ] && [ "$(pvisit '{"post":""}')" = 400 ] \
+       && curl -s "http://127.0.0.1:$pport/api/comments/%3Avisits?post=01-hello" | grep -q '"visits": 2' \
+       && curl -s "http://127.0.0.1:$pport/api/comments/%3Avisits" | grep -q '"visits": 0' \
+       && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["posts"]["01-hello"]["total"] == 2 and d["total"] == 0' \
+            "$TMP/comments.posts/visits.json"; then
+      ok "a post's visits are counted apart, for the posts of blog.json alone"
+    else
+      bad "a post's visits are counted apart, for the posts of blog.json alone"; cat "$TMP/api.pvisit"; tail "$TMP/posts.log"
+    fi
+    kill "$posts_server" 2>/dev/null; wait "$posts_server" 2>/dev/null
     # Only a site named by --allow-origin may use the comment API from another origin.
     if [ "$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS -H 'Origin: https://elsewhere.example' \
              "http://127.0.0.1:$port/api/comments/products")" = 403 ] \

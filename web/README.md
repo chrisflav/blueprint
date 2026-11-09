@@ -371,7 +371,7 @@ the posts in the sidebar on the left (`.doc-layout`, `nav.toc` and
 `ul.toc-levels`, set as the document's), one row
 each, the one open marked `current`. `#/blog` lists them with their authors
 and dates and a *PDF* tag on those that hold one. `#/blog/<id>` is the post: its title,
-author and date, its words rendered as an object's prose is (`renderBody`), every
+author, date and, with `[site] visits`, its number of visits, its words rendered as an object's prose is (`renderBody`), every
 address in them read in `blog/` (`resolveUrls` in `intro.js`), then its PDF
 in an `<iframe>`, the browser's own viewer, with *Open the PDF* and
 *Download* links above it for a browser that shows none, and at the foot the
@@ -404,6 +404,17 @@ before it is shown. Served without that server, the section says comments are
 unavailable. `blueprint site` leaves the script out of the published site. The same
 server makes PDFs on demand for the Export PDF dialog (`POST api/export`,
 `../docs/pdf-export.md`).
+
+With `[site] visits` (`"visits": true` in `comments-config.json`) the same
+server counts the visits: `countVisit` in `comments.js`, called once at boot,
+posts to `api/comments/:visits` unless the tab's `sessionStorage` says its
+visit is counted already (`blueprint.visitCounted`, set when the server took
+it), so one tab is one visit, reloads included; the Progress page asks
+`GET api/comments/:visits` (`visitCount`) and shows the number as a
+`.stat.visits` in a row of its own under the status bar, hidden on a site
+that does not count.  A post of the blog counts its own visits the same way,
+once per tab (`postVisits`, `{"post": id}` and `?post=<id>`), and shows them
+as `.blog-visits` under its date.
 
 ### The document's pages
 

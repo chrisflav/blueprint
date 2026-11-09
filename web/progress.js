@@ -2,6 +2,7 @@
 // and a time slider driven by data/index.json.
 
 import * as M from './model.js';
+import { visitCount } from './comments.js';
 
 export function render(root, app) {
   const { el, clear } = app;
@@ -28,6 +29,19 @@ export function render(root, app) {
       el('div.l', M.STATUS_LABEL[s])))));
 
   page.appendChild(stackBar(app, counts, total));
+
+  // --------------------------------------------------------------- visits
+  // The site's visits so far, whatever snapshot the slider shows: for a site
+  // with `[site] visits`, from the comment server (comments.js).
+  const visits = el('div.stat-row.visit-row');
+  visits.hidden = true;
+  page.appendChild(visits);
+  visitCount().then((n) => {
+    if (n === null || !visits.isConnected) return;
+    visits.appendChild(el('div.stat.visits', { title: 'Times this site has been opened in a browser tab' },
+      el('div.n', String(n)), el('div.l', n === 1 ? 'Visit' : 'Visits')));
+    visits.hidden = false;
+  });
 
   // -------------------------------------------------------- time slider
   const hist = app.history;

@@ -9,12 +9,15 @@
 // words — Markdown with maths and `[slug]` references, rendered as an
 // object's prose is — then its PDF, read in the page, with a link to open it
 // on its own, and its neighbours in the list.  A post's pictures and links
-// are read in `blog/`, where they are in the site.
+// are read in `blog/`, where they are in the site.  On a site with `[site]
+// visits` a post's page counts its visit and says, under the date, how many
+// it has had (`postVisits` in comments.js).
 //
 // A site without a blog has no blog.json: its tab stays hidden (`loadBlog`
 // in app.js), and the page, opened all the same, says so.
 
 import { resolveUrls, snapshotBase } from './intro.js';
+import { postVisits } from './comments.js';
 
 // Guards against a route change landing while blog.json is on its way.
 let drawToken = 0;
@@ -101,6 +104,16 @@ function article(app, posts, post, base) {
     post.author ? el('p.blog-author', post.author) : null,
     post.date ? el('p.blog-date', post.date) : null);
   app.renderMath(head);
+  // On a site with `[site] visits`, the post's visits, this one counted
+  // (comments.js); nothing on a site that does not count them.
+  const visits = el('p.blog-visits');
+  visits.hidden = true;
+  head.appendChild(visits);
+  postVisits(post.id).then((n) => {
+    if (n === null) return;
+    visits.textContent = n === 1 ? '1 visit' : `${n} visits`;
+    visits.hidden = false;
+  });
   const node = el('article.blog-post', head);
   if (post.body && post.body.trim()) {
     const prose = el('div.prose.body-prose');

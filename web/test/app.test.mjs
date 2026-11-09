@@ -967,6 +967,77 @@ await check('a site served elsewhere sends its comments to the server comments-c
   }
 });
 
+await check('a site with [site] visits counts a visit once per tab and shows the number on the Progress page', async () => {
+  const comments = await import(path.join(webDir, 'comments.js'));
+  const routes = dom.net.routes;
+  const tab = new Map();
+  global.sessionStorage = { getItem: (k) => (tab.has(k) ? tab.get(k) : null), setItem: (k, v) => { tab.set(k, String(v)); } };
+  const thread = 'api/comments/' + encodeURIComponent(comments.VISIT_THREAD);
+  let config = { visits: true };
+  let posts = 0;
+  const postPosts = [];
+  routes.push((u, init) => {
+    if (u === 'comments-config.json') return [200, JSON.stringify(config), 'application/json'];
+    if (u === thread + '?post=01-hello') return [200, '{"visits": 7, "post": "01-hello"}', 'application/json'];
+    if (u !== thread) return null;
+    const post = init.method === 'POST' ? JSON.parse(init.body).post : undefined;
+    if (post) {
+      postPosts.push(post);
+      return [201, '{"visits": 7, "post": "01-hello"}', 'application/json'];
+    }
+    if (init.method === 'POST') posts += 1;
+    return [init.method === 'POST' ? 201 : 200, '{"visits": 42}', 'application/json'];
+  });
+  comments.resetCommentsConfig();
+  try {
+    await comments.countVisit();
+    eq(posts, 1, 'opening the site is a visit');
+    await comments.countVisit();
+    eq(posts, 1, 'the same tab, reloaded, is the same visit');
+    tab.clear();
+    await comments.countVisit();
+    eq(posts, 2, 'a new tab is a new visit');
+    eq(await comments.visitCount(), 42, 'the number, from the server');
+    await go('#/progress');
+    await tick(5);
+    const stat = root.querySelector('.visit-row .stat.visits');
+    ok(stat && !root.querySelector('.visit-row').hidden, 'the Progress page shows it');
+    eq(stat.querySelector('.n').textContent, '42', 'as a figure');
+    eq(stat.querySelector('.l').textContent, 'Visits', 'of visits');
+
+    await go('#/blog/01-hello');
+    await tick(5);
+    const head = root.querySelector('.blog-head .blog-visits');
+    ok(head && !head.hidden, 'a post shows its visits');
+    eq(head.textContent, '7 visits', 'under its title');
+    eq(postPosts.join(' '), '01-hello', 'opening it is a visit of it');
+    await go('#/blog/02-paper');
+    await go('#/blog/01-hello');
+    await tick(5);
+    eq(postPosts.filter((p) => p === '01-hello').length, 1, 'once per tab');
+    eq(root.querySelector('.blog-head .blog-visits').textContent, '7 visits', 'and still said');
+    eq(posts, 2, 'not a visit of the site');
+
+    config = {};
+    tab.clear();
+    comments.resetCommentsConfig();
+    await comments.countVisit();
+    eq(posts, 2, 'a site without [site] visits counts nothing');
+    eq(await comments.visitCount(), null, 'and has no number');
+    await go('#/graph');
+    await go('#/progress');
+    await tick(5);
+    ok(root.querySelector('.visit-row').hidden, 'nor a figure on the Progress page');
+    await go('#/blog/01-hello');
+    await tick(5);
+    ok(root.querySelector('.blog-head .blog-visits').hidden, 'nor on a post');
+  } finally {
+    routes.length = 0;
+    delete global.sessionStorage;
+    comments.resetCommentsConfig();
+  }
+});
+
 await check('hide_content takes an entry off its parent\'s page, and leads every link to its own', async () => {
   const o = app.model.byId.get('sec-main');
   const before = o.attrs;

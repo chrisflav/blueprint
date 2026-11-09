@@ -21,6 +21,14 @@
 // writes for `[site.comments] server`; the server must name the site with
 // `--allow-origin`.
 //
+// A site with `[site] visits` (comments-config.json `"visits": true`) counts
+// its visits with the same server, on the thread `VISIT_THREAD`: the page
+// posts once each time the site is opened in a browser tab (`countVisit`),
+// and once each time a tab opens a post of the blog (`postVisits`),
+//   POST api/comments/:visits  <- {} or {"post": id} -> {"visits": n}
+//   GET  api/comments/:visits[?post=<id>]          -> {"visits": n}
+// and the Progress page shows the site's number (`visitCount`), a post its own.
+//
 // One object has one thread, wherever it is read: an object page and the
 // document's page of the same object show the same comments.  The top of the
 // document is no object, and has the thread `DOCUMENT_THREAD`: a colon is no
@@ -30,7 +38,13 @@
 /** The thread of the top page of the document; the server knows it too. */
 export const DOCUMENT_THREAD = ':document';
 
+/** The number of visits, which is no object either; the server knows it too. */
+export const VISIT_THREAD = ':visits';
+
 const NAME_KEY = 'blueprint.commentName';
+// Set in the tab's `sessionStorage` once its visit is counted: moving around
+// the site, or reloading it, in the same tab is the same visit.
+const VISIT_KEY = 'blueprint.visitCounted';
 const VISIBILITY_KEY = 'blueprint.commentVisibility';
 
 function remembered(key) {
@@ -41,25 +55,100 @@ function remember(key, value) {
   try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
 }
 
-let basePromise = null;
+let configPromise = null;
+
+/** comments-config.json, or `{}` for a site without one. */
+function commentsConfig() {
+  if (!configPromise) {
+    configPromise = fetch('comments-config.json', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((c) => (c && typeof c === 'object' ? c : {}))
+      .catch(() => ({}));
+  }
+  return configPromise;
+}
 
 /** Where the comment API is: `server` of comments-config.json, or this site. */
-function apiBase() {
-  if (!basePromise) {
-    basePromise = fetch('comments-config.json', { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((c) => {
-        const s = c && typeof c.server === 'string' ? c.server.trim() : '';
-        return /^https?:\/\//.test(s) ? s.replace(/\/*$/, '/') : '';
-      })
-      .catch(() => '');
-  }
-  return basePromise;
+async function apiBase() {
+  const c = await commentsConfig();
+  const s = typeof c.server === 'string' ? c.server.trim() : '';
+  return /^https?:\/\//.test(s) ? s.replace(/\/*$/, '/') : '';
 }
 
 /** Forget comments-config.json, so that the next panel reads it again: for the tests. */
 export function resetCommentsConfig() {
-  basePromise = null;
+  configPromise = null;
+}
+
+// ---------------------------------------------------------------- visits
+
+async function visitsUrl() {
+  const c = await commentsConfig();
+  return c.visits === true ? (await apiBase()) + 'api/comments/' + encodeURIComponent(VISIT_THREAD) : null;
+}
+
+function visitCounted() {
+  try { return sessionStorage.getItem(VISIT_KEY) === '1'; } catch (e) { return false; }
+}
+
+/**
+ * Count this visit on a site with `[site] visits`: once per browser tab,
+ * however many pages it opens or reloads (`sessionStorage`); a new tab, or
+ * a later return, is a new visit.  Never throws.
+ */
+export async function countVisit() {
+  try {
+    const url = await visitsUrl();
+    if (!url || visitCounted()) return;
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (res.ok) {
+      try { sessionStorage.setItem(VISIT_KEY, '1'); } catch (e) { /* counted again on reload */ }
+    }
+  } catch (e) { /* no server: not counted */ }
+}
+
+/** A number of visits as the server says it, or null. */
+async function visitsOf(res) {
+  const n = res.ok ? (await res.json()).visits : null;
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+/**
+ * Count a visit of the blog's post `id`, once per browser tab as the site's
+ * own (`sessionStorage`), and say how many it has had: null on a site that
+ * does not count them or cannot say.  Never throws.
+ */
+export async function postVisits(id) {
+  try {
+    const url = await visitsUrl();
+    if (!url) return null;
+    const key = VISIT_KEY + ':blog/' + id;
+    let counted = false;
+    try { counted = sessionStorage.getItem(key) === '1'; } catch (e) { /* counted again */ }
+    if (!counted) {
+      const res = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ post: id }),
+      });
+      if (res.ok) {
+        try { sessionStorage.setItem(key, '1'); } catch (e) { /* counted again on reload */ }
+        return await visitsOf(res);
+      }
+    }
+    return await visitsOf(await fetch(url + '?post=' + encodeURIComponent(id), { cache: 'no-store' }));
+  } catch (e) {
+    return null;
+  }
+}
+
+/** The number of visits, or null on a site that does not count them or cannot say. */
+export async function visitCount() {
+  try {
+    const url = await visitsUrl();
+    if (!url) return null;
+    return await visitsOf(await fetch(url, { cache: 'no-store' }));
+  } catch (e) {
+    return null;
+  }
 }
 
 async function commentsUrl(id) {
