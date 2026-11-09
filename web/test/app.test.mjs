@@ -56,7 +56,7 @@ global.window.renderMathInElement = katex;
 // The site's blog, blog.json beside the snapshot, as `blueprint site` writes
 // it for `[site] blog`; and its tab, which index.html has hidden until then.
 const blog = { posts: [
-  { id: '01-hello', title: 'Hello $x$', date: '2026-11-05', body: 'Words about [def-compact].' },
+  { id: '01-hello', title: 'Hello $x$', author: 'A. Author', date: '2026-11-05', body: 'Words about [def-compact].' },
   { id: '02-paper', title: 'Notes on a paper', body: 'What I think of it.', pdf: '02-paper.pdf' },
   { id: '03 slides', title: '03 slides', pdf: '03 slides.pdf' },
 ] };
@@ -1679,6 +1679,8 @@ await check('the blog: its tab once it has posts, the posts in the sidebar, and 
   eq(root.querySelectorAll('nav.blog-toc li.current').length, 0, 'no post is open');
   const items = [...root.querySelectorAll('ul.blog-list li')];
   eq(items.length, 3, 'the page lists every post');
+  eq(items[0].querySelector('.blog-author').textContent, 'A. Author', 'with its author');
+  eq(items[1].querySelector('.blog-author'), null, 'and none for a post without one');
   eq(items[0].querySelector('.blog-date').textContent, '2026-11-05', 'with its date');
   eq(items.filter((li) => li.querySelector('.blog-tag')).length, 2, 'and whether it holds a PDF');
 });
@@ -1688,6 +1690,7 @@ await check('a post: its words and its neighbours', async () => {
   const current = root.querySelectorAll('nav.blog-toc li.current a');
   eq(current.length, 1, 'the post opened is marked in the sidebar');
   eq(current[0].getAttribute('aria-current'), 'page', 'and says so');
+  eq(root.querySelector('.blog-head .blog-author').textContent, 'A. Author', 'its author');
   eq(root.querySelector('.blog-head .blog-date').textContent, '2026-11-05', 'its date');
   const prose = root.querySelector('article.blog-post .prose');
   ok(prose, 'its words are written out');

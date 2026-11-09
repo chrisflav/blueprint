@@ -4,7 +4,8 @@
 //
 // It is set as the document is: the posts in a sidebar on the left, one row
 // each in the order of their file names, and the post opened on the right.
-// `#/blog` lists them all, with their dates; `#/blog/<id>` is one post, its
+// `#/blog` lists them all, with their authors and dates; `#/blog/<id>` is one
+// post, its
 // words — Markdown with maths and `[slug]` references, rendered as an
 // object's prose is — then its PDF, read in the page, with a link to open it
 // on its own, and its neighbours in the list.  A post's pictures and links
@@ -80,12 +81,13 @@ function sidebar(app, posts, post) {
     el('h3.toc-head', el('a', { href: '#/blog' }, 'Blog')), list);
 }
 
-/** `#/blog`: the posts, with their dates and whether they hold a PDF. */
+/** `#/blog`: the posts, with their authors, dates and whether they hold a PDF. */
 function listing(app, posts) {
   const { el } = app;
   const list = el('ul.blog-list',
     posts.map((p) => el('li',
       el('a.blog-title', { href: postHref(p.id) }, p.title),
+      p.author ? el('span.blog-author', p.author) : null,
       p.date ? el('span.blog-date', p.date) : null,
       p.pdf ? el('span.blog-tag', 'PDF') : null)));
   app.renderMath(list);
@@ -95,7 +97,9 @@ function listing(app, posts) {
 /** `#/blog/<id>`: a post, its words, then its PDF, then its neighbours. */
 function article(app, posts, post, base) {
   const { el } = app;
-  const head = el('header.blog-head', el('h1', post.title), post.date ? el('p.blog-date', post.date) : null);
+  const head = el('header.blog-head', el('h1', post.title),
+    post.author ? el('p.blog-author', post.author) : null,
+    post.date ? el('p.blog-date', post.date) : null);
   app.renderMath(head);
   const node = el('article.blog-post', head);
   if (post.body && post.body.trim()) {

@@ -108,7 +108,8 @@ def siteExcludes : Array String := #["sample", "test", "README.md", commentServe
 
 `[site] blog` names a directory of posts, which the website shows on its
 *Blog* page.  Each `*.md` at its top is a post, Markdown with optional TOML
-front matter between `+++` lines (`title`, `date`), and each `*.pdf` there is
+front matter between `+++` lines (`title`, `author`, `date`), and each `*.pdf`
+there is
 one too, read in the page; a post and a PDF of the same name are one post,
 its words above the PDF.  The posts are listed in the order of their file
 names.  `blueprint site` copies the directory into the site as `blog/`, so a
@@ -122,6 +123,8 @@ structure BlogPost where
   /-- `title` in its front matter, else its first line when that is a `# `
   heading, else its id. -/
   title : String
+  /-- `author` in its front matter, as written; empty for none. -/
+  author : String := ""
   /-- `date` in its front matter, as written; empty for none. -/
   date : String := ""
   /-- Its Markdown, without the front matter or the heading taken as its
@@ -134,6 +137,7 @@ structure BlogPost where
 /-- A post as JSON, what it does not have left out. -/
 def BlogPost.toJson (p : BlogPost) : Json :=
   Json.mkObj ([("id", Json.str p.id), ("title", Json.str p.title)] ++
+    (if p.author.isEmpty then [] else [("author", Json.str p.author)]) ++
     (if p.date.isEmpty then [] else [("date", Json.str p.date)]) ++
     (if p.body.isEmpty then [] else [("body", Json.str p.body)]) ++
     (if p.pdf.isEmpty then [] else [("pdf", Json.str p.pdf)]))
@@ -161,17 +165,18 @@ def readBlogPost (path : System.FilePath) (id : String) : IO BlogPost := do
     | some (_, .dateTime s) => pure s
     | some (_, v) => throw <| IO.userError s!"{path}: '{k}' must be a string, got a {v.typeName}"
   let title ← field "title"
+  let author ← field "author"
   let date ← field "date"
-  if !title.isEmpty then return { id, title, date, body }
+  if !title.isEmpty then return { id, title, author, date, body }
   -- No title: its first line, when that is a heading, or else its name.
   let lines := splitLines body
   match lines[0]? with
   | some l =>
     if l.startsWith "# " then
-      return { id, title := trim (l.drop 2).copy, date,
+      return { id, title := trim (l.drop 2).copy, author, date,
                body := trim (String.intercalate "\n" (lines.toList.drop 1)) }
-    else return { id, title := id, date, body }
-  | none => return { id, title := id, date, body }
+    else return { id, title := id, author, date, body }
+  | none => return { id, title := id, author, date, body }
 
 /-- The posts of the blog directory `dir`, in the order of their names. -/
 def readBlog (dir : System.FilePath) : IO (Array BlogPost) := do

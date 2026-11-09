@@ -930,14 +930,14 @@ fi
 # previous run.
 rm -rf "$TMP/blog" "$TMP/blog.site"; cp -r examples/minimal "$TMP/blog"
 mkdir -p "$TMP/blog/posts/fig"
-printf '+++\ntitle = "Hello"\ndate = 2026-11-05\n+++\nWords, ![x](fig/a.png).\n' > "$TMP/blog/posts/01-hello.md"
+printf '+++\ntitle = "Hello"\nauthor = "A. Author"\ndate = 2026-11-05\n+++\nWords, ![x](fig/a.png).\n' > "$TMP/blog/posts/01-hello.md"
 printf '# Notes on a paper\n\nWhat I think of it.\n' > "$TMP/blog/posts/02-paper.md"
 printf 'pdf' > "$TMP/blog/posts/02-paper.pdf"
 printf 'pdf' > "$TMP/blog/posts/03-slides.pdf"
 printf 'png' > "$TMP/blog/posts/fig/a.png"
 printf '\n[site]\nblog = "posts"\n' >> "$TMP/blog/blueprint.toml"
 if "$BP" site --root "$TMP/blog" -o "$TMP/blog.site" > "$TMP/blog.out" 2>&1 \
-   && grep -qF '{"posts":[{"body":"Words, ![x](fig/a.png).","date":"2026-11-05","id":"01-hello","title":"Hello"},{"body":"What I think of it.","id":"02-paper","pdf":"02-paper.pdf","title":"Notes on a paper"},{"id":"03-slides","pdf":"03-slides.pdf","title":"03-slides"}]}' "$TMP/blog.site/blog.json" \
+   && grep -qF '{"posts":[{"author":"A. Author","body":"Words, ![x](fig/a.png).","date":"2026-11-05","id":"01-hello","title":"Hello"},{"body":"What I think of it.","id":"02-paper","pdf":"02-paper.pdf","title":"Notes on a paper"},{"id":"03-slides","pdf":"03-slides.pdf","title":"03-slides"}]}' "$TMP/blog.site/blog.json" \
    && [ "$(cat "$TMP/blog.site/blog/02-paper.pdf")" = pdf ] \
    && [ "$(cat "$TMP/blog.site/blog/fig/a.png")" = png ] \
    && [ -f "$TMP/blog.site/blog.js" ] \

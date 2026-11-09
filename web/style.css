@@ -1173,6 +1173,8 @@ ul.objlist .role {
 .blog-date { color: var(--muted); font-size: .86rem; font-variant-numeric: tabular-nums; }
 .blog-head { margin-bottom: 1.2rem; }
 .blog-head h1 { margin: 0; }
+.blog-author { font-size: .92rem; }
+.blog-head .blog-author { margin: .3rem 0 0; font-size: 1rem; }
 .blog-head .blog-date { margin: .3rem 0 0; }
 .blog-tag {
   font-size: .72rem; color: var(--muted); border: 1px solid var(--border);
