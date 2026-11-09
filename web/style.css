@@ -1299,6 +1299,9 @@ ul.objlist .role {
 .stat.s-stated { border-left-color: var(--st-stated); }
 .stat.s-proved { border-left-color: var(--st-proved); }
 .stat.s-proved_with_axioms { border-left-color: var(--st-proved_with_axioms); }
+.stat.visitors { border-left-color: var(--accent); }
+/* One box, as wide as one of the five status boxes above it. */
+.visitor-row { grid-template-columns: minmax(9rem, calc((100% - 4 * .7rem) / 5)); }
 
 .stackbar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
 .stackbar > span { display: block; }

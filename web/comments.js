@@ -21,6 +21,13 @@
 // writes for `[site.comments] server`; the server must name the site with
 // `--allow-origin`.
 //
+// A site with `[site] visitors` (comments-config.json `"visitors": true`)
+// counts its visitors with the same server, on the thread `VISITOR_THREAD`:
+// each browser draws a random id once and reports it once (`countVisit`),
+//   POST api/comments/:visitors  <- {"visitor": "<id>"} -> {"visitors": n, "new"}
+//   GET  api/comments/:visitors  -> {"visitors": n}
+// and the Progress page shows the number (`visitorCount`).
+//
 // One object has one thread, wherever it is read: an object page and the
 // document's page of the same object show the same comments.  The top of the
 // document is no object, and has the thread `DOCUMENT_THREAD`: a colon is no
@@ -30,7 +37,12 @@
 /** The thread of the top page of the document; the server knows it too. */
 export const DOCUMENT_THREAD = ':document';
 
+/** The number of visitors, which is no object either; the server knows it too. */
+export const VISITOR_THREAD = ':visitors';
+
 const NAME_KEY = 'blueprint.commentName';
+const VISITOR_KEY = 'blueprint.visitor';
+const VISITOR_COUNTED_KEY = 'blueprint.visitorCounted';
 const VISIBILITY_KEY = 'blueprint.commentVisibility';
 
 function remembered(key) {
@@ -41,25 +53,82 @@ function remember(key, value) {
   try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
 }
 
-let basePromise = null;
+let configPromise = null;
+
+/** comments-config.json, or `{}` for a site without one. */
+function commentsConfig() {
+  if (!configPromise) {
+    configPromise = fetch('comments-config.json', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((c) => (c && typeof c === 'object' ? c : {}))
+      .catch(() => ({}));
+  }
+  return configPromise;
+}
 
 /** Where the comment API is: `server` of comments-config.json, or this site. */
-function apiBase() {
-  if (!basePromise) {
-    basePromise = fetch('comments-config.json', { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((c) => {
-        const s = c && typeof c.server === 'string' ? c.server.trim() : '';
-        return /^https?:\/\//.test(s) ? s.replace(/\/*$/, '/') : '';
-      })
-      .catch(() => '');
-  }
-  return basePromise;
+async function apiBase() {
+  const c = await commentsConfig();
+  const s = typeof c.server === 'string' ? c.server.trim() : '';
+  return /^https?:\/\//.test(s) ? s.replace(/\/*$/, '/') : '';
 }
 
 /** Forget comments-config.json, so that the next panel reads it again: for the tests. */
 export function resetCommentsConfig() {
-  basePromise = null;
+  configPromise = null;
+}
+
+// ---------------------------------------------------------------- visitors
+
+async function visitorsUrl() {
+  const c = await commentsConfig();
+  return c.visitors === true ? (await apiBase()) + 'api/comments/' + encodeURIComponent(VISITOR_THREAD) : null;
+}
+
+/** A random id for this browser: letters, digits and dashes, as the server takes them. */
+function randomId() {
+  const c = typeof crypto !== 'undefined' ? crypto : null;
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (c && typeof c.getRandomValues === 'function') c.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Report this browser to the comment server, once: on a site with `[site]
+ * visitors`, the first time it is opened in a browser that keeps what it is
+ * given (`localStorage`); a browser that keeps nothing is not counted, rather
+ * than counted on every visit.  Never throws.
+ */
+export async function countVisit() {
+  try {
+    const url = await visitorsUrl();
+    if (!url || localStorage.getItem(VISITOR_COUNTED_KEY) === '1') return;
+    let id = localStorage.getItem(VISITOR_KEY);
+    if (!id || !/^[A-Za-z0-9-]{16,64}$/.test(id)) {
+      id = randomId();
+      localStorage.setItem(VISITOR_KEY, id);
+      if (localStorage.getItem(VISITOR_KEY) !== id) return;
+    }
+    const res = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visitor: id }),
+    });
+    if (res.ok) localStorage.setItem(VISITOR_COUNTED_KEY, '1');
+  } catch (e) { /* no storage, no server: not counted */ }
+}
+
+/** The number of visitors, or null on a site that does not count them or cannot say. */
+export async function visitorCount() {
+  try {
+    const url = await visitorsUrl();
+    if (!url) return null;
+    const res = await fetch(url, { cache: 'no-store' });
+    const n = res.ok ? (await res.json()).visitors : null;
+    return Number.isInteger(n) && n >= 0 ? n : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 async function commentsUrl(id) {

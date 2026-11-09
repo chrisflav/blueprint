@@ -33,6 +33,18 @@ the page and Zulip, so the bot's key never leaves it.  `--allow-origin` lets a s
 served elsewhere (a static host that cannot keep a secret) use this server
 for its comments, `[site.comments] server` saying where it is.
 
+    GET  /api/comments/:visitors -> {"visitors": n}
+    POST /api/comments/:visitors <- {"visitor": "<random id>"}
+                                 -> {"visitors": n, "new": true | false}
+
+for the number of visitors of a site with `[site] visitors`: each browser
+draws a random id once and reports it once, and the server counts the ids it
+has seen.  It keeps no address and no id as sent, only a hash of each id with
+the day it was first seen, one line per visitor in
+`<comments dir>/visitors.txt`; an address may bring at most
+`VISITORS_PER_HOUR` new ids an hour, so a script cannot inflate the count
+quickly.  `:visitors`, like `DOCUMENT_THREAD`, names no object.
+
     GET  /api/export          -> {"available": true|false, "reason": "..."}
     POST /api/export          <- {"snapshot": "blueprint.json" | "data/<sha>.json",
                                   "sha256": "...", "collapse": "refines",
@@ -57,6 +69,8 @@ Standard library only.  It listens on 127.0.0.1 unless told otherwise.
 import argparse
 import base64
 import datetime
+import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -65,6 +79,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -82,6 +97,10 @@ MAX_ID = 200
 # expected to have an object so named.  The site's comments.js names it too.
 DOCUMENT_THREAD = ":document"
 VISIBILITIES = ("public", "private")
+# The number of visitors, which is no object either (`Visitors`).
+VISITOR_THREAD = ":visitors"
+VISITOR_RE = re.compile(r"^[A-Za-z0-9-]{16,64}$")
+VISITORS_PER_HOUR = 30  # new visitors one address may bring in an hour
 MAX_PAGE = 2000  # the address of the page a comment was written on
 PAGE_RE = re.compile(r"^https?://[^\s()<>]+$")
 
@@ -130,6 +149,61 @@ class KnownIds:
         self.get()
         t = self.titles.get(object_id)
         return t if isinstance(t, str) and t else object_id
+
+
+class Visitors:
+    """The visitors of the site: a hash of each one's random id, with the day
+    it was first seen, one line each in `visitors.txt` of the comments
+    directory, read once and appended to."""
+
+    def __init__(self, directory):
+        self.directory = directory
+        self.path = os.path.join(directory, "visitors.txt")
+        self.lock = threading.Lock()
+        self.seen = None  # the hashes, read on first use
+        self.recent = {}  # address -> times of the new visitors it brought this hour
+
+    def load(self):
+        if self.seen is None:
+            self.seen = set()
+            try:
+                with open(self.path, encoding="utf-8") as f:
+                    for line in f:
+                        parts = line.split()
+                        if parts:
+                            self.seen.add(parts[-1])
+            except FileNotFoundError:
+                pass
+        return self.seen
+
+    def count(self):
+        with self.lock:
+            return len(self.load())
+
+    def add(self, visitor, address):
+        """(new, count) for a visitor reporting itself, or None when its
+        address has brought too many new ones this hour."""
+        h = hashlib.sha256(visitor.encode("ascii")).hexdigest()[:32]
+        with self.lock:
+            seen = self.load()
+            if h in seen:
+                return False, len(seen)
+            now = time.monotonic()
+            times = [t for t in self.recent.get(address, []) if now - t < 3600]
+            if len(times) >= VISITORS_PER_HOUR:
+                self.recent[address] = times
+                return None
+            times.append(now)
+            self.recent[address] = times
+            # Forget the addresses that brought nobody this hour.
+            for a in [a for a, ts in self.recent.items() if a != address and all(now - t >= 3600 for t in ts)]:
+                del self.recent[a]
+            os.makedirs(self.directory, exist_ok=True)
+            day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+            with open(self.path, "a", encoding="utf-8") as f:
+                f.write(f"{day} {h}\n")
+            seen.add(h)
+            return True, len(seen)
 
 
 class Exporter:
@@ -456,6 +530,7 @@ def write_comments(directory, object_id, comments):
 class Handler(SimpleHTTPRequestHandler):
     comments_dir = None
     known = None
+    visitors = None
     exporter = None
     zulip = None  # a Zulip, when the comments are kept there
     allowed_origins = frozenset()  # sites served elsewhere that may use the comment API
@@ -504,6 +579,20 @@ class Handler(SimpleHTTPRequestHandler):
             return None
         return object_id
 
+    def thread(self):
+        """The thread an /api/comments/<thread> request names, as written."""
+        return urllib.parse.unquote(urllib.parse.urlsplit(self.path).path[len(PREFIX):])
+
+    def client(self):
+        """Who is asking: the address the proxy in front of this server (on
+        this machine or its private network) names, else the connection's."""
+        address = self.client_address[0]
+        try:
+            behind = ipaddress.ip_address(address).is_private
+        except ValueError:
+            behind = False
+        return (self.headers.get("X-Real-IP") or address).strip() if behind else address
+
     def is_api(self):
         return urllib.parse.urlsplit(self.path).path.startswith(PREFIX)
 
@@ -538,6 +627,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(200, {"available": ok, "reason": reason})
         if not self.is_api():
             return super().do_GET()
+        if self.thread() == VISITOR_THREAD:
+            return self.send_json(200, {"visitors": self.visitors.count()})
         object_id = self.object_id()
         if object_id is not None:
             self.send_comments(200, object_id)
@@ -568,6 +659,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(status, payload)
         if not self.is_api():
             return self.send_json(405, {"error": "only comments and exports can be posted"})
+        if self.thread() == VISITOR_THREAD:
+            return self.count_visitor()
         object_id = self.object_id()
         if object_id is None:
             return
@@ -631,6 +724,21 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(201, {"comments": public_list(comments), "maxBody": MAX_BODY, **shown})
 
 
+    def count_visitor(self):
+        """A browser reporting its random id, once."""
+        data = self.read_json(1024)
+        if data is None:
+            return
+        visitor = data.get("visitor") if isinstance(data, dict) else None
+        if not isinstance(visitor, str) or not VISITOR_RE.match(visitor):
+            return self.send_json(400, {"error": "visitor must be a random id of 16 to 64 letters, digits or -"})
+        result = self.visitors.add(visitor, self.client())
+        if result is None:
+            return self.send_json(429, {"error": "too many new visitors from one address; try later"})
+        new, n = result
+        self.send_json(201 if new else 200, {"visitors": n, "new": new})
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description="Serve the blueprint site with comments.")
     p.add_argument("--port", type=int, default=8000)
@@ -647,6 +755,7 @@ def main(argv=None):
     site = os.path.abspath(args.directory)
     Handler.comments_dir = os.path.abspath(args.comments)
     Handler.known = KnownIds(os.path.join(site, "blueprint.json"))
+    Handler.visitors = Visitors(Handler.comments_dir)
     Handler.exporter = Exporter(site, os.path.abspath(args.assets_root) if args.assets_root else None)
     Handler.zulip = zulip_from(site)
     Handler.allowed_origins = frozenset(o.rstrip("/") for o in args.allow_origin)

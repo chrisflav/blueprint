@@ -1385,6 +1385,8 @@ async function boot() {
   setupPreviews(app);
   setupExport(app);
   setupPrefetch(prefetchTasks());
+  // A site with `[site] visitors` counts this browser, once (comments.js).
+  import('./comments.js').then((c) => c.countVisit()).catch(() => {});
   window.addEventListener('hashchange', () => {
     if (suppressRoute > 0) {
       suppressRoute -= 1;

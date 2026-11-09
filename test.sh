@@ -888,6 +888,27 @@ else
   bad "[site.comments] writes comments-config.json with where the comments go, never the bot"
   cat "$TMP/zulip.out" "$TMP/zulip2.out" "$TMP/zulip.site/comments-config.json"
 fi
+# `[site] visitors` says in comments-config.json that the comment server
+# counts the visitors, with or without `[site.comments]`; it is a boolean.
+cp -r examples/minimal "$TMP/visitors"
+printf '\n[site]\nvisitors = true\n' >> "$TMP/visitors/blueprint.toml"
+cp -r "$TMP/zulip" "$TMP/visitors-zulip"
+sed -i 's/^\[site.comments\]$/[site]\nvisitors = true\n\n[site.comments]/' "$TMP/visitors-zulip/blueprint.toml"
+cp -r examples/minimal "$TMP/visitors-bad"
+printf '\n[site]\nvisitors = "yes"\n' >> "$TMP/visitors-bad/blueprint.toml"
+if "$BP" site --root "$TMP/visitors" -o "$TMP/visitors.site" > "$TMP/visitors.out" 2>&1 \
+   && grep -qxF '{"visitors":true}' "$TMP/visitors.site/comments-config.json" \
+   && "$BP" site --root "$TMP/visitors-zulip" -o "$TMP/visitors-zulip.site" > "$TMP/visitors-zulip.out" 2>&1 \
+   && grep -qxF '{"server":"https://comments.example/","visitors":true,"zulip":{"channel":"blueprint comment","site":"https://zulip.example"}}' \
+        "$TMP/visitors-zulip.site/comments-config.json" \
+   && ! "$BP" site --root "$TMP/visitors-bad" -o "$TMP/visitors-bad.site" > "$TMP/visitors-bad.out" 2>&1 \
+   && grep -q "'\[site\] visitors' must be a boolean" "$TMP/visitors-bad.out"; then
+  ok "[site] visitors is said in comments-config.json, and must be a boolean"
+else
+  bad "[site] visitors is said in comments-config.json, and must be a boolean"
+  cat "$TMP/visitors.out" "$TMP/visitors-zulip.out" "$TMP/visitors-bad.out"
+  cat "$TMP/visitors.site/comments-config.json" "$TMP/visitors-zulip.site/comments-config.json"
+fi
 for bad_comments in 'channel = "c"|needs a .zulip.' \
                     'zulip = "https://z"|needs a .channel.' \
                     'zulip = "z.example"\nchannel = "c"|must be an http(s) address' \
@@ -1406,6 +1427,26 @@ if command -v node > /dev/null 2>&1; then
       ok "a private comment is kept with the comments and never listed"
     else
       bad "a private comment is kept with the comments and never listed"; cat "$TMP/api.list"
+    fi
+    # The visitors: a random id counts once, kept only as a hash; a bad id is
+    # refused, and one address brings at most 30 new visitors an hour.
+    visit () { curl -s -o "$TMP/api.visit" -w '%{http_code}' -H 'Content-Type: application/json' \
+      --data "{\"visitor\":\"$1\"}" "http://127.0.0.1:$port/api/comments/%3Avisitors"; }
+    if [ "$(visit 0123456789abcdef-first)" = 201 ] && [ "$(visit 0123456789abcdef-first)" = 200 ] \
+       && grep -q '"new": false' "$TMP/api.visit" && [ "$(visit short)" = 400 ] \
+       && curl -s "http://127.0.0.1:$port/api/comments/%3Avisitors" | grep -q '"visitors": 1' \
+       && [ "$(wc -l < "$TMP/comments.api/visitors.txt")" = 1 ] \
+       && ! grep -q 'first' "$TMP/comments.api/visitors.txt"; then
+      codes=""
+      for i in $(seq 1 30); do codes="$codes $(visit "0123456789abcdef-more-$i")"; done
+      if [ "$(echo $codes | tr ' ' '\n' | grep -c 201)" = 29 ] && [ "$(echo $codes | tr ' ' '\n' | grep -c 429)" = 1 ] \
+         && curl -s "http://127.0.0.1:$port/api/comments/%3Avisitors" | grep -q '"visitors": 30'; then
+        ok "the visitor API counts a browser once, keeps a hash, and limits one address"
+      else
+        bad "the visitor API counts a browser once, keeps a hash, and limits one address ($codes)"
+      fi
+    else
+      bad "the visitor API counts a browser once, keeps a hash, and limits one address"; cat "$TMP/api.visit"; tail "$TMP/api.log"
     fi
     # Only a site named by --allow-origin may use the comment API from another origin.
     if [ "$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS -H 'Origin: https://elsewhere.example' \

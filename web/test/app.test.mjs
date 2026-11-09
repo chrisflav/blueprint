@@ -967,6 +967,58 @@ await check('a site served elsewhere sends its comments to the server comments-c
   }
 });
 
+await check('a site with [site] visitors counts a browser once and shows the number on the Progress page', async () => {
+  const comments = await import(path.join(webDir, 'comments.js'));
+  const routes = dom.net.routes;
+  const store = new Map();
+  global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => { store.set(k, String(v)); } };
+  const thread = 'api/comments/' + encodeURIComponent(comments.VISITOR_THREAD);
+  let visitors = { visitors: true };
+  const sent = [];
+  routes.push((u, init) => {
+    if (u === 'comments-config.json') return [200, JSON.stringify(visitors), 'application/json'];
+    if (u !== thread) return null;
+    if (init.method === 'POST') sent.push(JSON.parse(init.body).visitor);
+    return [init.method === 'POST' ? 201 : 200, '{"visitors": 42}', 'application/json'];
+  });
+  comments.resetCommentsConfig();
+  try {
+    await comments.countVisit();
+    eq(sent.length, 1, 'the browser reports itself');
+    ok(/^[A-Za-z0-9-]{16,64}$/.test(sent[0]), 'with a random id the server takes');
+    eq(store.get('blueprint.visitor'), sent[0], 'which it keeps');
+    await comments.countVisit();
+    eq(sent.length, 1, 'once');
+    eq(await comments.visitorCount(), 42, 'the number, from the server');
+    await go('#/progress');
+    await tick(5);
+    const stat = root.querySelector('.visitor-row .stat.visitors');
+    ok(stat && !root.querySelector('.visitor-row').hidden, 'the Progress page shows it');
+    eq(stat.querySelector('.n').textContent, '42', 'as a figure');
+
+    visitors = {};
+    store.clear();
+    comments.resetCommentsConfig();
+    await comments.countVisit();
+    eq(sent.length, 1, 'a site without [site] visitors counts nobody');
+    eq(await comments.visitorCount(), null, 'and has no number');
+    await go('#/graph');
+    await go('#/progress');
+    await tick(5);
+    ok(root.querySelector('.visitor-row').hidden, 'nor a figure on the Progress page');
+
+    visitors = { visitors: true };
+    comments.resetCommentsConfig();
+    global.localStorage = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
+    await comments.countVisit();
+    eq(sent.length, 1, 'a browser that keeps nothing is not counted on every visit');
+  } finally {
+    routes.length = 0;
+    delete global.localStorage;
+    comments.resetCommentsConfig();
+  }
+});
+
 await check('hide_content takes an entry off its parent\'s page, and leads every link to its own', async () => {
   const o = app.model.byId.get('sec-main');
   const before = o.attrs;
