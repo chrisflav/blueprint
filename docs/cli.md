@@ -564,7 +564,7 @@ pdfScopes = ["part", "chapter"]     # PDFs only of these kinds or ids, besides t
 pdfReferences = "all"               # every PDF ends with the whole bibliography, default "cited"
 assets  = "site-assets"             # copied into the site as assets/
 blog    = "blog"                    # posts, Markdown and PDFs, on the Blog page
-logo    = "assets/logo.svg"         # left of the title in the top bar
+logo    = "assets/logo.svg"         # left of the title in the top bar, and the browser tab's icon
 logoInk = true                      # drawn in the title's colour, default false
 visits  = true                     # count the visits (comment server): the site's on the Progress page, a post's on its page; default false
 
@@ -794,8 +794,11 @@ bar, in place of its own mark and in every style: an address the site
 serves, such as `assets/logo.svg`, resolved as the intro's are.  It is drawn
 a little taller than the title's letters.  With `logoInk = true` only its
 shape counts: it is filled with the title's colour, so a one-colour logo
-follows the style and dark mode; otherwise it keeps its own colours.  They
-reach the snapshot as `project.logo` and `project.logoInk`.
+follows the style and dark mode; otherwise it keeps its own colours.  It is
+also the icon of the browser tab, as it is (an SVG that should follow dark
+mode says so itself, with `prefers-color-scheme`); without a logo the tab
+has the browser's own.  They reach the snapshot as `project.logo` and
+`project.logoInk`.
 
 A comment on the website is public, listed below its page, or private, kept
 for the blueprint's authors and never listed: the reader chooses.  Every
