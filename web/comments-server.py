@@ -33,17 +33,15 @@ the page and Zulip, so the bot's key never leaves it.  `--allow-origin` lets a s
 served elsewhere (a static host that cannot keep a secret) use this server
 for its comments, `[site.comments] server` saying where it is.
 
-    GET  /api/comments/:visitors -> {"visitors": n}
-    POST /api/comments/:visitors <- {"visitor": "<random id>"}
-                                 -> {"visitors": n, "new": true | false}
+    GET  /api/comments/:visits -> {"visits": n}
+    POST /api/comments/:visits <- {} -> {"visits": n}
 
-for the number of visitors of a site with `[site] visitors`: each browser
-draws a random id once and reports it once, and the server counts the ids it
-has seen.  It keeps no address and no id as sent, only a hash of each id with
-the day it was first seen, one line per visitor in
-`<comments dir>/visitors.txt`; an address may bring at most
-`VISITORS_PER_HOUR` new ids an hour, so a script cannot inflate the count
-quickly.  `:visitors`, like `DOCUMENT_THREAD`, names no object.
+for the number of visits of a site with `[site] visits`: the page posts once
+each time the site is opened in a browser tab, and the server counts.  It
+keeps the number alone, in all and per day, in `<comments dir>/visits.json`,
+and no address; an address may bring at most `VISITS_PER_HOUR` visits an
+hour, so a script cannot inflate the count quickly.  `:visits`, like
+`DOCUMENT_THREAD`, names no object.
 
     GET  /api/export          -> {"available": true|false, "reason": "..."}
     POST /api/export          <- {"snapshot": "blueprint.json" | "data/<sha>.json",
@@ -69,7 +67,6 @@ Standard library only.  It listens on 127.0.0.1 unless told otherwise.
 import argparse
 import base64
 import datetime
-import hashlib
 import ipaddress
 import json
 import os
@@ -97,10 +94,9 @@ MAX_ID = 200
 # expected to have an object so named.  The site's comments.js names it too.
 DOCUMENT_THREAD = ":document"
 VISIBILITIES = ("public", "private")
-# The number of visitors, which is no object either (`Visitors`).
-VISITOR_THREAD = ":visitors"
-VISITOR_RE = re.compile(r"^[A-Za-z0-9-]{16,64}$")
-VISITORS_PER_HOUR = 30  # new visitors one address may bring in an hour
+# The number of visits, which is no object either (`Visits`).
+VISIT_THREAD = ":visits"
+VISITS_PER_HOUR = 120  # visits one address may bring in an hour
 MAX_PAGE = 2000  # the address of the page a comment was written on
 PAGE_RE = re.compile(r"^https?://[^\s()<>]+$")
 
@@ -151,46 +147,42 @@ class KnownIds:
         return t if isinstance(t, str) and t else object_id
 
 
-class Visitors:
-    """The visitors of the site: a hash of each one's random id, with the day
-    it was first seen, one line each in `visitors.txt` of the comments
-    directory, read once and appended to."""
+class Visits:
+    """The visits of the site: their number, in all and per day, in
+    `visits.json` of the comments directory, written atomically."""
 
     def __init__(self, directory):
         self.directory = directory
-        self.path = os.path.join(directory, "visitors.txt")
+        self.path = os.path.join(directory, "visits.json")
         self.lock = threading.Lock()
-        self.seen = None  # the hashes, read on first use
-        self.recent = {}  # address -> times of the new visitors it brought this hour
+        self.data = None  # {"total": n, "days": {"YYYY-MM-DD": n}}, read on first use
+        self.recent = {}  # address -> times of its visits this hour
 
     def load(self):
-        if self.seen is None:
-            self.seen = set()
+        if self.data is None:
             try:
                 with open(self.path, encoding="utf-8") as f:
-                    for line in f:
-                        parts = line.split()
-                        if parts:
-                            self.seen.add(parts[-1])
+                    data = json.load(f)
             except FileNotFoundError:
-                pass
-        return self.seen
+                data = {}
+            total = data.get("total") if isinstance(data, dict) else None
+            days = data.get("days") if isinstance(data, dict) else None
+            self.data = {"total": total if isinstance(total, int) else 0,
+                         "days": days if isinstance(days, dict) else {}}
+        return self.data
 
     def count(self):
         with self.lock:
-            return len(self.load())
+            return self.load()["total"]
 
-    def add(self, visitor, address):
-        """(new, count) for a visitor reporting itself, or None when its
-        address has brought too many new ones this hour."""
-        h = hashlib.sha256(visitor.encode("ascii")).hexdigest()[:32]
+    def add(self, address):
+        """The number of visits with one more, or None when its address has
+        brought too many this hour."""
         with self.lock:
-            seen = self.load()
-            if h in seen:
-                return False, len(seen)
+            data = self.load()
             now = time.monotonic()
             times = [t for t in self.recent.get(address, []) if now - t < 3600]
-            if len(times) >= VISITORS_PER_HOUR:
+            if len(times) >= VISITS_PER_HOUR:
                 self.recent[address] = times
                 return None
             times.append(now)
@@ -198,12 +190,20 @@ class Visitors:
             # Forget the addresses that brought nobody this hour.
             for a in [a for a, ts in self.recent.items() if a != address and all(now - t >= 3600 for t in ts)]:
                 del self.recent[a]
-            os.makedirs(self.directory, exist_ok=True)
             day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
-            with open(self.path, "a", encoding="utf-8") as f:
-                f.write(f"{day} {h}\n")
-            seen.add(h)
-            return True, len(seen)
+            data["total"] += 1
+            data["days"][day] = data["days"].get(day, 0) + 1
+            os.makedirs(self.directory, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=self.directory, prefix=".tmp-", suffix=".json")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, sort_keys=True)
+                    f.write("\n")
+                os.replace(tmp, self.path)
+            except BaseException:
+                os.unlink(tmp)
+                raise
+            return data["total"]
 
 
 class Exporter:
@@ -530,7 +530,7 @@ def write_comments(directory, object_id, comments):
 class Handler(SimpleHTTPRequestHandler):
     comments_dir = None
     known = None
-    visitors = None
+    visits = None
     exporter = None
     zulip = None  # a Zulip, when the comments are kept there
     allowed_origins = frozenset()  # sites served elsewhere that may use the comment API
@@ -627,8 +627,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(200, {"available": ok, "reason": reason})
         if not self.is_api():
             return super().do_GET()
-        if self.thread() == VISITOR_THREAD:
-            return self.send_json(200, {"visitors": self.visitors.count()})
+        if self.thread() == VISIT_THREAD:
+            return self.send_json(200, {"visits": self.visits.count()})
         object_id = self.object_id()
         if object_id is not None:
             self.send_comments(200, object_id)
@@ -659,8 +659,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(status, payload)
         if not self.is_api():
             return self.send_json(405, {"error": "only comments and exports can be posted"})
-        if self.thread() == VISITOR_THREAD:
-            return self.count_visitor()
+        if self.thread() == VISIT_THREAD:
+            return self.count_visit()
         object_id = self.object_id()
         if object_id is None:
             return
@@ -724,19 +724,14 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(201, {"comments": public_list(comments), "maxBody": MAX_BODY, **shown})
 
 
-    def count_visitor(self):
-        """A browser reporting its random id, once."""
-        data = self.read_json(1024)
-        if data is None:
+    def count_visit(self):
+        """A visit: the site opened in a browser tab."""
+        if self.read_json(1024) is None:
             return
-        visitor = data.get("visitor") if isinstance(data, dict) else None
-        if not isinstance(visitor, str) or not VISITOR_RE.match(visitor):
-            return self.send_json(400, {"error": "visitor must be a random id of 16 to 64 letters, digits or -"})
-        result = self.visitors.add(visitor, self.client())
-        if result is None:
-            return self.send_json(429, {"error": "too many new visitors from one address; try later"})
-        new, n = result
-        self.send_json(201 if new else 200, {"visitors": n, "new": new})
+        n = self.visits.add(self.client())
+        if n is None:
+            return self.send_json(429, {"error": "too many visits from one address; try later"})
+        self.send_json(201, {"visits": n})
 
 
 def main(argv=None):
@@ -755,7 +750,7 @@ def main(argv=None):
     site = os.path.abspath(args.directory)
     Handler.comments_dir = os.path.abspath(args.comments)
     Handler.known = KnownIds(os.path.join(site, "blueprint.json"))
-    Handler.visitors = Visitors(Handler.comments_dir)
+    Handler.visits = Visits(Handler.comments_dir)
     Handler.exporter = Exporter(site, os.path.abspath(args.assets_root) if args.assets_root else None)
     Handler.zulip = zulip_from(site)
     Handler.allowed_origins = frozenset(o.rstrip("/") for o in args.allow_origin)

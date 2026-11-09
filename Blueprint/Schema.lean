@@ -377,10 +377,10 @@ def decodeConfig (t : TValue) (defaultName : String) :
     throw "'[site] logoInk' needs a 'logo'"
   let assets ← siteStr "assets"
   let blog ← siteStr "blog"
-  let visitors ← match site.bind (·.get? "visitors") with
+  let visits ← match site.bind (·.get? "visits") with
     | none => pure false
     | some (.bool b) => pure b
-    | some v => throw s!"'[site] visitors' must be a boolean, got a {v.typeName}"
+    | some v => throw s!"'[site] visits' must be a boolean, got a {v.typeName}"
   let (intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom) ←
     match site.bind (·.get? "intro") with
     | none => pure ("", "", none, "", none, #[], #[])
@@ -442,7 +442,7 @@ def decodeConfig (t : TValue) (defaultName : String) :
     { name, title, dir, leanModules, leanDescend, katexMacros, numbering, pdfDetails,
       pdfScopes, pdfReferences, logo, logoInk, docgen,
       intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom,
-      assets, blog, commentsZulip, commentsChannel, commentsServer, visitors }
+      assets, blog, commentsZulip, commentsChannel, commentsServer, visits }
   let mut schema := defaultSchema
   if let some v := lookup "defaultCollapse" then
     match v.asString? with

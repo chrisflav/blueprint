@@ -411,10 +411,10 @@ structure Project where
   served elsewhere (a static host) sends its comments to; empty for the site's
   own, as `blueprint serve` runs it. -/
   commentsServer : String := ""
-  /-- `[site] visitors`: the Progress page shows how many browsers have
-  visited the site, which each report once, with a random id, to the comment
-  server. -/
-  visitors : Bool := false
+  /-- `[site] visits`: the Progress page shows how many times the site has
+  been visited, each visit (the site opened in a browser tab) counted by the
+  comment server. -/
+  visits : Bool := false
   deriving Inhabited, BEq
 
 /-- A check produced by `blueprint check`. -/

@@ -647,8 +647,8 @@ def assembleSite (root : System.FilePath) (out : System.FilePath) (args : Args) 
   -- channel the comment server posts them to, and the comment server a site
   -- served elsewhere sends them to.  No credentials: the bot is the comment
   -- server's, from its own environment.  Without that file the comments are
-  -- the comment server's files.  `[site] visitors` is said there too: the
-  -- comment server counts the visitors.
+  -- the comment server's files.  `[site] visits` is said there too: the
+  -- comment server counts the visits.
   let commentsFile := out / "comments-config.json"
   if ← commentsFile.pathExists then IO.FS.removeFile commentsFile
   let server := if project.commentsServer.isEmpty then [] else
@@ -657,11 +657,11 @@ def assembleSite (root : System.FilePath) (out : System.FilePath) (args : Args) 
     [("zulip", Lean.Json.mkObj [
       ("site", Lean.Json.str project.commentsZulip),
       ("channel", Lean.Json.str project.commentsChannel)])]
-  let visitors := if project.visitors then [("visitors", Lean.Json.bool true)] else []
-  unless zulip.isEmpty && visitors.isEmpty do
-    IO.FS.writeFile commentsFile ((Lean.Json.mkObj (zulip ++ server ++ visitors)).compress ++ "\n")
-  if project.visitors then
-    IO.println "visitors: counted by the comment server, shown on the Progress page"
+  let visits := if project.visits then [("visits", Lean.Json.bool true)] else []
+  unless zulip.isEmpty && visits.isEmpty do
+    IO.FS.writeFile commentsFile ((Lean.Json.mkObj (zulip ++ server ++ visits)).compress ++ "\n")
+  if project.visits then
+    IO.println "visits: counted by the comment server, shown on the Progress page"
   unless project.commentsZulip.isEmpty do
     IO.println s!"comments: on Zulip, {project.commentsZulip} #{project.commentsChannel}, \
       through the comment server \

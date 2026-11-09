@@ -2,7 +2,7 @@
 // and a time slider driven by data/index.json.
 
 import * as M from './model.js';
-import { visitorCount } from './comments.js';
+import { visitCount } from './comments.js';
 
 export function render(root, app) {
   const { el, clear } = app;
@@ -30,17 +30,17 @@ export function render(root, app) {
 
   page.appendChild(stackBar(app, counts, total));
 
-  // ------------------------------------------------------------- visitors
-  // The site's visitors now, whatever snapshot the slider shows: for a site
-  // with `[site] visitors`, from the comment server (comments.js).
-  const visitors = el('div.stat-row.visitor-row');
-  visitors.hidden = true;
-  page.appendChild(visitors);
-  visitorCount().then((n) => {
-    if (n === null || !visitors.isConnected) return;
-    visitors.appendChild(el('div.stat.visitors', { title: 'Browsers that have opened this site' },
-      el('div.n', String(n)), el('div.l', n === 1 ? 'Visitor' : 'Visitors')));
-    visitors.hidden = false;
+  // --------------------------------------------------------------- visits
+  // The site's visits so far, whatever snapshot the slider shows: for a site
+  // with `[site] visits`, from the comment server (comments.js).
+  const visits = el('div.stat-row.visit-row');
+  visits.hidden = true;
+  page.appendChild(visits);
+  visitCount().then((n) => {
+    if (n === null || !visits.isConnected) return;
+    visits.appendChild(el('div.stat.visits', { title: 'Times this site has been opened in a browser tab' },
+      el('div.n', String(n)), el('div.l', n === 1 ? 'Visit' : 'Visits')));
+    visits.hidden = false;
   });
 
   // -------------------------------------------------------- time slider

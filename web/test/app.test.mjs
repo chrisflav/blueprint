@@ -967,54 +967,50 @@ await check('a site served elsewhere sends its comments to the server comments-c
   }
 });
 
-await check('a site with [site] visitors counts a browser once and shows the number on the Progress page', async () => {
+await check('a site with [site] visits counts a visit once per tab and shows the number on the Progress page', async () => {
   const comments = await import(path.join(webDir, 'comments.js'));
   const routes = dom.net.routes;
-  const store = new Map();
-  global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => { store.set(k, String(v)); } };
-  const thread = 'api/comments/' + encodeURIComponent(comments.VISITOR_THREAD);
-  let visitors = { visitors: true };
-  const sent = [];
+  const tab = new Map();
+  global.sessionStorage = { getItem: (k) => (tab.has(k) ? tab.get(k) : null), setItem: (k, v) => { tab.set(k, String(v)); } };
+  const thread = 'api/comments/' + encodeURIComponent(comments.VISIT_THREAD);
+  let config = { visits: true };
+  let posts = 0;
   routes.push((u, init) => {
-    if (u === 'comments-config.json') return [200, JSON.stringify(visitors), 'application/json'];
+    if (u === 'comments-config.json') return [200, JSON.stringify(config), 'application/json'];
     if (u !== thread) return null;
-    if (init.method === 'POST') sent.push(JSON.parse(init.body).visitor);
-    return [init.method === 'POST' ? 201 : 200, '{"visitors": 42}', 'application/json'];
+    if (init.method === 'POST') posts += 1;
+    return [init.method === 'POST' ? 201 : 200, '{"visits": 42}', 'application/json'];
   });
   comments.resetCommentsConfig();
   try {
     await comments.countVisit();
-    eq(sent.length, 1, 'the browser reports itself');
-    ok(/^[A-Za-z0-9-]{16,64}$/.test(sent[0]), 'with a random id the server takes');
-    eq(store.get('blueprint.visitor'), sent[0], 'which it keeps');
+    eq(posts, 1, 'opening the site is a visit');
     await comments.countVisit();
-    eq(sent.length, 1, 'once');
-    eq(await comments.visitorCount(), 42, 'the number, from the server');
+    eq(posts, 1, 'the same tab, reloaded, is the same visit');
+    tab.clear();
+    await comments.countVisit();
+    eq(posts, 2, 'a new tab is a new visit');
+    eq(await comments.visitCount(), 42, 'the number, from the server');
     await go('#/progress');
     await tick(5);
-    const stat = root.querySelector('.visitor-row .stat.visitors');
-    ok(stat && !root.querySelector('.visitor-row').hidden, 'the Progress page shows it');
+    const stat = root.querySelector('.visit-row .stat.visits');
+    ok(stat && !root.querySelector('.visit-row').hidden, 'the Progress page shows it');
     eq(stat.querySelector('.n').textContent, '42', 'as a figure');
+    eq(stat.querySelector('.l').textContent, 'Visits', 'of visits');
 
-    visitors = {};
-    store.clear();
+    config = {};
+    tab.clear();
     comments.resetCommentsConfig();
     await comments.countVisit();
-    eq(sent.length, 1, 'a site without [site] visitors counts nobody');
-    eq(await comments.visitorCount(), null, 'and has no number');
+    eq(posts, 2, 'a site without [site] visits counts nothing');
+    eq(await comments.visitCount(), null, 'and has no number');
     await go('#/graph');
     await go('#/progress');
     await tick(5);
-    ok(root.querySelector('.visitor-row').hidden, 'nor a figure on the Progress page');
-
-    visitors = { visitors: true };
-    comments.resetCommentsConfig();
-    global.localStorage = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
-    await comments.countVisit();
-    eq(sent.length, 1, 'a browser that keeps nothing is not counted on every visit');
+    ok(root.querySelector('.visit-row').hidden, 'nor a figure on the Progress page');
   } finally {
     routes.length = 0;
-    delete global.localStorage;
+    delete global.sessionStorage;
     comments.resetCommentsConfig();
   }
 });

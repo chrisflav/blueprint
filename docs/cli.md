@@ -397,7 +397,7 @@ Assembles the static website:
   `<dir>/comments-config.json`, which says where the website's comments go:
   the Zulip and channel the comment server posts them to, and the comment
   server of a site served elsewhere (see `[site.comments]` below), but nothing
-  of the bot; with `[site] visitors`, it says so there too; otherwise removes
+  of the bot; with `[site] visits`, it says so there too; otherwise removes
   it.
 
 With `--pdf` it then prepares the PDFs the website's *Export PDF* button
@@ -566,7 +566,7 @@ assets  = "site-assets"             # copied into the site as assets/
 blog    = "blog"                    # posts, Markdown and PDFs, on the Blog page
 logo    = "assets/logo.svg"         # left of the title in the top bar
 logoInk = true                      # drawn in the title's colour, default false
-visitors = true                     # count the visitors (comment server), on the Progress page; default false
+visits  = true                     # count the visits (comment server), on the Progress page; default false
 
 [site.intro]                        # shown as the website opens, then the graph
 file     = "intro.md"               # Markdown; or body = """…""" inline
@@ -830,15 +830,14 @@ browser, so a reader cannot see or use the bot.  `blueprint.toml` refuses an
 comment server reads them.  Without the two variables the comment server says
 so and keeps the comments in its files.
 
-`[site] visitors = true` counts the people who visit the site, by browser,
-and shows the number on the Progress page.  The first time a browser opens
-the site it draws a random id, keeps it (`localStorage`) and sends it once to
-the comment server (`POST api/comments/:visitors`), which counts the ids it
-has seen: one line per visitor in `visitors.txt` of its `--comments`
-directory, the day and a hash of the id, never the id itself or an address.
-One address may bring at most 30 new visitors an hour.  A browser that keeps
-nothing (some private windows) is not counted, and one person on two devices
-counts twice.  It needs the comment server, like the comments.
+`[site] visits = true` counts the visits of the site and shows the number on
+the Progress page.  A visit is the site opened in a browser tab: the page
+tells the comment server once (`POST api/comments/:visits`), and moving
+around the site or reloading it in the same tab is the same visit
+(`sessionStorage`), while a new tab or a later return is a new one.  The
+server keeps the number alone, in all and per day, in `visits.json` of its
+`--comments` directory, and no address; one address may bring at most 120
+visits an hour.  It needs the comment server, like the comments.
 
 A site needs its comment server to have comments, on Zulip or not: a static
 host cannot keep the bot's key secret.  For a site served elsewhere (GitHub

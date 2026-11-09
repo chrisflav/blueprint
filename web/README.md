@@ -405,13 +405,13 @@ unavailable. `blueprint site` leaves the script out of the published site. The s
 server makes PDFs on demand for the Export PDF dialog (`POST api/export`,
 `../docs/pdf-export.md`).
 
-With `[site] visitors` (`"visitors": true` in `comments-config.json`) the same
-server counts the visitors: `countVisit` in `comments.js`, called once at boot,
-draws a random id for the browser, keeps it in `localStorage`
-(`blueprint.visitor`) and posts it once to `api/comments/:visitors`, marking
-`blueprint.visitorCounted` when the server took it; the Progress page asks
-`GET api/comments/:visitors` (`visitorCount`) and shows the number as a
-`.stat.visitors` in a row of its own under the status bar, hidden on a site
+With `[site] visits` (`"visits": true` in `comments-config.json`) the same
+server counts the visits: `countVisit` in `comments.js`, called once at boot,
+posts to `api/comments/:visits` unless the tab's `sessionStorage` says its
+visit is counted already (`blueprint.visitCounted`, set when the server took
+it), so one tab is one visit, reloads included; the Progress page asks
+`GET api/comments/:visits` (`visitCount`) and shows the number as a
+`.stat.visits` in a row of its own under the status bar, hidden on a site
 that does not count.
 
 ### The document's pages
