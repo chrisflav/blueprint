@@ -1991,6 +1991,26 @@ await check('the top bar: the style menu and Show progress on the first row; the
   eq(aside.querySelector('select'), null, 'and no style menu');
 });
 
+await check('the browser tab shows the project\'s logo as its icon', async () => {
+  const { pageIcon } = await import(path.join(webDir, 'app.js'));
+  const icons = () => dom.document.head.querySelectorAll('link[data-logo-icon]');
+  try {
+    pageIcon({ logo: 'assets/logo.svg' });
+    eq(icons().length, 1, 'one icon');
+    const link = icons()[0];
+    eq(link.getAttribute('rel'), 'icon', 'as the page\'s icon');
+    ok(/assets\/logo\.svg$/.test(link.getAttribute('href')), 'the logo, read where the site is');
+    eq(link.getAttribute('type'), 'image/svg+xml', 'an SVG said to be one');
+    pageIcon({ logo: 'assets/logo.png' });
+    eq(icons().length, 1, 'still one, when the logo changes');
+    eq(icons()[0].getAttribute('type'), null, 'and a picture of another kind says none');
+    pageIcon({});
+    eq(icons().length, 0, 'none for a project without a logo');
+  } finally {
+    for (const n of icons()) n.parentNode.removeChild(n);
+  }
+});
+
 await check('the top bar\'s icon replays the intro, and the toolbar has no Replay intro', async () => {
   const project = app.model.project;
   const { watchBrand } = await import(path.join(webDir, 'app.js'));

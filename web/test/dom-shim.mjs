@@ -254,6 +254,7 @@ const document2 = {
   dispatch(t, ev) { for (const fn of this._listeners.get(t) || []) fn(ev); },
   title: '',
   documentElement: documentEl,
+  head: documentEl,
   body: documentEl,
 };
 

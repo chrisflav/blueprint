@@ -1102,11 +1102,35 @@ function brandLogo(project) {
   else holder.appendChild(el('img', { src: href, alt: '', decoding: 'async' }));
 }
 
+/**
+ * The browser tab's icon: the project's logo (`project.logo`), as it is, when
+ * it has one; otherwise whatever the browser shows for a site without one.
+ */
+export function pageIcon(project) {
+  const head = typeof document !== 'undefined' && document.head;
+  if (!head) return;
+  const logo = project && typeof project.logo === 'string' ? project.logo : '';
+  const href = logo ? resolveUrl(logo, snapshotBase(app)) : '';
+  let link = head.querySelector('link[data-logo-icon]');
+  if (!href) {
+    if (link) link.parentNode.removeChild(link);
+    return;
+  }
+  if (!link) {
+    link = el('link', { rel: 'icon', 'data-logo-icon': '' });
+    head.appendChild(link);
+  }
+  if (link.getAttribute('href') !== href) link.setAttribute('href', href);
+  if (/\.svg(?:[?#]|$)/i.test(logo)) link.setAttribute('type', 'image/svg+xml');
+  else link.removeAttribute('type');
+}
+
 function updateChrome() {
   const title = (app.model && (app.model.project.title || app.model.project.name)) || 'Blueprint';
   document.getElementById('project-title').textContent = title;
   document.title = title;
   brandLogo(app.model && app.model.project);
+  pageIcon(app.model && app.model.project);
   brandTitle(app.model && app.model.project);
 
   const aside = document.getElementById('topbar-aside');
