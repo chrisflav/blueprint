@@ -144,6 +144,9 @@ const opened = new Map();
 // names most often came for.
 const STARTS_OPEN = new Set(['lean']);
 
+/** A declaration's "depends on" list starts open when it has at most this many entries. */
+const DEPS_OPEN_MAX = 5;
+
 /**
  * A panel behind a disclosure, shut until the reader opens it: the long and
  * secondary listings (incident objects, attributes, the positions in the
@@ -270,7 +273,11 @@ function leanPanel(app, o, facts, want) {
         ? el('div.where', 'axioms: ', ...fact.axioms.map((a) => el('code', a)))
         : null,
       real && Array.isArray(fact.deps) && fact.deps.length
-        ? el('div.where', 'depends on: ', ...fact.deps.map((d) => el('code', d)))
+        // Folded: a theorem can depend on dozens of mapped declarations, and the
+        // list buried the declarations after it. Open when it is short.
+        ? el('details.lean-deps', { open: fact.deps.length <= DEPS_OPEN_MAX },
+            el('summary', `depends on ${fact.deps.length} declaration${fact.deps.length === 1 ? '' : 's'}`),
+            el('div.where', ...fact.deps.map((d) => el('code', d))))
         : null);
   });
   const title = facts.length === 1 ? 'Lean declaration' : `Lean declarations (${facts.length})`;

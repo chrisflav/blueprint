@@ -1021,8 +1021,8 @@ ul.lean-names code { font-family: var(--mono); font-size: .85rem; overflow-wrap:
 ul.lean-names .lean-docs { margin-left: auto; font-size: .78rem; white-space: nowrap; }
 
 /* Each declaration of the object page's Lean panel: its number, then what it
-   says in words (its docstring), large and centred, with the Lean name, kind
-   and status small beneath; the signature and the rest follow. */
+   says in words (its docstring), set left as prose is, with the Lean name,
+   kind and status small beneath; the signature and the rest follow. */
 .lean-decl {
   margin: .8rem 0;
   padding: .75rem .9rem .7rem;
@@ -1046,14 +1046,14 @@ ul.lean-names .lean-docs { margin-left: auto; font-size: .78rem; white-space: no
   color: var(--accent);
   background: var(--accent-soft);
 }
-.lean-decl-title { flex: 1; min-width: 0; text-align: center; }
+.lean-decl-title { flex: 1; min-width: 0; text-align: left; }
 .lean-notation { font-size: 1.12rem; line-height: 1.45; color: var(--fg); }
 .lean-notation > :last-child { margin-bottom: 0; }
 .lean-notation.is-name code { font-size: .95rem; overflow-wrap: anywhere; }
 .lean-meta {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   gap: .25em .5em;
   margin-top: .3em;
@@ -1063,10 +1063,25 @@ ul.lean-names .lean-docs { margin-left: auto; font-size: .78rem; white-space: no
 .lean-meta code { font-size: .78rem; overflow-wrap: anywhere; }
 .lean-meta a { color: var(--muted); }
 .lean-meta a:hover { color: var(--accent); }
-/* Room on the right as on the left of the centred title, so it centres on
-   the card rather than on what the number leaves of it. */
-.lean-decl-head::after { content: ""; flex: none; width: 1.45rem; }
 .lean-decl pre { margin: .25em 0; white-space: pre-wrap; }
+/* "depends on N declarations", folded when the list is long. */
+details.lean-deps { font-size: .82rem; color: var(--muted); margin-top: .15em; }
+details.lean-deps > summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: .35em;
+}
+details.lean-deps > summary::-webkit-details-marker { display: none; }
+details.lean-deps > summary::before {
+  content: "▸";
+  font-size: .8em;
+  transition: transform .15s;
+}
+details.lean-deps[open] > summary::before { transform: rotate(90deg); }
+details.lean-deps > summary:hover { color: var(--fg); }
+details.lean-deps[open] > .where { margin-top: .25em; }
 /* The axiom and dependency lists are runs of `code` chips with nothing but a
    margin between them, and a margin is not a break opportunity: on a theorem
    with forty Lean dependencies the row became one unbreakable 14,000px line

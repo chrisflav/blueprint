@@ -1707,6 +1707,28 @@ await check('resting on the object link opens a card of its Lean declarations', 
   eq(cards().length, 0, 'the card outlived the pointer');
 });
 
+await check('a declaration\'s "depends on" list is a fold, open only when short', async () => {
+  await go('#/object/thm-tychonoff');
+  const short = root.querySelector('.lean-decl details.lean-deps');
+  ok(short, 'the dependencies are a fold');
+  eq(short.querySelector('summary').textContent, 'depends on 3 declarations', 'its summary counts them');
+  ok(short.hasAttribute('open'), 'three are shown open');
+  eq(short.querySelectorAll('.where code').length, 3, 'one chip per dependency');
+  // A long list starts folded.
+  const fact = app.model.facts['Compact.tychonoff'];
+  const saved = fact.deps;
+  fact.deps = ['A.a', 'A.b', 'A.c', 'A.d', 'A.e', 'A.f', 'A.g'];
+  try {
+    await go('#/object/def-compact');
+    await go('#/object/thm-tychonoff');
+    const long = root.querySelector('.lean-decl details.lean-deps');
+    eq(long.querySelector('summary').textContent, 'depends on 7 declarations', 'seven counted');
+    ok(!long.hasAttribute('open'), 'seven start folded');
+  } finally {
+    fact.deps = saved;
+  }
+});
+
 await check('the object page numbers its Lean declarations and leads each with its docstring', async () => {
   await go('#/object/def-filter');
   const panel = root.querySelector('details.panel[data-fold="lean"]');
