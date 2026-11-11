@@ -212,7 +212,7 @@ def quotient (b : Blueprint) (v : View) : QuotientGraph := Id.run do
     let mut r : Array Nat := #[]
     let mut ends : Array DrawnEnd := #[]
     for e in o.boundary do
-      let rs := match b.findIdx? e.id with
+      let rs : Array Nat := match b.findIdx? e.id with
         | some j => reps[j]!
         | none => #[]
       for x in rs do
