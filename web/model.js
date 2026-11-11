@@ -524,49 +524,67 @@ export function nodeType(model, o) {
 export const STATUS_BAR_ORDER = ['proved', 'proved_with_axioms', 'stated', 'missing', 'absent'];
 
 /**
- * `progressOf` plus `mix`, the count of each derived status, so a bar can say
- * what the unproved part is.  Below an object, the counted nodes are the
- * countable leaves (countable objects at or below it with no children in the
- * order), as for `progressOf`.  A section counts its direct children instead,
- * each by its own status, leaving out those with nothing countable at or below
- * them (a remark, a concept): its progress is that of the layer right under
- * it, not of everything further down.  Memoised per kind.
+ * Whether `id` is a detail in the collapse order: something above it is a
+ * statement rather than a heading, so the document reads it inside that
+ * statement, numbered under it ("2.3.1" under "2.3" with `[site] numbering =
+ * "nested"`).  The statements under headings alone are the sketch.  Memoised
+ * on the order.
+ */
+export function isDetail(model, order, id) {
+  if (!order._details) order._details = new Map();
+  let d = order._details.get(id);
+  if (d === undefined) {
+    d = ancestorsOf(order, id).some((a) => {
+      const o = model.byId.get(a);
+      return !!o && o.kind !== order.kind && !isSectionKind(o.kind);
+    });
+    order._details.set(id, d);
+  }
+  return d;
+}
+
+/**
+ * The bar an object shows: {proved, total, mix}, `mix` the count of each
+ * derived status, so a bar can say what the unproved part is.  The counted
+ * objects are those of a countable kind, by their own status:
+ *
+ *   * a detail (`isDetail`, "2.3.1") counts itself alone, its own
+ *     formalisation, not what is further down;
+ *   * anything else, a heading or a statement of the sketch ("2.3"), counts
+ *     the statements of the sketch at or below it, so a chapter is the
+ *     fraction of its sketch that is formalised, whatever headings lie
+ *     between, and a statement of the sketch is its own status.
+ *
+ * null when nothing is counted, or the snapshot has no progress for the kind.
+ * This is the site's measure; `derived.progress` (`progressOf`, and the
+ * terminal's) counts the countable leaves below.  Memoised per kind.
  */
 export function progressMixOf(model, kind, id) {
-  const p = progressOf(model, kind, id);
-  if (!p) return null;
+  if (!model.progress[kind] || !model.byId.has(id)) return null;
   let memo = model._mixes.get(kind);
   if (!memo) model._mixes.set(kind, (memo = new Map()));
-  let out = memo.get(id);
-  if (!out) {
+  if (!memo.has(id)) {
     const order = collapseOrder(model, kind);
-    const mix = Object.create(null);
-    const tally = (x) => {
-      const s = statusOf(model, x) || 'absent';
-      mix[s] = (mix[s] || 0) + 1;
-    };
-    // A child counts when it is countable itself or has countable leaves
-    // below it, so a remark or concept right under a section is left out.
-    const children = childrenOf(order, id).filter((x) => {
+    const countable = (x) => {
       const o = model.byId.get(x);
       const k = o && model.kinds[o.kind];
-      return (k && k.countable) || progressOf(model, kind, x);
-    });
-    const self = model.byId.get(id);
-    if (children.length && self && isSectionKind(self.kind)) {
-      children.forEach(tally);
-      out = { proved: mix.proved || 0, total: children.length, mix };
-    } else {
-      for (const x of [id, ...descendantsOf(order, id)]) {
-        const o = model.byId.get(x);
-        const k = o && model.kinds[o.kind];
-        if (k && k.countable && !childrenOf(order, x).length) tally(x);
+      return !!(k && k.countable);
+    };
+    const counted = isDetail(model, order, id)
+      ? [id].filter(countable)
+      : [id, ...descendantsOf(order, id)].filter((x) => countable(x) && !isDetail(model, order, x));
+    let out = null;
+    if (counted.length) {
+      const mix = Object.create(null);
+      for (const x of counted) {
+        const s = statusOf(model, x) || 'absent';
+        mix[s] = (mix[s] || 0) + 1;
       }
-      out = { ...p, mix };
+      out = { proved: mix.proved || 0, total: counted.length, mix };
     }
     memo.set(id, out);
   }
-  return out;
+  return memo.get(id);
 }
 
 /** Everything whose boundary mentions `id`, as [{object, role}]. */
