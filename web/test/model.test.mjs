@@ -619,10 +619,10 @@ check('a remark under a top-level section is not counted in its bar', () => {
   eq(p.mix.absent, 1, 'only def-metric is absent');
 });
 
-check('a nested section counts its direct children, without remarks', () => {
-  // sec-main-induction (itself under sec-main) gets a remark and a subsection
-  // holding two lemmas: its bar is over lem-finite-subcover, lem-diagonal and
-  // sec-deep, not over the four lemma leaves below it.
+check('a heading counts the statements of the sketch below it, at any depth', () => {
+  // sec-main-induction (itself under sec-main) gets a remark, a subsection
+  // holding two lemmas, and details under lem-finite-subcover: its bar is over
+  // the four lemmas of the sketch, not the remark and not the details.
   const s = structuredClone(snapshot);
   s.schema.kinds.remark = { ...s.schema.kinds.section, countable: false };
   const refines = (src, tgt) => ({
@@ -634,19 +634,51 @@ check('a nested section counts its direct children, without remarks', () => {
     { id: 'sec-deep', kind: 'section', boundary: [], attrs: {}, body: '' },
     { id: 'lem-deep-a', kind: 'lemma', boundary: [], attrs: {}, body: '' },
     { id: 'lem-deep-b', kind: 'lemma', boundary: [], attrs: {}, body: '' },
+    { id: 'lem-detail', kind: 'lemma', boundary: [], attrs: {}, body: '' },
+    { id: 'lem-detail-deeper', kind: 'lemma', boundary: [], attrs: {}, body: '' },
     refines('rem-nested', 'sec-main-induction'),
     refines('sec-deep', 'sec-main-induction'),
     refines('lem-deep-a', 'sec-deep'),
     refines('lem-deep-b', 'sec-deep'),
+    refines('lem-detail', 'lem-finite-subcover'),
+    refines('lem-detail-deeper', 'lem-detail'),
   );
-  s.derived.progress.refines['sec-deep'] = { proved: 0, total: 2 };
-  s.derived.progress.refines['sec-main-induction'] = { proved: 2, total: 4 };
+  s.derived.status['lem-detail'] = 'stated';
+  s.derived.status['lem-detail-deeper'] = 'proved';
   const m = M.buildModel(s);
-  ok(M.ancestorsOf(M.collapseOrder(m, 'refines'), 'sec-main-induction').length > 0, 'nested');
+  const order = M.collapseOrder(m, 'refines');
+  ok(M.ancestorsOf(order, 'sec-main-induction').length > 0, 'nested');
+  ok(!M.isDetail(m, order, 'lem-deep-a'), 'a lemma under headings alone is of the sketch');
+  ok(M.isDetail(m, order, 'lem-detail'), 'a lemma under a lemma is a detail');
+  ok(M.isDetail(m, order, 'lem-detail-deeper'), 'and so is one further down');
+
   const p = M.progressMixOf(m, 'refines', 'sec-main-induction');
-  eq(p.total, 3, 'two lemmas and the subsection, not the remark');
+  eq(p.total, 4, 'the two lemmas and the two in the subsection, not the remark nor the details');
   eq(p.proved, 2, 'the two proved lemmas');
-  eq(p.mix.absent, 1, 'the unproved subsection');
+  eq(p.mix.absent, 2, 'the two lemmas of the subsection');
+
+  const top = M.progressMixOf(m, 'refines', 'sec-main');
+  eq(top.total, 5, 'thm-tychonoff and the four below sec-main-induction');
+
+  const sketch = M.progressMixOf(m, 'refines', 'lem-finite-subcover');
+  eq(sketch.total, 1, 'a statement of the sketch is itself, not its details');
+  eq(sketch.proved, 1, 'proved');
+
+  const detail = M.progressMixOf(m, 'refines', 'lem-detail');
+  eq(detail.total, 1, 'a detail is its own formalisation alone');
+  eq(detail.proved, 0, 'stated, whatever is proved below it');
+  eq(detail.mix.stated, 1, 'stated');
+
+  eq(M.progressMixOf(m, 'refines', 'rem-nested'), null, 'nothing to count under a remark');
+});
+
+check('the details under an edge are counted by themselves', () => {
+  // lem-base-case refines the uses edge thm-tychonoff -> lem-ultrafilter.
+  const order = M.collapseOrder(model, 'refines');
+  ok(M.isDetail(model, order, 'lem-base-case'), 'under an edge, not a heading');
+  const p = M.progressMixOf(model, 'refines', 'lem-base-case');
+  eq(p.total, 1, 'itself');
+  eq(p.proved, 1, 'proved');
 });
 
 check('statusCounts only counts countable kinds', () => {

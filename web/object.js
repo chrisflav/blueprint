@@ -113,8 +113,9 @@ export function render(root, app) {
     page.appendChild(el('div.panel',
       el('h3', 'Progress'),
       el('p.muted.small',
-        'The fraction of countable leaves below this object whose derived status is ',
-        el('code', 'proved'), '; for a section, of its direct children (remarks left out).'),
+        'The fraction of the statements of the sketch at or below this object (those under no other ',
+        'statement, remarks left out) whose derived status is ', el('code', 'proved'),
+        '; for a detail, a statement inside another, its own status alone.'),
       el('dl.kv', ...progs.flatMap(([k, p]) => [el('dt', k), el('dd', app.progressBar(p))]))));
   }
 
