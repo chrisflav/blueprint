@@ -886,4 +886,12 @@
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "eef5fe7c6e7061dfacba3ced80cb2b9c112db933",
    "file": "data/eef5fe7c6e7061dfacba3ced80cb2b9c112db933.json",
-   "date": "2026-11-11"}]}
+   "date": "2026-11-11"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "5b00d7c8603a2cc973221bda25e31212ddb570c3",
+   "file": "data/5b00d7c8603a2cc973221bda25e31212ddb570c3.json",
+   "date": "2026-11-16"}]}
