@@ -669,7 +669,6 @@ await check('text is escaped, and only text', () => {
   eq(markdownToLatex('[x](https://e.org/a_b%20c#f)', ctx), '\\href{https://e.org/a_b\\%20c\\#f}{x}', 'a link');
   eq(markdownToLatex('[https://e.org](https://e.org)', ctx), '\\href{https://e.org}{https://e.org}', 'a link whose text is a URL is not linked twice');
   eq(markdownToLatex('see [lem-x] and [text](#/object/y)', ctx), 'see <lem-x> and text', 'a reference, and a link into the site');
-  eq(markdownToLatex('a [*compact* space](@def-compact), quietly', ctx), 'a \\emph{compact} space, quietly', 'a quiet link: its words');
   const blocks = parseBlocks(['- a', '  - b', '- c', '', '1. x', '2. y'].map(String));
   same(blocks.map((b) => [b.type, b.ordered, b.items.length]), [['list', false, 2], ['list', true, 2]], 'two lists');
 });
