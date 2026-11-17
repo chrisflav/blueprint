@@ -168,6 +168,22 @@ export function render(root, app) {
     pin(target);
     flash(target);
   });
+  // A quiet link, `[text](@slug)`, is followed by a click with Ctrl or ⌘ held
+  // (app.js `watchQuietLinks`); to an entry of this page it jumps there, as a
+  // reference does.
+  flow.addEventListener('click', (ev) => {
+    if (ev.button || ev.shiftKey || ev.altKey || !(ev.ctrlKey || ev.metaKey)) return;
+    const a = ev.target && ev.target.closest ? ev.target.closest('a.quietlink[data-quiet]') : null;
+    if (!a) return;
+    const id = a.getAttribute('data-quiet');
+    if (levelPage(id) !== pageId) return;
+    const target = document.getElementById('doc-' + cssId(id));
+    if (!target) return; // not built yet: let the route build the page to it
+    ev.preventDefault();
+    target.scrollIntoView({ block: 'start' });
+    pin(target);
+    flash(target);
+  });
 
   // ----------------------------------------------------------------- header
   const crumbs = breadcrumbs(app, outline, pageEntry, href);

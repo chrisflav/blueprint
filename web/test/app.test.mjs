@@ -2171,6 +2171,130 @@ await check('a link to a place on the page scrolls there, a route is still follo
   }
 });
 
+// What marked makes of `[text](@slug)` and of other links, which the DOM
+// shim's innerHTML cannot build: `<a href="…">text</a>` in a paragraph.
+const quietProse = (...links) => {
+  const p = dom.document.createElement('p');
+  for (const [href, text] of links) {
+    p.appendChild(dom.document.createTextNode(' by '));
+    const a = dom.document.createElement('a');
+    a.setAttribute('href', href);
+    a.appendChild(dom.document.createTextNode(text));
+    p.appendChild(a);
+  }
+  return p;
+};
+
+await check('a quiet link reads as its words and leads where a reference to it does', async () => {
+  const { quietLinks } = await import(path.join(webDir, 'app.js'));
+  await go('#/object/def-compact');
+  const p = quietProse(['@def-filter', 'filters'], ['@no-such-object', 'nothing'],
+    ['https://e.org', 'a page'], ['#/graph', 'the graph']);
+  const text = p.textContent;
+  quietLinks(p, app.knownIds(), app.referenceFor);
+  const [quiet, broken, url, route] = p.querySelectorAll('a');
+  eq(p.textContent, text, 'the words as written: no number, no slug');
+  eq(quiet.getAttribute('class'), 'quietlink', 'a quiet link, not an objlink');
+  eq(quiet.getAttribute('data-href'), '#/document/sec-foundations?collapse=refines&focus=def-filter',
+    'where [def-filter] leads: its level in the document');
+  eq(quiet.getAttribute('href'), null, 'no address of the browser\'s: to it, its words are the prose\'s');
+  eq(quiet.getAttribute('data-quiet'), 'def-filter', 'the object it names');
+  ok(/^Definition 1\.2 \((Ctrl|⌘)\+click to open\)$/.test(quiet.getAttribute('title')),
+    `the tooltip says what and how: ${quiet.getAttribute('title')}`);
+  eq(preview.previewTarget(app.model, quiet), null, 'no card on hover');
+  eq(broken.getAttribute('class'), 'quietlink broken', 'a slug that resolves nowhere');
+  eq(broken.getAttribute('href') + ' ' + broken.getAttribute('data-href'), 'null null', 'leads nowhere');
+  eq(broken.getAttribute('title'), 'no-such-object does not resolve to an object', 'and says so');
+  eq(url.getAttribute('class') + ' ' + url.getAttribute('href'), 'null https://e.org', 'a link to a page is markdown\'s');
+  eq(route.getAttribute('class') + ' ' + route.getAttribute('href'), 'null #/graph', 'and so is a route');
+  // In the graph's side panel and cards, the level the graph draws it at.
+  await go('#/graph?collapse=refines&sel=def-compact');
+  const g = quietProse(['@thm-tychonoff', 'Tychonoff']);
+  quietLinks(g, app.knownIds(), app.referenceFor);
+  const q = new URLSearchParams(g.querySelector('a').getAttribute('data-href').split('?')[1]);
+  eq(q.get('sel') + ' ' + q.get('expand'), 'thm-tychonoff sec-main', 'the graph: its sections opened, it selected');
+  await go('#/object/def-compact');
+});
+
+await check('a quiet link is followed only by a click with Ctrl or ⌘ held, in this tab', async () => {
+  const { quietLinks, watchQuietLinks } = await import(path.join(webDir, 'app.js'));
+  await go('#/object/def-compact');
+  const prose = dom.document.createElement('div');
+  prose.appendChild(quietProse(['@def-filter', 'filters'], ['@no-such-object', 'nothing'], ['#/graph', 'the graph']));
+  quietLinks(prose, app.knownIds(), app.referenceFor);
+  watchQuietLinks(prose);
+  const [quiet, broken, route] = prose.querySelectorAll('a');
+  const click = (node, ev = {}) => fire(prose, 'click', { target: node, button: 0, ...ev });
+  const before = global.location.hash;
+  try {
+    for (const keys of [{}, { shiftKey: true }, { altKey: true }, { ctrlKey: true, shiftKey: true }]) {
+      ok(click(quiet, keys).defaultPrevented, `${JSON.stringify(keys)}: the browser followed it`);
+      eq(global.location.hash, before, `${JSON.stringify(keys)}: a click went somewhere`);
+    }
+    ok(click(quiet, { button: 1, ctrlKey: true }).defaultPrevented, 'another button: not followed');
+    eq(global.location.hash, before, 'another button went somewhere');
+    ok(click(broken, { ctrlKey: true }).defaultPrevented && global.location.hash === before, 'a broken one leads nowhere');
+    ok(click(quiet, { ctrlKey: true }).defaultPrevented, 'Ctrl: the browser opened a tab');
+    eq(global.location.hash, quiet.getAttribute('data-href'), 'Ctrl: followed in this tab');
+    global.location.hash = before;
+    ok(click(quiet, { metaKey: true }).defaultPrevented, '⌘: the browser opened a tab');
+    eq(global.location.hash, quiet.getAttribute('data-href'), '⌘: followed in this tab');
+    global.location.hash = before;
+    ok(!click(route).defaultPrevented, 'any other link is left alone');
+    // The pointer shows a hand over it only while the key is down.
+    const html = dom.document.documentElement;
+    fire(prose, 'keydown', { key: 'Control', ctrlKey: true });
+    ok(html.classList.contains('quiet-follow'), 'Ctrl down');
+    fire(prose, 'keyup', { key: 'Control', ctrlKey: false });
+    ok(!html.classList.contains('quiet-follow'), 'Ctrl up');
+    fire(prose, 'pointerover', { metaKey: true });
+    ok(html.classList.contains('quiet-follow'), '⌘ held on the way in');
+    fire(prose, 'pointerover', {});
+    ok(!html.classList.contains('quiet-follow'), 'and let go');
+  } finally {
+    global.location.hash = before;
+    dom.document.documentElement.classList.remove('quiet-follow');
+  }
+});
+
+await check('in the document a quiet link to an entry of the page jumps to it, with Ctrl held', async () => {
+  await go('#/document/sec-main');
+  const flow = root.querySelector('.doc-flow');
+  const p = quietProse(['@thm-tychonoff', 'Tychonoff'], ['@def-filter', 'filters']);
+  flow.appendChild(p);
+  const { quietLinks } = await import(path.join(webDir, 'app.js'));
+  quietLinks(p, app.knownIds(), app.referenceFor);
+  const [here, there] = p.querySelectorAll('a');
+  const entry = root.querySelector('#doc-thm-tychonoff');
+  let scrolled = 0;
+  entry.scrollIntoView = () => { scrolled += 1; };
+  // From the flow up to the document, as the browser hands a click on.
+  const click = (target, keys = {}) => {
+    const ev = fire(flow, 'click', { target, button: 0, ...keys });
+    for (const fn of dom.document._listeners.get('click') || []) fn(ev);
+    return ev;
+  };
+  const before = global.location.hash;
+  try {
+    eq(here.getAttribute('data-href'), '#/document/sec-main?collapse=refines&focus=thm-tychonoff', 'its level is this page');
+    ok(click(here).defaultPrevented, 'a click was followed');
+    eq(scrolled, 0, 'a click scrolled');
+    eq(global.location.hash, before, 'a click went somewhere');
+    ok(click(here, { ctrlKey: true }).defaultPrevented, 'Ctrl: the browser opened a tab');
+    eq(scrolled, 1, 'Ctrl: scrolled to the entry');
+    eq(global.location.hash, before, 'without leaving the page');
+    eq(app.route.id, 'sec-main', 'still the chapter\'s page');
+    ok(click(there, { ctrlKey: true }).defaultPrevented, 'Ctrl, to another page: the browser opened a tab');
+    eq(global.location.hash, '#/document/sec-foundations?collapse=refines&focus=def-filter', 'that page, at it');
+    eq(scrolled, 1, 'nothing on this page scrolled');
+  } finally {
+    delete entry.scrollIntoView;
+    p.parentNode.removeChild(p);
+    global.location.hash = before;
+  }
+  await go('#/document');
+});
+
 await check('`/` focuses the top bar\'s search, and on the graph the graph\'s own', async () => {
   const focused = [];
   const spy = (e, name) => { e.focus = () => focused.push(name); e.select = () => {}; };

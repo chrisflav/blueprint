@@ -1013,6 +1013,25 @@ if "$BP" check --root "$TMP/scratch" > /dev/null 2>&1; then
 else
   bad "the renamed project still checks out"
 fi
+# A quiet link, `[text](@slug)`: `check` reports one to nothing (and none in
+# maths), `rename` rewrites one to the object renamed.
+cp -r examples/minimal "$TMP/quiet"
+printf '\nBy [adding](@add), [*it*](@add "a title") and [nothing](@no-such), not $[a](@b)$.\n' \
+  >> "$TMP/quiet/blueprint/add-comm.md"
+"$BP" check --root "$TMP/quiet" > "$TMP/quiet.check" 2>&1
+if grep -q "warning: \[bad-link\] .*(@no-such)" "$TMP/quiet.check" \
+   && [ "$(grep -c "bad-link" "$TMP/quiet.check")" -eq 1 ]; then
+  ok "check reports a quiet link to nothing, and only that"
+else
+  bad "check reports a quiet link to nothing, and only that"
+  cat "$TMP/quiet.check"
+fi
+if "$BP" rename add plus --root "$TMP/quiet" > /dev/null 2>&1 \
+   && grep -qF 'By [adding](@plus), [*it*](@plus "a title")' "$TMP/quiet/blueprint/add-comm.md"; then
+  ok "rename rewrites quiet links"
+else
+  bad "rename rewrites quiet links"
+fi
 
 # ------------------------------------------------------------------- diff
 # Two copies of examples/induction, one of them edited, exercise every

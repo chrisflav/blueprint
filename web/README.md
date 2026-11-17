@@ -696,6 +696,27 @@ default order on the object page. The slug stays the link's tooltip.
   unnumbered, under their alphabetic labels, sorted by them
   (`referenceLabels`, `referenceMarkdown` and `parseCitation` in `model.js`).
 
+A *quiet link*, `[text](@slug)` in prose, links words of the prose rather
+than a number: "every [compact Hausdorff space](@def-ch) is normal" reads
+exactly as the prose around it, in its colour and weight, with no underline
+(`quietLinks` in `app.js`, `a.quietlink` in `style.css`).
+
+* Under the pointer it is underlined, and its tooltip says what it leads to
+  and how: "Definition 1.2 (Ctrl+click to open)". It opens no preview card.
+* A click on it does nothing. A click with Ctrl held, ⌘ on a Mac, follows
+  it in this tab, to where `[slug]` would lead (`watchQuietLinks`); in the
+  document, to an entry of the page on screen, it scrolls there as a
+  reference does. While Ctrl or ⌘ is down, the pointer over it is a hand
+  (`quiet-follow` on `<html>`).
+* Its address is kept in `data-href`, not `href`, so the browser treats its
+  words as text: a press and a drag select them rather than drag a link, no
+  address shows under the pointer, a middle click opens no tab, and Tab
+  passes it by. A touch has no Ctrl: on a phone it is text.
+* A slug that resolves nowhere leaves the words plain, with no underline;
+  `blueprint check` reports it as `bad-link`. The PDF sets the words alone.
+  Comments have no quiet links: their sanitiser drops the `@` address, as
+  it drops every address it does not keep.
+
 ### Export PDF
 
 The top bar's **Export PDF** button (also on every document page, next to
