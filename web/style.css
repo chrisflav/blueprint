@@ -945,6 +945,13 @@ dl.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 a.objlink { font-weight: 500; }
 a.objlink.broken { color: var(--lv-missing, var(--st-missing)); text-decoration: line-through dotted; cursor: help; }
 
+/* A quiet link, `[text](@slug)` (app.js `quietLinks`): set as the words
+   around it, underlined only under the pointer, and the pointer a hand only
+   while Ctrl or ⌘ is held, which a click needs to follow it. */
+a.quietlink, a.quietlink:hover { color: inherit; text-decoration: none; cursor: text; }
+a.quietlink[data-href]:hover { text-decoration: underline; }
+html.quiet-follow a.quietlink[data-href]:hover { cursor: pointer; }
+
 /* The card a link to an object shows while the pointer rests on it
    (preview.js): its head, the prose, scrolling when it is long, and a foot.
    Placed by the script, against the window. */

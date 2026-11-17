@@ -177,6 +177,8 @@ const SLUG_TEST = new RegExp(LINK_PATTERN);
  *   2. KaTeX auto-render (so maths is out of the way)
  *   3. `[slug]` -> a cross reference ("Definition 1.2.1") linking to the
  *      object page
+ *   4. `[text](@slug)` -> a quiet link, the text set as the prose around it
+ *      (see `quietLinks`)
  * `known` is a Set of existing ids; unknown slugs get a `broken` class.
  * `refs` says how a reference reads and where it leads (see `linkifySlugs`);
  * left out, it is `pageReferences`, the numbering of the active collapse
@@ -206,6 +208,7 @@ export function renderBody(target, text, known, refs, { untrusted = false } = {}
   }
   renderMath(target);
   linkifySlugs(target, known, refs === undefined ? pageReferences : refs);
+  quietLinks(target, known, refs === undefined ? pageReferences : refs);
   if (!untrusted) foldProofs(target);
   return target;
 }
@@ -645,6 +648,43 @@ export function linkifySlugs(root, known, refs) {
   }
 }
 
+// The key a quiet link is followed with: Ctrl, or ⌘ on a Mac, where a click
+// with Ctrl held opens the context menu.
+const FOLLOW_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') ? '⌘' : 'Ctrl';
+
+/**
+ * A quiet link, `[text](@slug)` in prose: words that lead to the object they
+ * name without looking like a link.  marked makes it an `<a href="@slug">`;
+ * here its address becomes the one a `[slug]` reference to the same object
+ * has (`refs`), kept in `data-href` rather than `href`, so that the browser
+ * treats its words as the prose around it: a press and a drag select them, a
+ * click, any button, does nothing, no address shows under the pointer, and the
+ * Tab key passes it by.  The `quietlink` class sets it as that prose too,
+ * underlined only under the pointer (style.css), and a click with Ctrl held,
+ * ⌘ on a Mac, follows it (`watchQuietLinks`).  It previews nothing.  A slug
+ * that resolves to no object leaves its words alone, leading nowhere.  A
+ * comment's links have lost an `@` address to `setSanitizedHtml` already, so
+ * none is quiet.
+ */
+export function quietLinks(root, known, refs) {
+  for (const a of root.querySelectorAll('a[href^="@"]')) {
+    const slug = a.getAttribute('href').slice(1);
+    const ok = slug !== '' && (!known || known.has(slug));
+    a.removeAttribute('href');
+    a.setAttribute('class', 'quietlink' + (ok ? '' : ' broken'));
+    if (!ok) {
+      a.setAttribute('title', `${slug} does not resolve to an object`);
+      continue;
+    }
+    const ref = refs ? refs(slug) : null;
+    const o = app.model && app.model.byId.get(slug);
+    const name = ref ? model.referenceText(ref) : o ? model.titleOf(o) : slug;
+    a.setAttribute('data-href', (ref && ref.href) || objectHref(slug));
+    a.setAttribute('data-quiet', slug);
+    a.setAttribute('title', `${name} (${FOLLOW_KEY}+click to open)`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // shared bits of UI
 // ---------------------------------------------------------------------------
@@ -1043,6 +1083,34 @@ export function watchAnchors(root = typeof document !== 'undefined' && document)
   });
 }
 
+/**
+ * A quiet link (`quietLinks`) is followed only by a click with Ctrl held, or
+ * ⌘ on a Mac, and then in this tab, as a click on a `[slug]` reference is
+ * followed; any other click on it does nothing.  A page that follows one
+ * itself (the document, to an entry on the page on screen) has prevented the
+ * click before it gets here.  While either key is down `<html>` carries
+ * `quiet-follow`, so that the pointer over a quiet link shows that it can be
+ * followed (style.css).
+ */
+export function watchQuietLinks(root = typeof document !== 'undefined' && document) {
+  if (!root) return;
+  root.addEventListener('click', (ev) => {
+    const a = ev.target && ev.target.closest && ev.target.closest('a.quietlink');
+    if (!a || ev.defaultPrevented) return;
+    ev.preventDefault();
+    if (ev.button || ev.shiftKey || ev.altKey || !(ev.ctrlKey || ev.metaKey)) return;
+    const href = a.getAttribute('data-href');
+    if (href) location.hash = href;
+  });
+  const html = document.documentElement;
+  const follow = (ev) => html.classList.toggle('quiet-follow', !!(ev.ctrlKey || ev.metaKey));
+  root.addEventListener('keydown', follow);
+  root.addEventListener('keyup', follow);
+  // A key pressed while another window had the focus is known on the way in.
+  root.addEventListener('pointerover', follow);
+  window.addEventListener('blur', () => html.classList.remove('quiet-follow'));
+}
+
 /** Say on the top bar's icon what a click on it does, when it replays the intro. */
 function brandTitle(project) {
   const brand = typeof document !== 'undefined' && document.querySelector('.brand');
@@ -1357,6 +1425,7 @@ async function boot() {
   watchTopbar();
   watchBrand();
   watchAnchors();
+  watchQuietLinks();
   applyShowProgress(currentShowProgress());
   const url = dataUrlFromQuery();
   app.dataUrlOriginal = url;

@@ -396,7 +396,10 @@ def cmdRename (root : System.FilePath) (args : Args) : IO UInt32 := do
           unless hasExplicitId front do
             front := #[s!"id       = \"{new}\""] ++ front
         let rest := rest.map fun line =>
-          replaceAll line ("[" ++ old ++ "]") ("[" ++ new ++ "]")
+          let line := replaceAll line ("[" ++ old ++ "]") ("[" ++ new ++ "]")
+          -- quiet links, `[text](@old)` and `[text](@old "title")`
+          let line := replaceAll line ("](@" ++ old ++ ")") ("](@" ++ new ++ ")")
+          replaceAll line ("](@" ++ old ++ " ") ("](@" ++ new ++ " ")
         let out := String.intercalate "\n"
           (["+++"] ++ front.toList ++ ["+++"] ++ rest.toList)
         if out != text then

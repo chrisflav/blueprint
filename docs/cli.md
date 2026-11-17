@@ -66,7 +66,8 @@ kind needs.  Slashes in `id` become `~` in the file name.
 
 Rewrites every reference to `old` in every source file: front matter strings
 (including `old` appearing as one `/` or `~` separated segment of a derived
-id), sugar values, and `[old]` links in bodies.  The file that declares the
+id), sugar values, and `[old]` links and `[text](@old)` quiet links in
+bodies.  The file that declares the
 object gets `new` as its `id` and `old` appended to its `aliases`.  Files are
 never renamed or moved; if the id used to come from the file name, an
 explicit `id` key is inserted instead.
@@ -974,6 +975,17 @@ directory when there is one, so sections nest.
 **Links.**  `[slug]` in a body is resolved against the object set and
 reported as `bad-link` when it does not resolve.  It creates no edge.
 `[text](url)`, `![x]` and `\[` are left alone.
+
+**Quiet links.**  `[text](@slug)` links the words `text` to `slug` without
+setting them apart from the prose: the website shows them as the words
+around them, underlined only under the pointer, and a click on them does
+nothing; a click with Ctrl held (⌘ on a Mac) goes where `[slug]` would.
+The PDF sets the words alone.  Like `[slug]`, it is reported as `bad-link`
+when `slug` does not resolve (maths is skipped) and creates no edge.
+
+```markdown
+Every [compact Hausdorff space](@def-compact-hausdorff) is normal.
+```
 
 **References.**  Each entry of the bibliography is an object of kind
 `reference`, with the fields BibTeX gives it: `author` and `editor` (a list

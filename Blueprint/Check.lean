@@ -108,6 +108,32 @@ def extractLinks (body : String) : Array String :=
   let cs := body.toList
   scanLinks cs.length cs ' ' #[]
 
+/-- Scan a body for the targets of quiet links, `[text](@slug)`: the address
+after the `@`, up to the closing parenthesis or a title.  Maths is skipped, as
+for `[slug]`. -/
+private def scanQuietLinks : Nat → List Char → Char → Array String → Array String
+  | 0, _, _, acc => acc
+  | _, [], _, acc => acc
+  | fuel + 1, c :: rest, prev, acc =>
+    if c == '$' && prev != '\\' then
+      match rest with
+      | '$' :: r => scanQuietLinks fuel (skipMath fuel r true) '$' acc
+      | r => scanQuietLinks fuel (skipMath fuel r false) '$' acc
+    else if c == ']' && prev != '\\' then
+      match rest with
+      | '(' :: '@' :: r =>
+        let slug := String.ofList (r.takeWhile fun d => d != ')' && !d.isWhitespace)
+        scanQuietLinks fuel r '@' (acc.push slug)
+      | _ => scanQuietLinks fuel rest c acc
+    else scanQuietLinks fuel rest c acc
+
+/-- The targets of the quiet links, `[text](@slug)`, in a body, in order of
+appearance.  The website sets one as the words around it, followed only by a
+click with Ctrl held. -/
+def extractQuietLinks (body : String) : Array String :=
+  let cs := body.toList
+  scanQuietLinks cs.length cs ' ' #[]
+
 /-! ## Structural checks -/
 
 /-- A canonical rendering of a boundary, used for the `unique` constraint. -/
@@ -242,6 +268,12 @@ def structuralChecks (b : Blueprint) : Array Check := Id.run do
       if !b.contains l then
         cs := cs.push <| Check.warning "bad-link"
           s!"{o.source.file}: '{o.id}' links to [{l}], which is not an object" #[o.id]
+  -- quiet links in prose, `[text](@slug)`
+  for o in b.objects do
+    for l in sortDedup (extractQuietLinks o.body) do
+      if !b.contains l then
+        cs := cs.push <| Check.warning "bad-link"
+          s!"{o.source.file}: '{o.id}' links to (@{l}), which is not an object" #[o.id]
   return cs
 
 /-! ## View consistency lints -/
