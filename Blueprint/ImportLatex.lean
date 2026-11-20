@@ -235,6 +235,13 @@ def slugify (s : String) : String := Id.run do
   while out.endsWith "-" do out := (out.dropEnd 1).copy
   return (if out.isEmpty then "x" else out)
 
+/-- The id a `\label` gives: the label itself when it is already an id (as the
+labels the graph editor writes are, `sec-rings--lemma-1` included), else its
+slug. -/
+def labelId (l : String) : String :=
+  let l := trim l
+  if !l.isEmpty && l.all slugOk && !l.startsWith "-" && !l.endsWith "-" then l else slugify l
+
 /-- Strip LaTeX markup crudely, for turning a title into a slug. -/
 def plainish (s : String) : String := Id.run do
   let cs := toChars s
@@ -325,6 +332,25 @@ def readDecl (cs : Chars) (name : String) (i : Nat) : (Option (Sum (String × St
         (match braceArg cs j with | some (_, _, n) => n | none => j)
       else j
     (none, j)
+
+/-- The commands a blueprint annotates its statements with.  A full document
+declares them (as no-ops, for printing); they are annotations, not maths, and
+never become KaTeX macros. -/
+def annotationMacros : Array String :=
+  #["\\lean", "\\leanok", "\\uses", "\\notready", "\\mathlibok", "\\proves", "\\alsoIn",
+    "\\discussion"]
+
+/-- The part of a full document between `\begin{document}` and
+`\end{document}`; a document without them (a `leanblueprint` `content.tex`)
+whole.  The preamble is read for its declarations only. -/
+def documentBody (cs : Chars) : Chars :=
+  let b := toChars "\\begin{document}"
+  let i := findPat cs 0 cs.size b
+  if i == cs.size then cs
+  else
+    let start := i + b.size
+    let stop := findPat cs start cs.size (toChars "\\end{document}")
+    cs.extract start stop
 
 /-- Collect every macro and `\newtheorem` in a document. -/
 def collectDecls (cs : Chars) (init : Decls) : Decls := Id.run do
@@ -1097,7 +1123,7 @@ def buildObjects (items : Array Item) :
     match it with
     | .sec lvl rawTitle label =>
       let base := match label with
-        | some l => slugify l
+        | some l => labelId l
         | none => slugify (plainish rawTitle)
       let (id, u) := uniqueId used base
       used := u
@@ -1115,7 +1141,7 @@ def buildObjects (items : Array Item) :
       let label := firstLabel cs
       let sec := path.back?.getD "x"
       let base ← match label with
-        | some l => pure (slugify l)
+        | some l => pure (labelId l)
         | none => do
           unlabelled := unlabelled + 1
           let key := sec ++ "\u0000" ++ env
@@ -1424,8 +1450,9 @@ def runImport (o : ImportOpts) : IO ImportReport := do
     decls := collectDecls (toChars (stripComments (← IO.FS.readFile f))) decls
   let cs := toChars doc
   decls := collectDecls cs decls
+  decls := { decls with macros := decls.macros.filter (fun (n, _) => !annotationMacros.contains n) }
   let thmEnvs := sortDedup (builtinTheoremEnvs ++ decls.theorems)
-  let items := scanDoc thmEnvs cs
+  let items := scanDoc thmEnvs (documentBody cs)
   let (objs, labels, dups, unlabelled) := buildObjects items
   let ctx : Ctx := { labels }
   let (files, st, rep) := emitFiles ctx objs
