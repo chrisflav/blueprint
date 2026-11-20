@@ -157,6 +157,21 @@ converter did not understand is counted in the report, so the loss is
 visible.  `examples/latex-import` is a worked example with its expected
 output committed next to it, and `docs/cli.md` is the reference.
 
+## Editing the graph
+
+The website has an opt-in *edit mode* for reorganising a blueprint's dependency
+graph — typically one imported as it stands from a paper's LaTeX — and writing
+the reorganised argument out as LaTeX again.  Press `e` on the site (or
+*Edit graph* behind the graph's Filters, or open it with `?edit=1`): delete a
+node (reconnecting what used it to what it used), replace or edit it inline,
+add nodes and dependencies (Shift+drag from one node to another), split a node
+into smaller lemmas that other nodes can reuse, merge nodes — each step
+undoable.  The edits are a log kept in the browser and exported or imported as
+an edit file; the snapshot is never changed, and with edit mode off the site
+is exactly the reading site.  *Export TeX* writes the edited blueprint as a
+`leanblueprint` LaTeX document that `blueprint import-latex` reads back into
+the edited graph.  `docs/graph-edit.md` is the reference.
+
 ## History and the website
 
 The compiled snapshot is the whole interchange format, so everything about

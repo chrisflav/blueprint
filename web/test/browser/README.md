@@ -119,3 +119,28 @@ contain is reported as `SKIP` with the reason rather than silently passing.
   page and gets the page's own module. Anything that installs document-wide
   listeners has to allow for it, as `setupPreviews` does by marking
   `<html data-previews>`; otherwise every hover is answered twice.
+
+## Edit mode: `edit-sweep.mjs`
+
+Edit mode (`../../../docs/graph-edit.md`) has a sweep of its own, in Chromium
+only (it dispatches right clicks and Shift+drags through the DevTools
+protocol). Point it at `blueprint site --root examples/paper`; with
+`--reading-origin` it also compares reading mode, box for box, with the same
+snapshot served from a site built without edit mode (the default branch's
+`web/`, say), and with `--bin` it imports what *Export TeX* wrote and checks
+the graph that comes back.
+
+```sh
+lake exe blueprint site --root examples/paper -o /tmp/site
+git archive origin/main web | tar -x -C /tmp/main-web
+BLUEPRINT_WEB_DIR=/tmp/main-web/web lake exe blueprint site --root examples/paper -o /tmp/site-main
+python3 -m http.server 8765 --directory /tmp/site &
+python3 -m http.server 8766 --directory /tmp/site-main &
+nix-shell -p chromium nodejs_22 --run "node web/test/browser/edit-sweep.mjs \
+  --origin=http://127.0.0.1:8765 --reading-origin=http://127.0.0.1:8766 \
+  --bin=.lake/build/bin/blueprint --shots=/tmp/shots"
+```
+
+`chromium({profile})` in `driver.mjs` takes the browser's profile directory;
+the sweep gives each run a fresh one, since `/tmp/bp-sweep-chromium-<port>`
+may belong to another user on a shared machine.

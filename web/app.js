@@ -923,6 +923,8 @@ const app = {
 
   /** Load a different snapshot file (time slider). */
   async showSnapshot(entry) {
+    // Edits are made on the current snapshot, not on a past one.
+    if (app.editor) await setEditing(false, { draw: false });
     if (!entry) {
       await loadInto(app.dataUrlOriginal, { sha: null });
     } else {
@@ -940,6 +942,17 @@ const app = {
 
   /** Put `text` in the top bar's search box (the search page's query). */
   setQuickSearch: (text) => setQuickSearch(text),
+
+  /**
+   * Edit mode (edit.js): the editor while it is on, null in reading mode.
+   * The pages call into it only when it is set, so with it off they draw
+   * and behave exactly as they do without it.
+   */
+  editor: null,
+  /** Enter or leave edit mode. */
+  setEditing: (on) => setEditing(on),
+  /** Draw the page on screen again, for the editor after a change. */
+  refresh: () => render(),
 
   /** Known object ids, for `[slug]` link resolution. */
   knownIds() {
@@ -1341,6 +1354,62 @@ function takesText(node) {
   return node.tagName === 'TEXTAREA' || node.tagName === 'SELECT' || !!node.isContentEditable;
 }
 
+// ---------------------------------------------------------------------------
+// edit mode
+// ---------------------------------------------------------------------------
+
+// Edit mode (edit.js, docs/graph-edit.md) is opt-in: its module, its sheet
+// and its log are loaded only when the reader asks for it — `e` anywhere
+// that is not taking text, *Edit graph* behind the graph's Filters, or
+// `?edit=1` in the page's URL — and while it is off nothing on the page
+// differs from a site without it.  Within a tab it stays on across reloads
+// (`sessionStorage`) until the reader leaves it.
+const EDIT_SESSION_KEY = 'blueprint.editing';
+let editModule = null;
+
+async function setEditing(on, { draw = true } = {}) {
+  on = !!on;
+  if (on === !!app.editor) return;
+  if (on) {
+    if (!app.model || app.viewingSha) return; // only the current snapshot is edited
+    if (!editModule) editModule = import('./edit.js');
+    let mod;
+    try {
+      mod = await editModule;
+    } catch (e) {
+      editModule = null;
+      console.error(e);
+      return;
+    }
+    if (app.editor) return;
+    app.editor = mod.enter(app);
+  } else {
+    app.editor.exit();
+    app.editor = null;
+  }
+  try {
+    if (on) sessionStorage.setItem(EDIT_SESSION_KEY, 'on');
+    else sessionStorage.removeItem(EDIT_SESSION_KEY);
+  } catch (e) { /* storage refused: it lasts as long as the page */ }
+  if (draw) render();
+}
+
+function wantsEditing() {
+  if (new URLSearchParams(location.search).get('edit') === '1') return true;
+  try { return sessionStorage.getItem(EDIT_SESSION_KEY) === 'on'; } catch (e) { return false; }
+}
+
+function watchEditKey() {
+  document.addEventListener('keydown', (ev) => {
+    if ((ev.key !== 'e' && ev.key !== 'E') || ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented) return;
+    if (takesText(ev.target)) return;
+    // Not while a dialog of the page is open.
+    if (document.querySelector('.export-overlay, .ed-overlay')) return;
+    ev.preventDefault();
+    setEditing(!app.editor);
+  });
+}
+
 /**
  * Search for `text` from the top bar: an object's id opens its page, anything
  * else the search page.  On the search page its choices (all objects or
@@ -1484,6 +1553,7 @@ async function boot() {
   watchBrand();
   watchAnchors();
   watchQuietLinks();
+  watchEditKey();
   applyShowProgress(currentShowProgress());
   const url = dataUrlFromQuery();
   app.dataUrlOriginal = url;
@@ -1547,6 +1617,7 @@ async function boot() {
     render();
   });
   render();
+  if (wantsEditing()) setEditing(true);
 }
 
 /**

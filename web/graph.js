@@ -378,6 +378,15 @@ function renderToolbar(app, st) {
         }), 'hide appendix')
       : null));
 
+  // Edit mode (edit.js; also the `e` key): behind Filters, so the graph as it
+  // opens is the reading graph, with nothing added.
+  filters.appendChild(el('div.group.tb-edit', el('button', {
+    type: 'button',
+    title: 'reorganise the graph: delete, add, split and merge nodes, edit their dependencies, ' +
+      'and export the result as TeX (key E)',
+    onclick: () => app.setEditing(!app.editor),
+  }, app.editor ? 'Leave edit mode' : 'Edit graph')));
+
   // status filter
   if (st.progress) {
     filters.appendChild(el('div.sep'));
@@ -1835,6 +1844,9 @@ function drawNode(app, box, meta, st, view) {
       fill.mix.parts.map(({ value, n }) => `\n  ${value.label}: ${n}`).join('') +
       (fill.mix.unmarked ? `\n  unmarked: ${fill.mix.unmarked}` : '') : '');
   g.appendChild(svgEl('title', title2));
+  // Edit mode (edit.js) marks what was edited and takes the clicks it
+  // needs first; in reading mode there is no editor and nothing changes.
+  if (app.editor) app.editor.decorateNode(g, o);
   wireNode(app, g, o.id, view);
   return g;
 }
@@ -1943,6 +1955,7 @@ function drawTitleStrip(app, box, g, meta, view) {
     'data-nid': box.node.id,
   });
   strip.appendChild(app.svgEl('rect', { class: 'title-hit', x: 0, y: 0, width: box.w, height }));
+  if (app.editor) app.editor.decorateNode(strip, meta.object, { strip: true });
   wireNode(app, strip, id, view);
   strip.addEventListener('mouseenter', () => hover(g, true));
   strip.addEventListener('mouseleave', () => hover(g, false));
@@ -2125,6 +2138,7 @@ function drawEdge(app, meta, pts, a, b) {
     const id = g.dataset.id;
     if (ui.app.model.byId.has(id)) select(ui.app, id);
   });
+  if (app.editor && !isSpoke) app.editor.decorateEdge(g, entity);
   return g;
 }
 
@@ -2558,6 +2572,7 @@ function renderSide(app, st, view, quot) {
             ' synthesised derived-only arcs')
           : el('li', el('b', String(quot.items.length - drawn)),
             ' relations of contents not drawn (', el('i', 'arcs of contents'), ')'))));
+    if (app.editor) app.editor.sidePanel(side, null);
     return;
   }
 
@@ -2641,6 +2656,7 @@ function renderSide(app, st, view, quot) {
   // the prose, which `renderBody` has rendered already.
   app.renderMath(heading);
   for (const list of side.querySelectorAll('ul.objlist')) app.renderMath(list);
+  if (app.editor) app.editor.sidePanel(side, o);
 }
 
 // A section behind a disclosure: the prose and the long listings shut until the

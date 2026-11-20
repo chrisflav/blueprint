@@ -1,0 +1,169 @@
+/* edit.css — edit mode only (edit.js adds this sheet when the reader enters
+   edit mode and takes it away again when they leave), so reading mode's
+   styling is style.css alone, untouched. */
+
+:root {
+  --ed-new: #2c9a62;
+  --ed-chg: #d9822b;
+  --ed-del: #d34b4b;
+  --ed-mark: #8a4fd0;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ed-new: #4cba82; --ed-chg: #e8a04f; --ed-del: #e06a6a; --ed-mark: #b48cf0; }
+}
+
+/* The stage says it is being edited: an inset rule in the editor's colour. */
+html.bp-editing .graph-stage { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+html.bp-editing #export-pdf { display: none; }
+html.ed-picking .graph-stage, html.ed-picking .gnode { cursor: crosshair; }
+
+/* What the edits touched. */
+.gnode.ed-new > .shape { stroke: var(--ed-new); stroke-width: 2.6; stroke-dasharray: 6 3; }
+.gnode.ed-changed > .shape { stroke: var(--ed-chg); stroke-width: 2.6; }
+.gnode.ed-inner > .shape { stroke: var(--ed-chg); stroke-dasharray: 2 3; }
+.gnode.ed-marked > .shape { stroke: var(--ed-mark); stroke-width: 3.4; filter: drop-shadow(0 0 3px var(--ed-mark)); }
+.gnode.selected.ed-new > .shape, .gnode.selected.ed-changed > .shape { stroke-width: 3.4; }
+
+/* The line a shift-drag draws. */
+.ed-rubber { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 90; display: none; }
+.ed-rubber line { stroke: var(--accent); stroke-width: 2.4; stroke-dasharray: 6 4; }
+.ed-rubber path { fill: var(--accent); }
+
+/* ---------------------------------------------------------------- the dock */
+
+.ed-dock {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+  font-size: .86rem;
+}
+.ed-bar, .ed-panel, .ed-hint, .ed-toast {
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  box-shadow: var(--shadow);
+}
+.ed-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 5px 6px; }
+.ed-bar button { padding: .2em .65em; font-size: .84rem; }
+.ed-title { font-weight: 700; color: var(--accent); padding: 0 .4em; white-space: nowrap; }
+.ed-warn { color: var(--lv-warning); font-weight: 600; padding: 0 .3em; cursor: help; }
+.ed-primary { color: var(--accent-fg) !important; background: var(--accent) !important; border-color: var(--accent) !important; font-weight: 600; }
+button.danger { color: var(--ed-del); border-color: color-mix(in srgb, var(--ed-del) 50%, var(--border-strong)); }
+.ed-hint { padding: 6px 10px; border-color: var(--accent); }
+.ed-hint button { margin-left: .4em; padding: .1em .5em; }
+.ed-panel { width: min(30rem, calc(100vw - 24px)); max-height: 55vh; overflow: auto; padding: .5rem .8rem .7rem; }
+.ed-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.ed-panel h3 { margin: .2rem 0; font-size: 1rem; }
+.ed-panel h4 { margin: .7rem 0 .2rem; font-size: .82rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.ed-panel ul, .ed-panel ol { margin: 0; padding-left: 1.2rem; }
+.ed-panel li { margin: .1rem 0; overflow-wrap: anywhere; }
+.ed-log li.last { font-weight: 600; }
+.ed-warnings h4 { color: var(--lv-warning); }
+.ed-id { font-family: var(--mono); font-size: .82rem; }
+.ed-gone { text-decoration: line-through; color: var(--ed-del); }
+.ed-tag { display: inline-block; font-size: .7rem; font-weight: 700; text-transform: uppercase; border-radius: 4px; padding: 0 .35em; color: #fff; }
+.ed-tag-new { background: var(--ed-new); }
+.ed-tag-chg { background: var(--ed-chg); }
+.ed-tag-del { background: var(--ed-del); }
+button.ed-link { border: 0; background: none; color: var(--accent); padding: 0 .3em; font-size: .8rem; text-decoration: underline; cursor: pointer; }
+.ed-toasts { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ed-toasts:empty { display: none; }
+.ed-toast { padding: 7px 11px; max-width: min(34rem, calc(100vw - 24px)); transition: opacity .5s; }
+.ed-toast.warn { border-color: var(--lv-warning); }
+.ed-toast.gone { opacity: 0; }
+
+/* ---------------------------------------------------------------- the menu */
+
+.ed-menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 14rem;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+  font-size: .88rem;
+}
+.ed-menu-head { padding: 4px 8px 6px; font-weight: 700; border-bottom: 1px solid var(--border); margin-bottom: 3px; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-menu-item { display: flex; width: 100%; justify-content: space-between; gap: 1.5rem; border: 0; background: none; text-align: left; padding: 5px 8px; border-radius: 5px; color: var(--fg); }
+.ed-menu-item:hover:not(:disabled), .ed-menu-item:focus-visible { background: var(--accent-soft); outline: none; }
+.ed-menu-item:disabled { color: var(--faint); }
+.ed-menu-item.danger { color: var(--ed-del); }
+.ed-menu kbd, .ed-keys kbd { font-family: var(--mono); font-size: .75rem; color: var(--muted); border: 1px solid var(--border); border-radius: 3px; padding: 0 .3em; }
+
+/* ------------------------------------------------------------- the dialogs */
+
+.ed-overlay {
+  position: fixed; inset: 0; z-index: 110;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 5vh 16px 16px; background: rgba(10, 14, 20, .42); overflow-y: auto;
+}
+.ed-dialog {
+  width: min(44rem, 100%);
+  padding: 1rem 1.2rem;
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border-strong); border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+}
+.ed-dialog.wide { width: min(72rem, 100%); }
+.ed-dialog h2 { margin: 0 0 .6rem; font-size: 1.12rem; }
+.ed-dialog h3 { margin: 0 0 .4rem; font-size: .95rem; }
+.ed-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .7rem; }
+.ed-form { display: flex; flex-direction: column; gap: .45rem; }
+.ed-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ed-row > .ed-field { flex: 1 1 9rem; min-width: 0; }
+.ed-field { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.ed-label { font-size: .76rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.ed-fhint { font-size: .78rem; color: var(--muted); }
+.ed-field input[type=text], .ed-field select, .ed-field textarea, .ed-add input, .ed-add select, .ed-chip-input {
+  font: inherit; font-size: .88rem; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--border-strong); border-radius: 5px; padding: .3em .45em; min-width: 0; max-width: 100%;
+}
+.ed-field textarea { font-family: var(--mono); font-size: .82rem; line-height: 1.45; resize: vertical; width: 100%; }
+.ed-under { display: flex; gap: .4rem; align-items: center; margin-top: -.25rem; }
+.ed-preview { width: 100%; border: 1px dashed var(--border-strong); border-radius: 5px; padding: .3rem .6rem; font-size: .9rem; }
+.ed-choices { display: flex; flex-direction: column; gap: .3rem; margin: .3rem 0 .5rem; }
+.ed-choice { display: flex; gap: .5rem; align-items: baseline; cursor: pointer; }
+.ed-check { display: inline-flex; gap: .2rem; align-items: center; font-size: .86rem; margin-right: .8rem; cursor: pointer; }
+.ed-checks { display: flex; flex-wrap: wrap; }
+.ed-chipbox { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.ed-chips { display: contents; }
+.ed-chip { display: inline-flex; align-items: center; gap: .2rem; font-family: var(--mono); font-size: .78rem; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 0 .1rem 0 .55rem; }
+button.ed-x { border: 0; background: none; padding: 0 .35em; color: var(--muted); cursor: pointer; font-size: .9rem; line-height: 1.3; }
+button.ed-x:hover { color: var(--ed-del); }
+.ed-keys { border-collapse: collapse; font-size: .88rem; }
+.ed-keys td { padding: .2rem .7rem .2rem 0; vertical-align: top; }
+.ed-keys td:first-child { white-space: nowrap; }
+
+.ed-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 1rem; }
+.ed-split-src { display: flex; flex-direction: column; gap: .45rem; }
+.ed-split-pieces { display: flex; flex-direction: column; gap: .5rem; }
+.ed-pieces { display: flex; flex-direction: column; gap: .6rem; max-height: 62vh; overflow: auto; }
+.ed-piece { border: 1px solid var(--border-strong); border-left: 3px solid var(--ed-new); border-radius: 6px; padding: .5rem .6rem; display: flex; flex-direction: column; gap: .35rem; }
+.ed-piece-head { display: flex; gap: .4rem; align-items: baseline; }
+.ed-piece-head .ed-link { margin-left: auto; }
+@media (max-width: 760px) { .ed-split { grid-template-columns: minmax(0, 1fr); } }
+
+/* --------------------------------------------- the side panel, the object page */
+
+.ed-side { border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 8px; padding: .55rem .65rem .7rem; margin: .4rem 0 .9rem; background: color-mix(in srgb, var(--accent-soft) 45%, var(--panel)); }
+.ed-side h3 { margin: 0 0 .35rem; }
+.ed-side h4 { margin: .8rem 0 .2rem; font-size: .8rem; color: var(--muted); }
+.ed-side .ed-actions { margin: .2rem 0 .5rem; }
+.ed-side .ed-actions button { padding: .2em .6em; font-size: .82rem; }
+.ed-deps { list-style: none; margin: 0; padding: 0; }
+.ed-deps li { display: flex; align-items: center; gap: .3rem; padding: .1rem 0; overflow-wrap: anywhere; }
+.ed-deps li .ed-x { margin-left: auto; }
+.ed-add { display: flex; gap: .3rem; margin-top: .3rem; flex-wrap: wrap; }
+.ed-add input { flex: 1 1 6rem; }
+.ed-add button { padding: .15em .55em; font-size: .8rem; }
+.ed-objbar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: .4rem .6rem; margin-bottom: .8rem; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--accent-soft) 45%, var(--panel)); }
+.ed-dialog button { font-size: .88rem; padding: .3em .85em; }

@@ -1705,8 +1705,9 @@ fi
 # a NixOS host without it, `nix-shell -p nodejs_22 --run ./test.sh` runs them).
 # export-compile.test.mjs needs pdflatex as well, and says so when it is not there.
 if command -v node > /dev/null 2>&1; then
-  for t in web/test/model.test.mjs web/test/app.test.mjs web/test/export.test.mjs web/test/export-compile.test.mjs; do
-    if node "$t" > "$TMP/$(basename "$t").txt" 2>&1; then
+  # edit.test.mjs takes the graph editor's TeX export round the tool itself.
+  for t in web/test/model.test.mjs web/test/app.test.mjs web/test/export.test.mjs web/test/export-compile.test.mjs web/test/edit.test.mjs; do
+    if BLUEPRINT_BIN="$BP" node "$t" > "$TMP/$(basename "$t").txt" 2>&1; then
       ok "$t: $(tail -1 "$TMP/$(basename "$t").txt")"
     else
       bad "$t"

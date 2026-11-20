@@ -133,6 +133,8 @@ export function render(root, app) {
 
   // -------------------------------------------------------------- comments
   page.appendChild(commentsPanel(app, o.id));
+  // Edit mode (edit.js) puts its commands above the heading; null in reading mode.
+  if (app.editor) app.editor.objectPage(page, o);
 }
 
 // ---------------------------------------------------------------------------
