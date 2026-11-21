@@ -249,6 +249,12 @@ attributes in the text and names carrying the `@[blueprint]` attribute. The
 extractor learns the text-side names from a `blueprint.json` built without
 facts (`blueprint build` then `blueprint extract`), or from `--names`.
 
+`blueprint extract` writes every field. A facts file written without Lean,
+to give the website source links and signatures for a project that cannot
+be built, may leave out `status`, `axioms` and the dependencies: an entry
+without `status` makes its objects' derived status `absent`, not `stated`
+(`statusOf` in `Blueprint/Status.lean`).
+
 ## diff.json
 
 What `blueprint diff --json` prints.  The two sides are matched by id and

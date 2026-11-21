@@ -1426,6 +1426,19 @@ else
   bad "serve refreshes the site before serving it"
 fi
 
+# A facts entry without a status (a facts file written without Lean, for
+# source links and signatures) leaves its object `absent`, not `stated`.
+awk '/"Induction.keyProp":/ { k = 1 } k && /"status":/ { k = 0; next } { print }' \
+  examples/induction/lean-facts.json > "$TMP/nostatus-facts.json"
+"$BP" build --root examples/induction --facts "$TMP/nostatus-facts.json" \
+  -o "$TMP/nostatus.json" > /dev/null 2>&1
+if grep -q '"key-prop": "absent"' "$TMP/nostatus.json" && grep -q '"main-theorem": "stated"' "$TMP/nostatus.json"; then
+  ok "a facts entry without a status is absent, not stated"
+else
+  bad "a facts entry without a status is absent, not stated"
+  grep -o '"key-prop": "[a-z_]*"\|"main-theorem": "[a-z_]*"' "$TMP/nostatus.json"
+fi
+
 # ---------------------------------------------------------- web fixtures
 head_ "web fixtures"
 "$BP" build --root examples/induction --facts examples/induction/lean-facts.json \
