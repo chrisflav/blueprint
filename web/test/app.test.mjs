@@ -1377,6 +1377,63 @@ await check('a citation reads as a paper sets it, "[Del74, Exp. X]", each label 
   await go('#/object/def-compact');
 });
 
+await check('a statement\'s source follows its title in its heading, its citations read and linked as in a body', async () => {
+  const saved = { model: app.model, snapshot: app.snapshot };
+  const snap = JSON.parse(JSON.stringify(app.snapshot));
+  const add = (o) => snap.objects.push({ boundary: [], attrs: {}, body: '', depth: 0, ...o });
+  add({ id: 'sec-refs', kind: 'section', attrs: { title: 'References', order: 99 } });
+  add({ id: 'del74', kind: 'reference', attrs: { author: ['P. Deligne'], title: 'La conjecture de Weil. I', year: '1974' } });
+  add({ id: 'refines/del74/sec-refs', kind: 'refines', depth: 1, boundary: [{ role: 'src', id: 'del74' }, { role: 'tgt', id: 'sec-refs' }] });
+  const def = snap.objects.find((o) => o.id === 'def-compact');
+  def.attrs.source = 'Bourbaki, after [del74] and **[del74, Thm. 1]**';
+  app.snapshot = snap;
+  app.model = modelMod1.buildModel(snap);
+  const preview = await import(path.join(webDir, 'preview.js'));
+  try {
+    await go('#/document/sec-foundations');
+    await app.rendered;
+    const h = root.querySelectorAll('section.doc-entry').find((s) => s.getAttribute('id') === 'doc-def-compact').querySelector('div.head').firstChild;
+    const title = h.querySelector('a.doc-title');
+    eq(title.querySelector('.doc-title-text').textContent, 'Compact space', 'the title, in the heading\'s link');
+    const src = h.querySelector('span.heading-source');
+    ok(src && src.parentNode === h && !title.querySelector('span.heading-source'), 'the source after it, outside the link');
+    const parens = (s) => [s.childNodes[0], s.childNodes[s.childNodes.length - 1]].map((n) => (n.nodeType === 3 ? n.nodeValue : null)).join('|');
+    eq(parens(src), ' (|)', 'in parentheses after the title, plain text');
+    ok(src.textContent.startsWith(' (Bourbaki, after [Del74]') && src.textContent.endsWith(')'), `as written: ${src.textContent}`);
+    const cite = src.querySelector('a.cite-label');
+    eq(cite && cite.textContent, 'Del74', '[id] reads as its label');
+    eq(cite.getAttribute('href'), '#/document/sec-refs?collapse=refines&focus=del74', 'and leads to its entry, as in a body');
+    eq(preview.previewTarget(app.model, cite), 'del74', 'with a preview on hover, in a heading too');
+    ok(src.querySelector('.heading-source-text').innerHTML.includes('<strong><span class="cite">&#91;<a class="objlink ref cite-label" href="#/document/sec-refs?collapse=refines&amp;focus=del74" title="del74" data-ref="del74">Del74</a>, Thm. 1&#93;</span></strong>'),
+      `a locator, as in a body, inline Markdown around it: ${src.querySelector('.heading-source-text').innerHTML}`);
+    // No title of its own (a title that is no string is none): the
+    // parenthesis stands in its place, rather than the id.
+    def.attrs.title = 42;
+    app.model = modelMod1.buildModel(snap);
+    await go('#/document/sec-foundations?collapse=refines');
+    await app.rendered;
+    const h2 = root.querySelectorAll('section.doc-entry').find((s) => s.getAttribute('id') === 'doc-def-compact').querySelector('div.head').firstChild;
+    eq(h2.querySelector('.doc-title-text'), null, 'no id for a title');
+    eq(parens(h2.querySelector('span.heading-source')), '(|)', 'the parenthesis alone');
+    ok(h2.textContent.includes('1.1 (Bourbaki') && !h2.textContent.includes('def-compact'), `after the number: ${h2.textContent}`);
+    await go('#/object/def-compact');
+    await app.rendered;
+    ok(root.querySelector('.obj-head h1').textContent.startsWith('(Bourbaki'), `the object page: ${root.querySelector('.obj-head h1').textContent}`);
+    // The object page's heading reads the same way.
+    def.attrs.title = 'Compact space';
+    app.model = modelMod1.buildModel(snap);
+    await go('#/object/def-compact');
+    await app.rendered;
+    const h1 = root.querySelector('.obj-head h1');
+    ok(h1.textContent.startsWith('Compact space (Bourbaki, after [Del74]'), `the object page too: ${h1.textContent}`);
+    eq(h1.querySelector('a.cite-label').getAttribute('data-ref'), 'del74', 'its citation linked');
+  } finally {
+    app.model = saved.model;
+    app.snapshot = saved.snapshot;
+  }
+  await go('#/object/def-compact');
+});
+
 await check('on an object page a reference reads "Definition 1.2" and leads to its level in the document', async () => {
   await go('#/object/def-compact');
   const r = refTo('def-filter');

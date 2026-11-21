@@ -194,7 +194,8 @@ Notes
   `multi-parent` [warning], `undeclared-edge` [info], `unwitnessed-edge` [info],
   `declared-not-actual` [info], `actual-not-declared` [warning], `bad-link` [warning],
   `bad-attr` [error: `hide_content` other than `true`, `false`, `"yes"`, `"no"`;
-  `serial` other than a string, a whole number or `false`],
+  `serial` other than a string, a whole number or `false`; `source` other
+  than a string],
   `hide-content-without-page` [error: `hide_content` on an object with nothing
   under it in any collapse kind].
 - `hide_content` and `serial` are attributes of every kind, whatever the kind's `attrs`

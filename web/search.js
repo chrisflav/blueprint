@@ -321,8 +321,6 @@ function treeItem(app, doc, n) {
   return li;
 }
 
-const ownTitle = (o) => (typeof o.attrs.title === 'string' && o.attrs.title ? o.attrs.title : null);
-
 /**
  * A result's line: "Section 1.2: Filters", "Lemma 1.2.3: Title", the number
  * being the link into the document (`resultHref`), as the tag is on the
@@ -335,15 +333,15 @@ function lineOf(app, doc, n) {
   if (!o) return ['Not in the document'];
   const link = (text) => el('a', { href: resultHref(app, doc, o), title: o.id }, text);
   const e = n.entry;
-  if (e && e.reference) return [link('[' + (e.label || o.id) + ']'), ownTitle(o) ? [' ', ownTitle(o)] : null];
+  if (e && e.reference) return [link('[' + (e.label || o.id) + ']'), M.ownTitle(o) ? [' ', M.ownTitle(o)] : null];
   if (e && e.text) return [link('Text')];
   if (e) {
-    const t = ownTitle(o);
+    const t = M.ownTitle(o);
     // Unnumbered by its `serial`: the kind word is the link.
     if (e.number == null) return [link(M.kindWord(o.kind)), t ? [': ', t] : null];
     return [M.kindWord(o.kind), ' ', link(e.number), t ? [': ', t] : null];
   }
-  if (o.kind === 'proof') return [link('Proof'), ownTitle(o) ? ' (' + ownTitle(o) + ')' : null];
+  if (o.kind === 'proof') return [link('Proof'), M.ownTitle(o) ? ' (' + M.ownTitle(o) + ')' : null];
   return [link(M.kindWord(o.kind)), ': ', M.titleOf(o)];
 }
 
@@ -353,7 +351,7 @@ function fillPreview(app, doc, n, target) {
   const o = n.object;
   const e = n.entry;
   const link = (text) => el('a.environment-identifier', { href: resultHref(app, doc, o) }, text);
-  const t = ownTitle(o);
+  const t = M.ownTitle(o);
   const word = e && e.number != null ? [M.kindWord(o.kind), ' ', e.number] : o.kind === 'proof' ? 'Proof' : M.kindWord(o.kind);
   const lead = e && e.text ? null : el('strong', link(word), t ? [' (', t, ')'] : null, '. ');
   const body = target.appendChild(el('div.prose.body-prose'));

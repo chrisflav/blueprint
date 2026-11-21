@@ -30,7 +30,7 @@
 // reading of the snapshot.
 
 import * as M from '../model.js';
-import { markdownToLatex, titleToLatex, titleToPlain, escapeText, escapeCode } from './markdown-tex.js';
+import { markdownToLatex, inlineMarkdownToLatex, titleToLatex, titleToPlain, escapeText, escapeCode } from './markdown-tex.js';
 import { unicodeDeclarations, isTextLetter } from './unicode.js';
 
 /** Changes whenever the TeX written for the same request could change. */
@@ -634,10 +634,10 @@ export function exportLatex(model, request, options = {}) {
     return `${title} (\\bpout{${tag}})`;
   };
 
-  const math = (span) => {
+  const math = (span, opts) => {
     if (unsafeMath(span.body)) warn('unsafe-maths', `a formula uses a TeX command no formula on the website can (${UNSAFE_TEX.exec(span.body)[0]}); it is set as its source`);
     else if (unbalancedMath(span.body)) warn('broken-maths', `a formula's braces do not pair up (${span.source.replace(/\s+/g, ' ').slice(0, 60)}); it is set as its source, as the website shows it`);
-    return mathToLatex(span);
+    return mathToLatex(span, opts);
   };
   const image = (src, alt, { block }) => {
     let res = null;
@@ -665,6 +665,9 @@ export function exportLatex(model, request, options = {}) {
   const titleCtx = { ...ctx, math: (span) => mathToLatex(span, { title: true }) };
   const titleTex = (t) => titleToLatex(t, titleCtx);
   const plainTitle = (t) => titleToPlain(t).replace(/[\\{}]/g, '');
+  // A statement's source is Markdown in a heading: its maths `$…$`, with the
+  // diagnostics a body's maths gets.
+  const sourceCtx = { ...ctx, math: (span) => math(span, { title: true }) };
 
   const out = [];
   const comment = (s) => out.push('% ' + String(s).replace(/[\r\n]+/g, ' '));
@@ -677,8 +680,16 @@ export function exportLatex(model, request, options = {}) {
     out.push(`\\addcontentsline{toc}{${HEADINGS[Math.min(level, 2)]}}{\\texorpdfstring{${number ? number + '\\quad ' : ''}${tex}}{${escapePdf(numPrefix(raw) + plain)}}}`);
   };
 
+  // "Theorem~4.2 (Title; Kato [Kat04, Thm. 12.5])": the title and the
+  // statement's source (`M.sourceOf`) share the parenthesis, as a paper sets
+  // a theorem's optional argument; the source's citations count as cited.
   const statementHead = (o, word, number) => {
-    const t = o.attrs && typeof o.attrs.title === 'string' && o.attrs.title ? ` (${titleTex(o.attrs.title)})` : '';
+    current = o.id;
+    const parts = [];
+    if (M.ownTitle(o)) parts.push(titleTex(M.ownTitle(o)));
+    const source = M.sourceOf(o);
+    if (source) parts.push(inlineMarkdownToLatex(source, sourceCtx));
+    const t = parts.length ? ` (${parts.join('; ')})` : '';
     return { lead: number == null ? escapeText(word) : `${escapeText(word)}~${escapeText(number)}`, rest: t };
   };
 

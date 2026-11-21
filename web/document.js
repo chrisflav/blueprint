@@ -266,11 +266,18 @@ export function render(root, app) {
     // is; the page's own heading too.  "Show details 1.2 →" beside it
     // leads on.
     const isSection = M.isSectionKind(o.kind);
+    // A statement's attribution to the literature follows its title, outside
+    // the heading's link, so that its citations are links of their own:
+    // "Theorem 4.2. Kato's Euler system (Kato [Kat04, Thm. 12.5])", the
+    // parentheses plain text.  Without a title the parenthesis stands in its
+    // place, rather than the id: "Theorem 4.2. (Kato [Kat04, Thm. 12.5])".
+    const source = isSection ? null : app.headingSource(o, known, refs);
+    const untitled = source && M.ownTitle(o) === null;
     const head = el('div.head',
       el('h' + hLevel, el('a.doc-title', { href: href(pageId, o.id), 'data-here': o.id },
         isSection ? null : [el('span.kindword', M.kindWord(o.kind)), ' '],
         numbered(el, num, o.kind),
-        el('span.doc-title-text', M.titleOf(o)))),
+        untitled ? null : el('span.doc-title-text', M.titleOf(o)))),
       // An entry whose children are on a page of their own leads on there,
       // beside its title.
       leadsOn ? el('a.doc-open', { href: href(o.id) }, 'Show details ', num == null ? M.titleOf(o) : num, ' →') : null,
@@ -286,7 +293,9 @@ export function render(root, app) {
       status === null ? null : app.statusBadge(status),
       entry.duplicate ? el('span.chip', 'repeated') : null);
     // Titles carry maths too ("the $2$-colimit"); render it like the bodies.
+    // The source has rendered its own.
     app.renderMath(head);
+    if (source) head.firstChild.appendChild(source);
     const section = el('section', {
       class: 'doc-entry ' + (isHead ? 'page-head' : 'depth-' + Math.min(rel, 3)) +
         (entry.duplicate ? ' dup' : '') + (isSection ? ' is-section' : ' is-statement') +

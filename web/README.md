@@ -695,6 +695,14 @@ default order on the object page. The slug stays the link's tooltip.
   with a preview on hover. The document sets the entries as a bibliography:
   unnumbered, under their alphabetic labels, sorted by them
   (`referenceLabels`, `referenceMarkdown` and `parseCitation` in `model.js`).
+* A statement's `source`, its attribution to the literature, follows its
+  title in its heading in parentheses, "Theorem 4.2. Kato's Euler system
+  (Kato [Kat04, Thm. 12.5])", in the document and on its object page, and
+  stands alone where it has no title, "Theorem 4.2. (Kato [Kat04, Thm.
+  12.5])" (`sourceOf` in `model.js`, `headingSource` and `renderInline`
+  in `app.js`). It is inline Markdown outside the heading's link, so its
+  citations and references read, link and preview as in a body. The graph's
+  labels keep the title alone.
 
 A *quiet link*, `[text](@slug)` in prose, links words of the prose rather
 than a number: "every [compact Hausdorff space](@def-ch) is normal" reads

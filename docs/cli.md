@@ -66,8 +66,10 @@ kind needs.  Slashes in `id` become `~` in the file name.
 
 Rewrites every reference to `old` in every source file: front matter strings
 (including `old` appearing as one `/` or `~` separated segment of a derived
-id), sugar values, and `[old]` links and `[text](@old)` quiet links in
-bodies.  The file that declares the
+id), sugar values, and in bodies and `source` values `[old]` links, the
+ids of citations (`[old, Thm. 1]`, `[a, old]`: every leading id that names a
+reference) and `[text](@old)` quiet links.  A link's text, `[old](url)`,
+is prose and is left alone.  The file that declares the
 object gets `new` as its `id` and `old` appended to its `aliases`.  Files are
 never renamed or moved; if the id used to come from the file name, an
 explicit `id` key is inserted instead.
@@ -592,7 +594,7 @@ channel = "blueprint comments"      # one topic per comment, named by its title
 # server = "https://comments.example.org/"   # the comment server of a site served elsewhere
 
 [kinds.theorem]                     # extends the built-in `theorem`
-attrs = ["title", "lean", "review", "tags", "order", "aliases", "owner"]
+attrs = ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]
 
 [kinds.uses]                        # a fresh kind looks the same
 boundary   = { src = "1", tgt = "1" }
@@ -892,8 +894,8 @@ the comment server answers no other site (`--allow-origin`, repeatable).
 | `proof` | `of` 1 | only `definition`, `theorem`, `proposition`, `lemma`, `corollary`, `remark`, `example` in `of` |
 
 Node kinds permit `title`, `lean`, `review`, `tags`, `order`, `aliases`,
-`owner`; edge kinds and `proof` permit the same minus `lean`.  `defaultCollapse` is
-`refines`.
+`owner`, `source` (see *Sources* below); edge kinds and `proof` permit the
+same minus `lean` and `source`.  `defaultCollapse` is `refines`.
 
 ## The authoring format
 
@@ -1042,6 +1044,38 @@ like the rest of the prose (maths, emphasis), but may not contain brackets.
 Brackets whose first part names no reference, `[m, n]`, stay text; so does
 a citation whose ids are mistyped (`[del74, del8O]` cites `del74` with the
 locator "del8O"), which no check reports.
+
+**Sources.**  `source` attributes a statement to the literature, as a paper
+does with the optional argument of a theorem environment.  Its value is
+Markdown, words and citations written as in a body:
+
+```markdown
++++
+kind   = "theorem"
+title  = "Kato's Euler system"
+source = "Kato [kato04, Thm. 12.5]"
++++
+```
+
+The heading sets it after the title.  The PDF puts both in the same
+parenthesis, "Theorem 4.2 (Kato's Euler system; Kato [Kat04, Thm. 12.5]).",
+and without a title "Theorem 4.2 (Kato [Kat04, Thm. 12.5]).".  The document
+and the object page, which set a title without parentheses, put the source
+in parentheses of its own after it, "Theorem 4.2. Kato's Euler system (Kato
+[Kat04, Thm. 12.5])", and without a title "Theorem 4.2. (Kato [Kat04, Thm.
+12.5])"; the parentheses are plain text, the citations links.  Its
+citations read, link and preview as in a body, maths in it is set, and a
+work it cites is cited: a PDF that does not write the bibliography out ends
+with that entry.  `check` reports a `[slug]` or a quiet link in it that
+resolves to no object, as in a body, and also a citation `[id, locator]` or
+`[a, b]` whose first id is not an object (`bad-link`, a warning; maths and
+numbers such as `[0, 1]` are left alone).  A body's citations are not checked
+so, since bracketed prose there, `[m, n]`, reads the same.  A `source` that
+is not a string is a `bad-attr` error.  `blueprint rename` rewrites it as it
+rewrites a body: `[old]`, every leading id of a citation that names the old
+reference (`[a, old, Thm. 1]`), and quiet links `[text](@old)`, in a
+multi-line string (`source = """…"""`) too.  The graph's labels keep the
+title alone.  A section's heading does not show it.
 
 ## The examples
 

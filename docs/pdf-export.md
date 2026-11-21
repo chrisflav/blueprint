@@ -83,11 +83,13 @@ Within the chosen part:
 Bibliography entries (kind `reference`, `docs/cli.md`) are set as
 `thebibliography` sets them, the label hanging in the margin (`\bpbibitem`),
 and a citation, `[id]`, `[a, b]` or `[a, Exp. X]`, reads as on the website,
-"[Del74, Exp. X]", each label a link to its entry.  An export that cites a
-work whose entry it does not write out in place (a chapter, say, while the
-bibliography is a section of its own) ends with a *References* section of
-those entries alone, sorted by label, so every citation in a PDF has its
-entry in it.  With `[site] pdfReferences = "all"` that section holds every
+"[Del74, Exp. X]", each label a link to its entry.  A statement's `source`
+shares its heading's parenthesis with the title, "Theorem 4.2 (Kato's Euler
+system; Kato [Kat04, Thm. 12.5]).", and what it cites counts as cited.  An
+export that cites a work whose entry it does not write out in place (a
+chapter, say, while the bibliography is a section of its own) ends with a
+*References* section of those entries alone, sorted by label, so every
+citation in a PDF has its entry in it.  With `[site] pdfReferences = "all"` that section holds every
 entry of the bibliography, cited or not, and every PDF has it; the whole
 blueprint, which writes the bibliography out in place, starts it on a new
 page instead.

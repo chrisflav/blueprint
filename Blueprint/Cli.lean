@@ -368,6 +368,30 @@ def hasExplicitId (front : Array String) : Bool :=
     | key :: _ :: _ => trim key == "id"
     | _ => false
 
+/-- Apply `f` to the lines of a front matter block that hold its `source`:
+the line of the key, and, for a multi-line string (`"""…"""` or `'''…'''`),
+every line up to the one that closes it. -/
+def mapSourceLines (f : String → String) (front : Array String) : Array String := Id.run do
+  let mut out := #[]
+  let mut closing : Option String := none -- inside a multi-line `source`
+  for line in front do
+    match closing with
+    | some d =>
+      out := out.push (f line)
+      if (line.splitOn d).length > 1 then closing := none
+    | none =>
+      match line.splitOn "=" with
+      | key :: _ :: _ =>
+        if trim key == "source" then
+          out := out.push (f line)
+          let value := trim (String.intercalate "=" ((line.splitOn "=").drop 1))
+          for d in ["\"\"\"", "'''"] do
+            -- opened, and not closed on the same line
+            if value.startsWith d && (value.splitOn d).length == 2 then closing := some d
+        else out := out.push line
+      | _ => out := out.push line
+  return out
+
 /-- `blueprint rename <old> <new>` -/
 def cmdRename (root : System.FilePath) (args : Args) : IO UInt32 := do
   match args.positional[1]?, args.positional[2]? with
@@ -381,6 +405,8 @@ def cmdRename (root : System.FilePath) (args : Args) : IO UInt32 := do
     if l.blueprint.contains new then
       throw <| IO.userError s!"an object with id '{new}' already exists"
     let declaring := (l.blueprint.find? old).filter (fun o => !o.source.anonymous)
+    -- what a citation cites: the ids of bibliography entries
+    let isRef (id : String) : Bool := (l.blueprint.find? id).any (·.kind == "reference")
     let files ← collectMarkdown (root / l.blueprint.project.dir)
     let mut touched := 0
     for (rel, path) in files do
@@ -390,16 +416,14 @@ def cmdRename (root : System.FilePath) (args : Args) : IO UInt32 := do
       | none => pure ()
       | some (front, rest) =>
         let isDeclaring := declaring.any fun o => o.source.file == relFull
-        let mut front := front.map fun line => rewriteQuoted line (rewriteSegments · old new)
+        -- a statement's `source` is Markdown as a body is, and rewritten alike
+        let mut front := mapSourceLines (renameInMarkdown isRef old new)
+          (front.map fun line => rewriteQuoted line (rewriteSegments · old new))
         if isDeclaring then
           front := recordAlias front old
           unless hasExplicitId front do
             front := #[s!"id       = \"{new}\""] ++ front
-        let rest := rest.map fun line =>
-          let line := replaceAll line ("[" ++ old ++ "]") ("[" ++ new ++ "]")
-          -- quiet links, `[text](@old)` and `[text](@old "title")`
-          let line := replaceAll line ("](@" ++ old ++ ")") ("](@" ++ new ++ ")")
-          replaceAll line ("](@" ++ old ++ " ") ("](@" ++ new ++ " ")
+        let rest := rest.map (renameInMarkdown isRef old new)
         let out := String.intercalate "\n"
           (["+++"] ++ front.toList ++ ["+++"] ++ rest.toList)
         if out != text then
