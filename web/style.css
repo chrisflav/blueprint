@@ -1584,6 +1584,27 @@ ul.objlist .role {
 .gnode.status-proved  .shape { fill: color-mix(in srgb, var(--st-proved) 18%, var(--graph-node)); stroke: var(--st-proved); }
 .gnode.status-proved_with_axioms .shape { fill: color-mix(in srgb, var(--st-proved_with_axioms) 18%, var(--graph-node)); stroke: var(--st-proved_with_axioms); }
 
+/* Provenance, when the project declares one (`[site.provenance]`, graph.js
+   `provenanceFill`): the fill says where an object comes from, in its value's
+   light colour (`--pv`, or `--pv-dark` under the dark scheme, set inline on
+   the element), and the status keeps its outline, a little heavier, and its
+   dashes; the status tints give way, so that a colour means one thing.  A
+   collapsed section is filled with a band per value inside it, as wide as
+   its share; an expanded one keeps its plain box. */
+.pv { --pv-c: var(--pv); }
+@media (prefers-color-scheme: dark) { .pv { --pv-c: var(--pv-dark); } }
+.graph-stage.provenance .gnode:not(.compound):not(.junction) > .shape { fill: var(--graph-node); }
+.graph-stage.provenance .gnode.prov:not(.compound) > .shape { fill: var(--pv-c); }
+.graph-stage.provenance .gnode.prov-mix:not(.compound) > .shape { fill: transparent; }
+/* below hovering's and selection's widths, which stay as they are */
+:where(.graph-stage.provenance) .gnode > .shape { stroke-width: 1.9; }
+.gnode .pv-band { fill: var(--graph-node); stroke: none; }
+.gnode .pv-band.pv { fill: var(--pv-c); }
+.legend.prov-outline .row .sw { background: var(--graph-node); }
+.toolbar label.chk.pv-chip { background: var(--pv-c); border-color: color-mix(in srgb, var(--pv-c) 70%, var(--fg)); color: var(--fg); }
+.toolbar label.chk.pv-chip.off { background: var(--panel); border-style: dashed; color: var(--muted); }
+.badge.prov { background: var(--pv-c); color: var(--fg); border-color: color-mix(in srgb, var(--pv-c) 70%, var(--fg)); }
+
 .gnode.compound > .shape {
   fill: var(--graph-compound);
   stroke: var(--border-strong);

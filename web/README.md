@@ -140,7 +140,8 @@ The graph route carries its full view state as query parameters:
 `collapse=<kind>`, `expand=<comma separated ids>`, `ekinds=<edge kinds>`,
 `status=<derived statuses>`, `q=<search>`, `sel=<selected id>`,
 `reduce=0` when *hide implied* is off, `inner=1` when *arcs of contents*
-is on, and `appendix=0` when *hide appendix* is on.
+is on, `appendix=0` when *hide appendix* is on, and `hide=<provenance
+values>` when the reader hides some (see *Provenance* below).
 
 The graph is drawn from `graphModel` in `model.js`: the snapshot without the
 objects of a kind with `graph = "never"` (the built-in `matter`, `hidden` and
@@ -153,6 +154,37 @@ when the snapshot has an appendix. The document, the object pages and the
 progress page read the whole snapshot; there an appendix or matter is a
 section and a hidden object is text (see below), and an object the graph
 never draws says so instead of offering *Show in graph*.
+
+### Provenance
+
+A project that declares `[site.provenance]` (`docs/cli.md`;
+`project.provenance` in the snapshot, `provenanceOf` in `model.js`) names
+one attribute whose values say where a statement comes from, each with a
+light colour and a dark one (derived from the light one by `darkFill` when
+the project gives none). Without it nothing here shows and the graph is
+drawn as it always was.
+
+* The graph fills a node with its value's colour (`provenanceFill` in
+  `graph.js`; style.css takes `--pv` or, under a dark colour scheme,
+  `--pv-dark`, set inline on the node). The fill then means the provenance
+  alone: the status tints give way to the plain fill, and the status keeps
+  its coloured outline, a little heavier, and the dashes of `missing`; the
+  key at the foot of the stage calls the statuses *outline*. A collapsed
+  section with no value of its own is filled with a band per value as wide
+  as its share of what is inside (`provenanceMixOf`: a node with a value
+  counts for what is below it, one without is looked through), and a band
+  in the plain fill for what carries none; an expanded section is never
+  filled, its contents showing their own.
+* The toolbar has, beside *Collapse all* and outside the *Filters* fold, a
+  chip per value in its colour with its label: the key to the fills and a
+  checkbox. Unticked, the objects of that value leave the graph as a hidden
+  appendix does (`outOfGraph`'s `hideValues`), and with them a section
+  without a value of its own that this empties, so hiding what is published
+  leaves the skeleton of the new argument. `hide=` keeps the choice in the
+  URL.
+* The document's headings, the object page and the graph's side panel set
+  a badge with the value's label on its colour after the kind badge
+  (`provenanceBadge` in `app.js`), whether or not the progress is shown.
 
 By default the graph draws, for two nodes A and B (statements and collapsed
 sections, at any depth; an expanded section is a box, never an end), an arc

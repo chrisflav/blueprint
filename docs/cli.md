@@ -593,6 +593,20 @@ zulip   = "https://example.zulipchat.com"
 channel = "blueprint comments"      # one topic per comment, named by its title
 # server = "https://comments.example.org/"   # the comment server of a site served elsewhere
 
+[site.provenance]                   # where a statement comes from, as graph fills
+attr = "provenance"                 # the front-matter attribute, default "provenance"
+
+[[site.provenance.values]]          # one per value, in the legend's order
+value = "published"
+label = "Published"                 # optional, default the value
+color = "#e8eef7"                   # the light fill, #rgb or #rrggbb
+dark  = "#26303d"                   # optional: the fill under a dark scheme
+
+[[site.provenance.values]]
+value = "new"
+label = "New"
+color = "#e3f1e6"
+
 [kinds.theorem]                     # extends the built-in `theorem`
 attrs = ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]
 
@@ -862,6 +876,57 @@ BLUEPRINT_ZULIP_EMAIL=… BLUEPRINT_ZULIP_KEY=… python3 web/comments-server.py
 
 and set `server` to its address: the website sends its comments there, and
 the comment server answers no other site (`--allow-origin`, repeatable).
+
+`[site.provenance]` lets a reader see at a glance which statements were
+already known and which are new.  It names one front-matter attribute,
+`attr` (`"provenance"` unless given), and its values, one
+`[[site.provenance.values]]` each: the `value` as the front matter writes it
+(not empty, no commas), the `label` the website calls it by (the value when
+not given), a light `color` and optionally a `dark` one, both `#rgb` or
+`#rrggbb`.  A statement then says where it comes from,
+
+```markdown
++++
+kind       = "theorem"
+title      = "Kato's Euler system"
+source     = "Kato [kato04, Thm. 12.5]"
+provenance = "published"
++++
+```
+
+and so may a section or a chapter.  Once declared, the attribute is every
+node kind's, whatever its `attrs` say; `check` reports a value that is not
+one of the declared ones, or one that is not a string, as `bad-attr`, and an
+object without the attribute is fine.  `attr` may not be `id`, `kind`,
+`boundary` or the name of a kind.  The declaration reaches the snapshot as
+`project.provenance`; without it nothing below shows, and the attribute is
+an unknown one as before.
+
+* **Graph.**  A node is filled with its value's colour (its `dark` one, or
+  one derived from `color` with the same hue, under a dark colour scheme).
+  The fill then says the provenance alone: the status keeps its coloured
+  outline (dashed for `missing`), drawn a little heavier, and the legend at
+  the foot of the stage calls the statuses *outline* rather than *fill*.  An
+  object without a value keeps the plain fill.  A collapsed section without
+  a value of its own is filled with a band per value, side by side, as wide
+  as its share of what is inside (each node below it counted once, one with
+  a value standing for what is below it, one without looked through to what
+  is below it), and a band in the plain fill for what carries none; with
+  nothing inside carrying a value it is plain.  An expanded section is
+  never filled: its contents are drawn in it with their own fills.  The
+  node's tooltip lists the counts.
+* **Key and filter.**  The graph's toolbar, beside *Collapse all* and not
+  folded behind *Filters*, has a chip per value in its colour with its
+  label, which is the key to the fills and a checkbox: unticked, the
+  objects of that value are left out of the graph as a hidden appendix is,
+  with what is below them and the relations touching them, and so is a
+  section without a value of its own that this leaves empty.  Hiding
+  `published` thus leaves the skeleton of the new argument.  The choice is
+  in the URL, `hide=published,modified`, as the graph's other options are.
+* **Document and object page.**  A badge with the value's label, on its
+  colour, follows the kind badge in the document's headings, on the object
+  page and in the graph's side panel; unlike the status badge it shows
+  whether or not the progress does.
 
 ### The default schema
 

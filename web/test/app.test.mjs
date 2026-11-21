@@ -2660,6 +2660,94 @@ await check('unfolding or folding a node fits the graph into the stage; a filter
   await layout('#/graph?collapse=refines');
 });
 
+await check('provenance: fills in the graph, a key in the toolbar that hides a value, a badge in the document and on the object page', async () => {
+  const w = dom.workers.created[dom.workers.created.length - 1];
+  const layout = async (hash) => {
+    await go(hash);
+    const req = lastLayoutMessage(w);
+    w.reply({ id: req.id, data: fakeLayout(JSON.parse(JSON.stringify(req.graph))) });
+    await tick(5);
+  };
+  const stage = () => root.querySelector('.graph-stage');
+  const node = (id) => root.querySelectorAll('.gnode').find((g) => g.getAttribute('data-id') === id);
+  // Without a provenance: no key, no fills of it, no badge.
+  await layout('#/graph?collapse=refines&expand=sec-foundations');
+  ok(!root.querySelector('.toolbar .tb-prov'), 'a key without a provenance');
+  ok(!stage().classList.contains('provenance'), 'the stage is marked without one');
+  ok(root.querySelectorAll('.gnode').every((g) => !g.classList.contains('prov') && !g.classList.contains('prov-mix')),
+    'a node filled without a provenance');
+
+  const saved = { model: app.model, snapshot: app.snapshot };
+  const snap = JSON.parse(JSON.stringify(app.snapshot));
+  snap.project = { ...snap.project, provenance: { attr: 'provenance', values: [
+    { value: 'published', label: 'Published', color: '#e8eef7', dark: '#26303d' },
+    { value: 'new', label: 'New', color: '#e3f1e6' }] } };
+  const mark = (id, v) => { snap.objects.find((o) => o.id === id).attrs.provenance = v; };
+  mark('def-compact', 'published');
+  mark('def-filter', 'published');
+  mark('lem-ultrafilter', 'new');
+  mark('thm-tychonoff', 'new');
+  app.snapshot = snap;
+  app.model = modelMod1.buildModel(snap);
+  try {
+    await layout('#/graph?collapse=refines&expand=sec-foundations');
+    ok(stage().classList.contains('provenance'), 'the stage is not marked');
+    const chips = root.querySelectorAll('.toolbar .tb-prov label.pv-chip');
+    eq(chips.map((c) => c.textContent).join(), 'Published,New', 'a chip per value, in order');
+    ok(!root.querySelector('.tb-filters .tb-prov'), 'the key is folded behind Filters');
+    eq(chips[0].getAttribute('style'), '--pv:#e8eef7;--pv-dark:#26303d', 'a chip in its value\'s colours');
+    ok(chips.every((c) => c.querySelector('input').hasAttribute('checked')), 'every value shown at first');
+    // An object with a value is filled with it; one without keeps the plain fill.
+    const dc = node('def-compact');
+    ok(dc.classList.contains('prov'), 'def-compact is not filled');
+    eq(dc.getAttribute('style'), '--pv:#e8eef7;--pv-dark:#26303d', 'def-compact\'s colours');
+    ok(/provenance: Published/.test(dc.querySelector('title').textContent), 'the tooltip says it');
+    ok(!node('def-net').classList.contains('prov') && !node('def-net').classList.contains('prov-mix'), 'def-net is filled');
+    ok(!node('sec-foundations').classList.contains('prov-mix'), 'an expanded section is filled');
+    // A collapsed section is filled with a band per value inside it.
+    const sm = node('sec-main');
+    ok(sm.classList.contains('prov-mix'), 'sec-main has no bands');
+    const bands = sm.querySelectorAll('rect.pv-band');
+    ok(bands.length >= 1 && bands[0].classList.contains('pv'), `sec-main's bands: ${bands.length}`);
+    eq(graphMod.provenanceFill(M.makeView(app.model, 'refines', ['sec-foundations']), 'sec-foundations', true), null,
+      'no fill for a compound');
+    eq(graphMod.provenanceFill(M.makeView(app.model, 'refines', []), 'sec-foundations', false).mix.total, 5,
+      'collapsed, its five statements');
+    // Unticking a chip hides that value, written to the URL.
+    fire(chips[0].querySelector('input'), 'change', { target: { checked: false } });
+    await tick(5);
+    eq(hashParams().get('hide'), 'published', 'hide= in the URL');
+    await layout('#/graph?collapse=refines&expand=sec-foundations&hide=published');
+    ok(!node('def-compact') && !node('def-filter'), 'the published definitions are still drawn');
+    ok(node('lem-ultrafilter') && node('def-net'), 'the rest is gone too');
+    const off = root.querySelectorAll('.toolbar .tb-prov label.pv-chip')[0];
+    ok(off.classList.contains('off') && !off.querySelector('input').hasAttribute('checked'), 'the chip shows it hidden');
+    await layout('#/graph?collapse=refines&expand=sec-foundations&hide=nonsense');
+    ok(node('def-compact'), 'an undeclared value hides something');
+    // The document and the object page: a badge after the kind's.
+    await go('#/document/sec-foundations');
+    await app.rendered;
+    const head = root.querySelectorAll('section.doc-entry').find((s) => s.getAttribute('id') === 'doc-def-compact').querySelector('div.head');
+    const badge = head.querySelector('.badge.prov');
+    eq(badge && badge.textContent, 'Published', 'the document\'s badge');
+    const before = (b) => b.parentNode.children[b.parentNode.children.indexOf(b) - 1];
+    ok(before(badge).classList.contains('kind'), 'right after the kind badge');
+    const plain = root.querySelectorAll('section.doc-entry').find((s) => s.getAttribute('id') === 'doc-def-net');
+    ok(!plain.querySelector('.badge.prov'), 'a badge for an unmarked statement');
+    await go('#/object/thm-tychonoff');
+    await app.rendered;
+    const row = root.querySelector('.obj-head div.row');
+    eq(row.querySelector('.badge.prov').textContent, 'New', 'the object page\'s badge');
+    eq(before(row.querySelector('.badge.prov')).textContent, 'theorem', 'after the kind badge');
+  } finally {
+    app.model = saved.model;
+    app.snapshot = saved.snapshot;
+  }
+  await go('#/object/def-compact');
+  ok(!root.querySelector('.obj-head .badge.prov'), 'a badge without a provenance');
+  await layout('#/graph?collapse=refines');
+});
+
 await check('a blocked worker falls back to laying out on the main thread', async () => {
   dom.workers.enabled = false;
   dom.workers.created.length = 0;

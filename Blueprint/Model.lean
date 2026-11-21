@@ -291,6 +291,21 @@ structure IntroLayer where
   arrows : Array (String × String) := #[]
   deriving Inhabited, BEq, Repr
 
+/-- One value of the provenance attribute, a `[[site.provenance.values]]`:
+what the attribute says (`"published"`), how the website names it, and the
+light fill the graph gives the objects that carry it. -/
+structure ProvenanceValue where
+  /-- The attribute's value, as the front matter writes it. -/
+  value : String
+  /-- What the graph's legend and the badges call it; the value when not given. -/
+  label : String
+  /-- The fill of its nodes, a light `#rgb` or `#rrggbb`. -/
+  color : String
+  /-- The fill under a dark colour scheme; empty for one the website derives
+  from `color`. -/
+  dark : String := ""
+  deriving Inhabited, BEq, Repr
+
 /-- Project level configuration from `blueprint.toml`. -/
 structure Project where
   /-- Short name. -/
@@ -358,6 +373,16 @@ structure Project where
   name to `<docgen>/<its module, as a path>.html#<its name>`; empty for no
   links.  Handed to the website as `project.docgen`. -/
   docgen : String := ""
+  /-- `[site.provenance] attr`: the front-matter attribute that says where a
+  statement comes from, the published literature, a modification of it, or
+  the project itself.  Empty when the project declares no `[site.provenance]`.
+  Every node kind permits it, and `blueprint check` holds its values to
+  `provenanceValues`.  Handed to the website as `project.provenance.attr`. -/
+  provenanceAttr : String := ""
+  /-- `[[site.provenance.values]]`: the values `provenanceAttr` may take, in
+  the order the website's legend lists them.  Handed to the website as
+  `project.provenance.values`. -/
+  provenanceValues : Array ProvenanceValue := #[]
   /-- What the website shows in the middle of the screen as it opens, before
   the graph: `[site.intro]` in `blueprint.toml`, Markdown with maths, pictures
   and HTML, read from its `file` or given as its `body`.  Empty for none.

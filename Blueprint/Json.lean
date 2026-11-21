@@ -131,11 +131,20 @@ def Project.introJson (p : Project) : Json :=
       | mss => [("stepMs", Json.arr (mss.map nat))]) ++
     (if p.introZoom.isEmpty then [] else [("zoom", Json.arr (p.introZoom.map layer))]))
 
+/-- The project's `[site.provenance]` as JSON, `project.provenance` in the
+snapshot: `{attr, values: [{value, label, color, dark?}]}`, `dark` left out
+when the website is to derive it. -/
+def Project.provenanceJson (p : Project) : Json :=
+  Json.mkObj [("attr", Json.str p.provenanceAttr),
+    ("values", Json.arr (p.provenanceValues.map fun v => Json.mkObj ([
+      ("value", Json.str v.value), ("label", Json.str v.label), ("color", Json.str v.color)] ++
+      (if v.dark.isEmpty then [] else [("dark", Json.str v.dark)]))))]
+
 /-- A snapshot as JSON, exactly as `docs/snapshot-format.md` describes it. -/
 def Snapshot.toJson (s : Snapshot) : Json :=
   Json.mkObj [
     ("version", Json.num (JsonNumber.fromInt s.version)),
-    -- `katexMacros`, `numbering`, `logo`, `docgen`, `sources` and `intro` are left out when the project
+    -- `katexMacros`, `numbering`, `logo`, `docgen`, `provenance`, `sources` and `intro` are left out when the project
     -- declares none, `pdfDetails` unless it is `false`, `pdfScopes` unless it
     -- names a kind or an object and `pdfReferences` unless it is set, so that a blueprint
     -- without them has exactly the `project` it had before the fields existed.
@@ -156,6 +165,8 @@ def Snapshot.toJson (s : Snapshot) : Json :=
         [("logo", Json.str s.project.logo)] ++
         (if s.project.logoInk then [("logoInk", Json.bool true)] else [])) ++
       (if s.project.docgen.isEmpty then [] else [("docgen", Json.str s.project.docgen)]) ++
+      (if s.project.provenanceAttr.isEmpty then [] else
+        [("provenance", s.project.provenanceJson)]) ++
       (if s.project.sources.isEmpty then [] else
         [("sources", objOf (s.project.sources.map fun (dir, url, rev) =>
           (dir, Json.mkObj [("url", Json.str url), ("rev", Json.str rev)])))]) ++
@@ -300,6 +311,7 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
     | some m => (objEntries m).filterMap fun (n, v) => (v.getStr?.toOption).map (n, ·)
     | none => #[]
   let intro := (field? p "intro").getD Json.null
+  let provenance := (field? p "provenance").getD Json.null
   let introNat (k : String) : Option Nat := (field? intro k).bind (·.getNat?.toOption)
   let introZoom : Array IntroLayer := match field? intro "zoom" with
     | some (.arr ls) => ls.map fun l =>
@@ -326,6 +338,12 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
       logo := fieldStrD p "logo" ""
       logoInk := fieldBoolD p "logoInk" false
       docgen := fieldStrD p "docgen" ""
+      provenanceAttr := fieldStrD provenance "attr" ""
+      provenanceValues := match field? provenance "values" with
+        | some (.arr vs) => vs.map fun v =>
+          { value := fieldStrD v "value" "", label := fieldStrD v "label" "",
+            color := fieldStrD v "color" "", dark := fieldStrD v "dark" "" }
+        | _ => #[]
       sources := match field? p "sources" with
         | some m => (objEntries m).map fun (dir, v) =>
           (dir, fieldStrD v "url" "", fieldStrD v "rev" "")

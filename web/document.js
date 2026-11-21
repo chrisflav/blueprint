@@ -290,6 +290,8 @@ export function render(root, app) {
         'data-lean': M.leanNamesOf(o).length ? o.id : null,
       }, 'object'),
       isSection ? null : app.kindBadge(o.kind),
+      // where it comes from, when the project says (`[site.provenance]`)
+      app.provenanceBadge(m, o),
       status === null ? null : app.statusBadge(status),
       entry.duplicate ? el('span.chip', 'repeated') : null);
     // Titles carry maths too ("the $2$-colimit"); render it like the bodies.

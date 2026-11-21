@@ -26,6 +26,13 @@ by editing this file first. Version 1.
     "logo": "assets/logo.svg",                   // optional, see below
     "logoInk": true,                             // optional
     "docgen": "https://org.github.io/proj/",     // optional, see below
+    "provenance": {                              // optional, see below
+      "attr": "provenance",
+      "values": [
+        { "value": "published", "label": "Published", "color": "#e8eef7", "dark": "#26303d" },
+        { "value": "new", "label": "New", "color": "#e3f1e6" }   // "dark" optional
+      ]
+    },
     "sources": {                                 // optional, see below
       ".lake/packages/mathlib/": { "url": "https://github.com/leanprover-community/mathlib4", "rev": "0df444a3…" }
     },
@@ -145,6 +152,15 @@ Notes
   full name: `<docgen>/<module, dots as slashes>.html#<name>`
   (`docgenUrl` in `web/model.js`), the module being the Lean facts'
   `module`; a declaration without facts gets no link.  Left out when unset.
+- `project.provenance` is `[site.provenance]` of `blueprint.toml`: `attr`,
+  the front-matter attribute that says where a statement comes from, and
+  its `values` in the declared order, each the `value` objects carry, its
+  `label` (the value when the project gave none), its light `color` and,
+  when the project gave one, its `dark` one (`#rgb` or `#rrggbb`).  While it
+  is declared, every node kind of `schema` lists `attr` among its `attrs`.
+  The website fills the graph's nodes with the colours, can hide the
+  objects of a value, and badges an object with its label (`provenanceOf`
+  in `web/model.js`, which derives a missing `dark`).  Left out when unset.
 - `project.sources` is not from `blueprint.toml` but from the
   `lake-manifest.json` next to it: for every package that is a git checkout
   of a `https://github.com/` repository, the directory its sources sit in
@@ -195,7 +211,8 @@ Notes
   `declared-not-actual` [info], `actual-not-declared` [warning], `bad-link` [warning],
   `bad-attr` [error: `hide_content` other than `true`, `false`, `"yes"`, `"no"`;
   `serial` other than a string, a whole number or `false`; `source` other
-  than a string],
+  than a string; the attribute of `[site.provenance]` other than one of its
+  declared values],
   `hide-content-without-page` [error: `hide_content` on an object with nothing
   under it in any collapse kind].
 - `hide_content` and `serial` are attributes of every kind, whatever the kind's `attrs`

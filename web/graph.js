@@ -70,6 +70,7 @@ function readState(app) {
     ? p.get('collapse')
     : m.defaultCollapse || m.collapseKinds[0] || null;
   const split = (k) => (p.get(k) || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const prov = M.provenanceOf(m);
   return {
     collapse,
     expand: split('expand'),
@@ -93,17 +94,21 @@ function readState(app) {
     // Draw the appendices (objects of a kind with `graph = "optional"`): on
     // unless the reader hides them.
     appendix: p.get('appendix') !== '0',
+    // The provenance values (`[site.provenance]`) whose objects the reader
+    // hides, `hide=published,modified`; only values the project declares.
+    hide: prov ? split('hide').filter((v) => prov.values.some((x) => x.value === v)) : [],
   };
 }
 
 /**
  * The model the graph draws (`M.graphModel`): the snapshot without what is
- * never drawn, and without the appendices and everything in them while those
- * are hidden.  Everything about the drawing is computed on it; what an object
- * *is* (its progress, its status) still comes from `app.model`.
+ * never drawn, and without the appendices and everything in them, or the
+ * objects of a provenance value, while those are hidden.  Everything about
+ * the drawing is computed on it; what an object *is* (its progress, its
+ * status) still comes from `app.model`.
  */
 function drawnModel(app, st) {
-  return M.graphModel(app.model, { hideOptional: !st.appendix });
+  return M.graphModel(app.model, { hideOptional: !st.appendix, hideValues: st.hide || [] });
 }
 
 const NONE = '__none__';
@@ -144,15 +149,19 @@ export function render(root, app) {
   if (!ui || !root.contains(ui.page)) mount(root, app);
   ui.app = app;
   ui.state = st;
-  if (ui.legendProgress !== st.progress) {
-    const fresh = legend(app, st.progress);
+  // With a provenance the fills are its colours, and the statuses the outlines.
+  const prov = !!M.provenanceOf(app.model);
+  const legendKey = st.progress + ' ' + prov;
+  if (ui.legendKey !== legendKey) {
+    const fresh = legend(app, st.progress, prov);
     ui.stage.replaceChild(fresh, ui.legend);
     ui.legend = fresh;
-    ui.legendProgress = st.progress;
+    ui.legendKey = legendKey;
   }
 
   renderToolbar(app, st);
   ui.stage.classList.toggle('inner-arcs', st.inner);
+  ui.stage.classList.toggle('provenance', prov);
   const view = M.makeView(drawnModel(app, st), st.collapse, st.expand);
   const quot = M.quotient(view);
   ui.view = view;
@@ -179,7 +188,7 @@ function mount(root, app) {
   svg.appendChild(layer);
   stage.appendChild(svg);
   stage.appendChild(el('div.graph-status', { id: 'graph-status' }));
-  const key = legend(app, app.showProgress);
+  const key = legend(app, app.showProgress, !!M.provenanceOf(app.model));
   stage.appendChild(key);
   // The way back up from the section the reader is in (`applyLevel`).
   const back = el('button.graph-back', {
@@ -192,7 +201,8 @@ function mount(root, app) {
   // `folded`: the side panel's listings the reader has opened (see `fold`).
   // `toolbarOpen`, `sideShown`, `statsShown`: the reader's choices (`shownPref`).
   ui = { page, toolbar, stage, svg, layer, side, back, transform: { x: 40, y: 40, k: 1 }, fitted: false,
-    folded: new Map(), entered: null, legend: key, legendProgress: app.showProgress,
+    folded: new Map(), entered: null, legend: key,
+    legendKey: app.showProgress + ' ' + !!M.provenanceOf(app.model),
     toolbarOpen: shownPref(TOOLS_KEY), sideShown: shownPref(SIDE_KEY, true), statsShown: shownPref(STATS_KEY) };
   page.classList.toggle('side-hidden', !ui.sideShown);
   stage.classList.toggle('stats-hidden', !ui.statsShown);
@@ -220,8 +230,12 @@ function defs(app) {
     arrowMarker(svgEl, 'bp-arrow-focus', 'arrowhead focus'));
 }
 
-/** The key to the drawing; the fills say the statuses, so without the progress there are none. */
-function legend(app, progress) {
+/**
+ * The key to the drawing; the fills say the statuses, so without the progress
+ * there are none.  With a provenance (`provenance`) the fills are its colours,
+ * which the toolbar's chips name, and the statuses are told by the outlines.
+ */
+function legend(app, progress, provenance) {
   const { el, svgEl } = app;
   const sample = (...children) => {
     const s = svgEl('svg', { width: 24, height: 10, viewBox: '0 0 24 10', class: 'lgsvg' });
@@ -241,7 +255,7 @@ function legend(app, progress) {
   });
   const swatch = (s, text) =>
     el('div.row', el('span', { class: 'sw status-' + s }), el('span', text));
-  return el('div.legend',
+  return el('div.legend', { class: provenance ? 'prov-outline' : null },
     el('b', 'lines'),
     el('div.row', sample(line(), head()), 'declared + derived'),
     el('div.row', sample(line('short'), head()), 'declared, unwitnessed'),
@@ -253,7 +267,7 @@ function legend(app, progress) {
     el('div.row.lg-search', el('span.shp.hit'), el('span', 'matches')),
     el('div.row.lg-search', el('span.lg-badge', '2'), el('span', 'matches inside')),
     progress ? [
-      el('b', { style: { marginTop: '.3em' } }, 'fill'),
+      el('b', { style: { marginTop: '.3em' } }, provenance ? 'outline' : 'fill'),
       swatch('proved', 'proved'),
       swatch('proved_with_axioms', 'extra axioms'),
       swatch('stated', 'stated'),
@@ -320,6 +334,8 @@ function renderToolbar(app, st) {
   }, 'Filters'));
   bar.appendChild(el('div.group.tb-collapse',
     el('button', { onclick: () => writeState(app, { expand: [] }) }, 'Collapse all')));
+  const prov = M.provenanceOf(app.model);
+  if (prov) bar.appendChild(provenanceGroup(app, st, prov));
   const filters = bar.appendChild(el('div.tb-filters'));
 
   // There is no Expand all: the reader opens the sections one at a time.  The
@@ -399,6 +415,32 @@ function renderToolbar(app, st) {
     el('button', { onclick: () => zoomBy(app, 1 / 1.25) }, '\u2212')));
   bar.appendChild(statsToggle(app));
   bar.appendChild(sideToggle(app));
+}
+
+/**
+ * The key to the fills, when the project declares a provenance: a chip per
+ * value, in its colour and with its label, which is also the switch that
+ * hides the objects of that value (`hide=` in the URL, `M.outOfGraph`), so
+ * that hiding what is published leaves the skeleton of the new argument.
+ * It stays out of the Filters fold, since it says what the colours mean.
+ */
+function provenanceGroup(app, st, prov) {
+  const { el } = app;
+  const hidden = new Set(st.hide);
+  return el('div.group.tb-prov', el('span.lbl', prov.attr),
+    ...prov.values.map((v) => el('label.chk.pv-chip.pv', {
+      style: M.provenanceStyle(v),
+      class: hidden.has(v.value) ? 'off' : null,
+      title: (hidden.has(v.value) ? 'show' : 'hide') + ' what is marked “' + v.label + '”',
+    },
+    el('input', {
+      type: 'checkbox', checked: !hidden.has(v.value),
+      onchange: (e) => {
+        const next = new Set(hidden);
+        if (e.target.checked) next.delete(v.value); else next.add(v.value);
+        writeState(app, { hide: prov.values.map((x) => x.value).filter((x) => next.has(x)) });
+      },
+    }), v.label)));
 }
 
 /**
@@ -1127,7 +1169,7 @@ export function rememberLayout(inputText, laidText) {
 
 function signatureOf(st) {
   return JSON.stringify([st.collapse, [...st.expand].sort(), st.ekinds, st.status, st.reduce, st.inner,
-    st.appendix, st.progress]);
+    st.appendix, st.progress, st.hide]);
 }
 
 async function scheduleLayout(app, st, view, quot) {
@@ -1666,6 +1708,25 @@ function cssEscape(s) {
 
 // --- node shapes -----------------------------------------------------------
 
+/**
+ * What fills a node, when the project declares a provenance (`M.provenanceOf`):
+ * `{value}` for an object carrying a value of its own, which fills it in that
+ * value's colour; `{mix}` (`M.provenanceMixOf`) for a collapsed object with
+ * none whose contents carry some, filled with a band per value as wide as
+ * its share; null otherwise, and always for an expanded section, whose
+ * contents are drawn in it with their own fills.  Without a provenance,
+ * null, and the fill says the status as it always did.
+ */
+export function provenanceFill(view, id, compound) {
+  const m = view.model;
+  if (compound || !M.provenanceOf(m)) return null;
+  const value = M.provenanceValueOf(m, m.byId.get(id));
+  if (value) return { value };
+  if (!view.isExpandable(id)) return null;
+  const mix = M.provenanceMixOf(m, view.kind, id);
+  return mix ? { mix } : null;
+}
+
 // Every object is the same sharp box, whatever its kind: colour says the
 // status, and the mark in the top right corner the kind (`M.nodeType`).
 function nodeShape(svgEl, w, h) {
@@ -1678,14 +1739,30 @@ function drawNode(app, box, meta, st, view) {
   const o = meta.object;
   const status = st.progress ? M.statusOf(m, o.id) : null;
   const type = M.nodeType(m, o);
+  const fill = provenanceFill(view, o.id, meta.compound);
   const g = svgEl('g', {
     class: 'gnode' + (meta.compound ? ' compound' : '') + ' kind-' + o.kind +
-      ' status-' + (status || 'none'),
+      ' status-' + (status || 'none') +
+      (fill && fill.value ? ' prov pv' : fill ? ' prov-mix' : ''),
+    style: fill && fill.value ? M.provenanceStyle(fill.value) : null,
     transform: `translate(${box.x},${box.y})`,
     'data-nid': box.node.id,
     'data-id': o.id,
     tabindex: 0,
   });
+  if (fill && fill.mix) {
+    // Side by side under the outline, a band per value as wide as its share,
+    // and one in the plain fill for what carries none.
+    let x = 0;
+    for (const { value, n } of fill.mix.parts) {
+      const w = (box.w * n) / fill.mix.total;
+      g.appendChild(svgEl('rect', { class: 'pv-band pv', style: M.provenanceStyle(value), x, y: 0, width: w, height: box.h }));
+      x += w;
+    }
+    if (fill.mix.unmarked) {
+      g.appendChild(svgEl('rect', { class: 'pv-band', x, y: 0, width: box.w - x, height: box.h }));
+    }
+  }
   for (const s of nodeShape(svgEl, box.w, box.h)) g.appendChild(s);
 
   // The whole title, on the lines `buildElk` sized the node for: a section's
@@ -1750,7 +1827,11 @@ function drawNode(app, box, meta, st, view) {
     `${o.id}\n${o.kind}` + (status ? `\nstatus: ${M.STATUS_LABEL[status]}` : '') +
     (prog ? `\nprogress: ${prog.proved}/${prog.total}` : '') +
     (prog && prog.mix ? M.STATUS_BAR_ORDER.filter((s) => prog.mix[s] && s !== 'proved')
-      .map((s) => `\n  ${M.STATUS_LABEL[s]}: ${prog.mix[s]}`).join('') : '');
+      .map((s) => `\n  ${M.STATUS_LABEL[s]}: ${prog.mix[s]}`).join('') : '') +
+    (fill && fill.value ? `\n${M.provenanceOf(m).attr}: ${fill.value.label}` : '') +
+    (fill && fill.mix ? `\n${M.provenanceOf(m).attr}:` +
+      fill.mix.parts.map(({ value, n }) => `\n  ${value.label}: ${n}`).join('') +
+      (fill.mix.unmarked ? `\n  unmarked: ${fill.mix.unmarked}` : '') : '');
   g.appendChild(svgEl('title', title2));
   wireNode(app, g, o.id, view);
   return g;
@@ -2503,7 +2584,10 @@ function renderSide(app, st, view, quot) {
   }, M.titleOf(o)));
   side.appendChild(el('div.side-head', { 'data-id': id }, heading, app.kindBadge(o.kind)));
   side.appendChild(el('div.side-open', el('a', { href }, inDoc ? 'Open in document' : 'Open object page')));
-  if (status !== null) side.appendChild(el('div.meta', app.statusBadge(status)));
+  const provenance = app.provenanceBadge(app.model, o);
+  if (status !== null || provenance) {
+    side.appendChild(el('div.meta', provenance, status === null ? null : app.statusBadge(status)));
+  }
 
   const prog = st.progress ? M.progressMixOf(app.model, st.collapse, id) : null;
   if (prog) {

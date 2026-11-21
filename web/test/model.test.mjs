@@ -2038,6 +2038,102 @@ check('sourceUrl: a declaration\'s lines on GitHub, by the package that holds it
 });
 
 // ---------------------------------------------------------------------------
+// provenance, `[site.provenance]`
+// ---------------------------------------------------------------------------
+
+/**
+ * Three chapters: `ch1` holds a published theorem with a new lemma refining
+ * it, a new definition and a new theorem; `ch2` holds only published
+ * statements, two of them in a section; `ch3` holds an unmarked remark and
+ * one with an undeclared value.  The new theorem uses two published ones.
+ */
+function provenanceSnapshot(provenance) {
+  const node = (id, kind, attrs = {}) => ({ id, kind, boundary: [], attrs, body: '', depth: 0 });
+  const edge = (kind, src, tgt) => ({ id: `${kind}/${src}/${tgt}`, kind, attrs: {}, body: '', depth: 1,
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }] });
+  const binary = { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } } };
+  const pv = (v) => ({ provenance: v });
+  return {
+    version: 1,
+    project: { name: 'p', title: 'p', dir: 'blueprint', ...(provenance ? { provenance } : {}) },
+    schema: { defaultCollapse: 'refines', kinds: {
+      chapter: { boundary: {} }, section: { boundary: {} }, theorem: { boundary: {}, countable: true },
+      lemma: { boundary: {}, countable: true }, definition: { boundary: {}, countable: true },
+      remark: { boundary: {} }, refines: { ...binary, collapse: true }, uses: binary } },
+    objects: [
+      node('ch1', 'chapter'), node('ch2', 'chapter'), node('ch3', 'chapter'),
+      node('pub', 'theorem', pv('published')), node('lem', 'lemma', pv('new')),
+      node('def', 'definition', pv('new')), node('thm', 'theorem', pv('new')),
+      node('sec', 'section'), node('p1', 'theorem', pv('published')), node('p2', 'lemma', pv('published')),
+      node('p3', 'lemma', pv('published')), node('rem', 'remark'), node('odd', 'remark', pv('bogus')),
+      edge('refines', 'pub', 'ch1'), edge('refines', 'lem', 'pub'), edge('refines', 'def', 'ch1'),
+      edge('refines', 'thm', 'ch1'), edge('refines', 'sec', 'ch2'), edge('refines', 'p1', 'sec'),
+      edge('refines', 'p2', 'sec'), edge('refines', 'p3', 'ch2'), edge('refines', 'rem', 'ch3'),
+      edge('refines', 'odd', 'ch3'), edge('uses', 'thm', 'pub'), edge('uses', 'thm', 'p1'),
+    ],
+    derived: {},
+  };
+}
+const PROVENANCE = {
+  attr: 'provenance',
+  values: [
+    { value: 'published', label: 'Published', color: '#e8eef7', dark: '#26303d' },
+    { value: 'new', label: 'New', color: '#e3f1e6' },
+    { value: 'evil', label: 'Evil', color: 'red;background:url(x)' },
+  ],
+};
+
+check('provenance: read off the snapshot, a dark fill derived where none is given', () => {
+  eq(M.provenanceOf(M.buildModel(provenanceSnapshot(null))), null, 'none declared, none read');
+  const m = M.buildModel(provenanceSnapshot(PROVENANCE));
+  const p = M.provenanceOf(m);
+  eq(p.attr, 'provenance', 'the attribute');
+  eq(p.values.map((v) => v.value).join(), 'published,new', 'in the declared order, a colour that is no colour left out');
+  eq(p.values[0].dark, '#26303d', 'a dark fill given is kept');
+  ok(/^#[0-9a-f]{6}$/.test(p.values[1].dark), `a dark fill derived: ${p.values[1].dark}`);
+  eq(M.darkFill('#e3f1e6'), M.darkFill('#E3F1E6'), 'case does not matter');
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(M.darkFill('#e3f1e6').slice(i, i + 2), 16));
+  ok(g > r && g > b && g < 80, `the hue kept, the colour dark: ${M.darkFill('#e3f1e6')}`);
+  eq(M.darkFill('#fff'), '#333333', 'a grey stays grey');
+  eq(M.provenanceValueOf(m, m.byId.get('pub')).label, 'Published', 'an object\'s value');
+  eq(M.provenanceValueOf(m, m.byId.get('rem')), null, 'none');
+  eq(M.provenanceValueOf(m, m.byId.get('odd')), null, 'an undeclared value is none');
+  eq(M.provenanceStyle(p.values[0]), '--pv:#e8eef7;--pv-dark:#26303d', 'the style handing the colours on');
+});
+
+check('provenance: a collapsed object counts what it holds, a value standing for what is below it', () => {
+  const m = M.buildModel(provenanceSnapshot(PROVENANCE));
+  const mix = (id) => {
+    const x = M.provenanceMixOf(m, 'refines', id);
+    return x && x.parts.map((q) => q.value.value + ':' + q.n).join(' ') + ' unmarked:' + x.unmarked + ' total:' + x.total;
+  };
+  // `lem` is below the published `pub`, which counts for it.
+  eq(mix('ch1'), 'published:1 new:2 unmarked:0 total:3', 'ch1');
+  // `sec` carries nothing, and is looked through to p1, p2.
+  eq(mix('ch2'), 'published:3 unmarked:0 total:3', 'ch2');
+  eq(mix('ch3'), null, 'nothing declared inside, nothing to show');
+  eq(M.provenanceMixOf(M.buildModel(provenanceSnapshot(null)), 'refines', 'ch1'), null, 'no provenance, no mix');
+});
+
+check('provenance: hiding a value leaves its objects out of the graph, and the sections it empties', () => {
+  const m = M.buildModel(provenanceSnapshot(PROVENANCE));
+  const out = M.outOfGraph(m, { hideValues: ['published'] });
+  sameSet(out, ['pub', 'lem', 'refines/pub/ch1', 'refines/lem/pub', 'uses/thm/pub',
+    'p1', 'p2', 'p3', 'sec', 'ch2', 'refines/p1/sec', 'refines/p2/sec', 'refines/p3/ch2',
+    'refines/sec/ch2', 'uses/thm/p1'], 'the published statements, what is below them, ch2 emptied');
+  ok(!out.has('ch3'), 'a chapter that had nothing hidden stays');
+  eq(M.outOfGraph(m, { hideValues: ['nonsense'] }).size, 0, 'an unknown value hides nothing');
+  eq(M.outOfGraph(M.buildModel(provenanceSnapshot(null)), { hideValues: ['published'] }).size, 0,
+    'without a provenance nothing is hidden');
+  const gm = M.graphModel(m, { hideValues: ['published'] });
+  eq(gm === M.graphModel(m, { hideValues: ['published'] }), true, 'memoised');
+  eq(gm === M.graphModel(m), false, 'apart from the unhidden one');
+  sameSet(M.visibleNodes(M.makeView(gm, 'refines', ['ch1'])).map((o) => o.id), ['def', 'thm', 'ch3'],
+    'the new argument\'s skeleton');
+  eq(M.provenanceMixOf(gm, 'refines', 'ch1').parts.map((q) => q.value.value).join(), 'new', 'counted on what is drawn');
+});
+
+// ---------------------------------------------------------------------------
 
 if (failures.length) {
   console.error(`\n${failures.length} FAILED, ${passed} passed\n`);
