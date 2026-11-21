@@ -177,11 +177,14 @@ drawn as it always was.
   filled, its contents showing their own.
 * The toolbar has, beside *Collapse all* and outside the *Filters* fold, a
   chip per value in its colour with its label: the key to the fills and a
-  checkbox. Unticked, the objects of that value leave the graph as a hidden
-  appendix does (`outOfGraph`'s `hideValues`), and with them a section
-  without a value of its own that this empties, so hiding what is published
-  leaves the skeleton of the new argument. `hide=` keeps the choice in the
-  URL.
+  checkbox. Unticked, the objects of that value leave the graph with the
+  relations touching them (`outOfGraph`'s `hideValues`), as a part does, but
+  what is below them stays: `graphModel` puts it under the nearest ancestor
+  still drawn (`liftedEdges`), through further hidden ones. A section
+  without a value of its own left with nothing drawn below it goes too, so
+  hiding what is published leaves the skeleton of the new argument, new
+  lemmas refining a published theorem included. `hide=` keeps the choice in
+  the URL.
 * The document's headings, the object page and the graph's side panel set
   a badge with the value's label on its colour after the kind badge
   (`provenanceBadge` in `app.js`), whether or not the progress is shown.

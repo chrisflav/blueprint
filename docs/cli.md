@@ -918,10 +918,13 @@ an unknown one as before.
 * **Key and filter.**  The graph's toolbar, beside *Collapse all* and not
   folded behind *Filters*, has a chip per value in its colour with its
   label, which is the key to the fills and a checkbox: unticked, the
-  objects of that value are left out of the graph as a hidden appendix is,
-  with what is below them and the relations touching them, and so is a
-  section without a value of its own that this leaves empty.  Hiding
-  `published` thus leaves the skeleton of the new argument.  The choice is
+  objects of that value are left out of the graph with the relations
+  touching them, but not what is below them: that stays, whatever its own
+  value, under the nearest ancestor still drawn, as the chapters of a
+  `part` stand without it.  A section without a value of its own that this
+  leaves with nothing drawn below it goes too.  Hiding `published` thus
+  leaves the skeleton of the new argument, a new lemma refining a published
+  theorem included.  The choice is
   in the URL, `hide=published,modified`, as the graph's other options are.
 * **Document and object page.**  A badge with the value's label, on its
   colour, follows the kind badge in the document's headings, on the object

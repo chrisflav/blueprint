@@ -2687,6 +2687,8 @@ await check('provenance: fills in the graph, a key in the toolbar that hides a v
   mark('def-filter', 'published');
   mark('lem-ultrafilter', 'new');
   mark('thm-tychonoff', 'new');
+  // a section from the literature, whose lemmas are not marked
+  mark('sec-main-induction', 'published');
   app.snapshot = snap;
   app.model = modelMod1.buildModel(snap);
   try {
@@ -2722,6 +2724,10 @@ await check('provenance: fills in the graph, a key in the toolbar that hides a v
     ok(node('lem-ultrafilter') && node('def-net'), 'the rest is gone too');
     const off = root.querySelectorAll('.toolbar .tb-prov label.pv-chip')[0];
     ok(off.classList.contains('off') && !off.querySelector('input').hasAttribute('checked'), 'the chip shows it hidden');
+    // What is below a hidden object stays, lifted into its nearest ancestor drawn.
+    await layout('#/graph?collapse=refines&expand=sec-main&hide=published');
+    ok(!node('sec-main-induction'), 'the published section is still drawn');
+    ok(node('lem-finite-subcover') && node('thm-tychonoff'), 'its lemmas went with it');
     await layout('#/graph?collapse=refines&expand=sec-foundations&hide=nonsense');
     ok(node('def-compact'), 'an undeclared value hides something');
     // The document and the object page: a badge after the kind's.

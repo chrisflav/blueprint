@@ -1743,14 +1743,22 @@ export function graphHint(model, kindName) {
  * chapters become roots.
  *
  * `hideValues` names provenance values (`provenanceOf`) the reader hides:
- * an object carrying one of them is left out as a hidden appendix is, with
- * what is below it and the relations touching it, and so is an object that
- * carries no value of its own once everything below it is left out and some
- * of it for a hidden value, so that hiding the published statements leaves
- * no empty section behind.
+ * an object carrying one of them is left out as a part is, with the
+ * relations touching it but not with what is below it, which `graphModel`
+ * lifts to the nearest ancestor still drawn, so a new lemma refining a
+ * hidden theorem from the literature stays.  An object that carries no value
+ * of its own is left out too once everything below it is, some of it for a
+ * hidden value, so that hiding the published statements leaves no empty
+ * section behind.
  */
-export function outOfGraph(model, { hideOptional = false, hideValues = [] } = {}) {
+export function outOfGraph(model, opts = {}) {
+  return graphOmissions(model, opts).out;
+}
+
+/** `outOfGraph`, and of its ids those left out for carrying a hidden value. */
+function graphOmissions(model, { hideOptional = false, hideValues = [] } = {}) {
   const out = new Set();
+  const byValue = new Set();
   const stack = [];
   for (const o of model.objects) {
     const g = graphHint(model, o.kind);
@@ -1778,31 +1786,76 @@ export function outOfGraph(model, { hideOptional = false, hideValues = [] } = {}
   const hidden = new Set(hideValues);
   if (hidden.size && provenanceOf(model)) {
     const before = new Set(out);
+    // As a part: the object and the relations touching it, not what is below.
     for (const o of model.objects) {
       const v = provenanceValueOf(model, o);
-      if (v && hidden.has(v.value)) stack.push(o.id);
+      if (!v || !hidden.has(v.value) || out.has(o.id)) continue;
+      out.add(o.id);
+      byValue.add(o.id);
+      for (const { object } of incidentTo(model, o.id)) stack.push(object.id);
     }
     drain();
     if (!orders) orders = model.collapseKinds.map((k) => collapseOrder(model, k));
-    // Containers emptied by the hiding go too, innermost first, until none is left.
+    // Containers emptied by the hiding go too, until none is left: nothing
+    // below them, at any depth, is drawn any more.
     for (;;) {
       for (const o of model.objects) {
         if (out.has(o.id) || provenanceValueOf(model, o)) continue;
-        const kids = orders.flatMap((order) => childrenOf(order, o.id));
-        if (kids.length && kids.every((c) => out.has(c)) && kids.some((c) => !before.has(c))) stack.push(o.id);
+        const below = orders.flatMap((order) => descendantsOf(order, o.id));
+        if (below.length && below.every((c) => out.has(c)) && below.some((c) => !before.has(c))) stack.push(o.id);
       }
       if (!stack.length) break;
       drain();
     }
   }
-  return out;
+  return { out, byValue };
+}
+
+/**
+ * The relations of a collapse kind that put what was below an object hidden
+ * for its value (`byValue`) under the nearest ancestors still drawn, looked
+ * for through further hidden ones: `{id, kind, boundary: [src, tgt]}` for
+ * each pair no surviving relation already joins.  What has no such ancestor
+ * becomes a root.
+ */
+function liftedEdges(model, out, byValue) {
+  const lifted = [];
+  const have = new Set(model.objects.filter((o) => !out.has(o.id)).map((o) => o.id));
+  for (const kind of model.collapseKinds) {
+    const order = collapseOrder(model, kind);
+    const above = (id, seen = new Set()) => {
+      const found = [];
+      for (const p of parentsOf(order, id)) {
+        if (seen.has(p)) continue;
+        seen.add(p);
+        if (!out.has(p)) found.push(p);
+        else if (byValue.has(p)) found.push(...above(p, seen));
+      }
+      return found;
+    };
+    for (const h of byValue) {
+      for (const c of childrenOf(order, h)) {
+        if (out.has(c)) continue;
+        for (const a of above(h)) {
+          const id = `${kind}/${c}/${a}`;
+          if (have.has(id) || parentsOf(order, c).includes(a)) continue;
+          have.add(id);
+          lifted.push({ id, kind, attrs: {}, body: '', depth: 1,
+            boundary: [{ role: 'src', id: c }, { role: 'tgt', id: a }] });
+        }
+      }
+    }
+  }
+  return lifted;
 }
 
 /**
  * The model the graph page draws: `model` itself when nothing is left out, and
  * otherwise the model of the same snapshot without the objects `outOfGraph`
  * names.  Every view, quotient, consistency state and reduction computed on it
- * is then that of a blueprint in which those objects were never written.
+ * is then that of a blueprint in which those objects were never written,
+ * except that what was below an object hidden for its provenance value sits
+ * under that object's nearest ancestors still drawn (`liftedEdges`).
  * Memoised on the model, per choice of what to hide.
  */
 export function graphModel(model, { hideOptional = false, hideValues = [] } = {}) {
@@ -1810,9 +1863,10 @@ export function graphModel(model, { hideOptional = false, hideValues = [] } = {}
     (hideValues.length ? '\n' + [...hideValues].sort().join('\n') : '');
   const hit = model._graphModels.get(key);
   if (hit) return hit;
-  const out = outOfGraph(model, { hideOptional, hideValues });
+  const { out, byValue } = graphOmissions(model, { hideOptional, hideValues });
   const gm = out.size === 0 ? model
-    : buildModel({ ...model.snapshot, objects: model.objects.filter((o) => !out.has(o.id)) });
+    : buildModel({ ...model.snapshot, objects: model.objects.filter((o) => !out.has(o.id))
+      .concat(byValue.size ? liftedEdges(model, out, byValue) : []) });
   model._graphModels.set(key, gm);
   return gm;
 }

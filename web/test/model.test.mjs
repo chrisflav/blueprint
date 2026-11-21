@@ -2045,7 +2045,8 @@ check('sourceUrl: a declaration\'s lines on GitHub, by the package that holds it
  * Three chapters: `ch1` holds a published theorem with a new lemma refining
  * it, a new definition and a new theorem; `ch2` holds only published
  * statements, two of them in a section; `ch3` holds an unmarked remark and
- * one with an undeclared value.  The new theorem uses two published ones.
+ * one with an undeclared value.  The new theorem uses two published ones,
+ * the new lemma the new definition.
  */
 function provenanceSnapshot(provenance) {
   const node = (id, kind, attrs = {}) => ({ id, kind, boundary: [], attrs, body: '', depth: 0 });
@@ -2070,6 +2071,7 @@ function provenanceSnapshot(provenance) {
       edge('refines', 'thm', 'ch1'), edge('refines', 'sec', 'ch2'), edge('refines', 'p1', 'sec'),
       edge('refines', 'p2', 'sec'), edge('refines', 'p3', 'ch2'), edge('refines', 'rem', 'ch3'),
       edge('refines', 'odd', 'ch3'), edge('uses', 'thm', 'pub'), edge('uses', 'thm', 'p1'),
+      edge('uses', 'lem', 'def'),
     ],
     derived: {},
   };
@@ -2115,12 +2117,14 @@ check('provenance: a collapsed object counts what it holds, a value standing for
   eq(M.provenanceMixOf(M.buildModel(provenanceSnapshot(null)), 'refines', 'ch1'), null, 'no provenance, no mix');
 });
 
-check('provenance: hiding a value leaves its objects out of the graph, and the sections it empties', () => {
+check('provenance: hiding a value leaves its objects out of the graph, not what is below them, and the sections it empties', () => {
   const m = M.buildModel(provenanceSnapshot(PROVENANCE));
   const out = M.outOfGraph(m, { hideValues: ['published'] });
-  sameSet(out, ['pub', 'lem', 'refines/pub/ch1', 'refines/lem/pub', 'uses/thm/pub',
+  sameSet(out, ['pub', 'refines/pub/ch1', 'refines/lem/pub', 'uses/thm/pub',
     'p1', 'p2', 'p3', 'sec', 'ch2', 'refines/p1/sec', 'refines/p2/sec', 'refines/p3/ch2',
-    'refines/sec/ch2', 'uses/thm/p1'], 'the published statements, what is below them, ch2 emptied');
+    'refines/sec/ch2', 'uses/thm/p1'], 'the published statements and their relations, ch2 emptied');
+  ok(!out.has('lem'), 'the new lemma below the published theorem stays');
+  ok(!out.has('uses/lem/def'), 'and so does a relation between two that stay');
   ok(!out.has('ch3'), 'a chapter that had nothing hidden stays');
   eq(M.outOfGraph(m, { hideValues: ['nonsense'] }).size, 0, 'an unknown value hides nothing');
   eq(M.outOfGraph(M.buildModel(provenanceSnapshot(null)), { hideValues: ['published'] }).size, 0,
@@ -2128,9 +2132,24 @@ check('provenance: hiding a value leaves its objects out of the graph, and the s
   const gm = M.graphModel(m, { hideValues: ['published'] });
   eq(gm === M.graphModel(m, { hideValues: ['published'] }), true, 'memoised');
   eq(gm === M.graphModel(m), false, 'apart from the unhidden one');
-  sameSet(M.visibleNodes(M.makeView(gm, 'refines', ['ch1'])).map((o) => o.id), ['def', 'thm', 'ch3'],
-    'the new argument\'s skeleton');
-  eq(M.provenanceMixOf(gm, 'refines', 'ch1').parts.map((q) => q.value.value).join(), 'new', 'counted on what is drawn');
+  sameSet(M.visibleNodes(M.makeView(gm, 'refines', ['ch1'])).map((o) => o.id), ['lem', 'def', 'thm', 'ch3'],
+    'the new argument\'s skeleton, the lemma lifted into the chapter');
+  sameSet(M.parentsOf(M.collapseOrder(gm, 'refines'), 'lem'), ['ch1'], 'under the hidden theorem\'s parent');
+  ok(gm.byId.has('uses/lem/def'), 'its use of the definition drawn');
+  eq(M.provenanceMixOf(gm, 'refines', 'ch1').parts.map((q) => q.value.value + ':' + q.n).join(), 'new:3',
+    'counted on what is drawn');
+  eq(M.graphModel(m).byId.has('refines/lem/ch1'), false, 'nothing lifted while nothing is hidden');
+  // Hiding a value inside a hidden one lifts through both; what is left of a
+  // chapter decides whether it stays.
+  const both = M.graphModel(m, { hideValues: ['published', 'new'] });
+  sameSet(M.visibleNodes(M.makeView(both, 'refines', [])).map((o) => o.id), ['ch3'], 'only the unmarked chapter');
+  const deep = provenanceSnapshot(PROVENANCE);
+  deep.objects.push({ id: 'step', kind: 'lemma', boundary: [], attrs: {}, body: '', depth: 0 },
+    { id: 'refines/step/lem', kind: 'refines', attrs: {}, body: '', depth: 1,
+      boundary: [{ role: 'src', id: 'step' }, { role: 'tgt', id: 'lem' }] });
+  const dm = M.graphModel(M.buildModel(deep), { hideValues: ['published', 'new'] });
+  sameSet(M.parentsOf(M.collapseOrder(dm, 'refines'), 'step'), ['ch1'], 'lifted through two hidden levels');
+  ok(dm.byId.has('ch1'), 'the chapter keeps it, so it stays');
 });
 
 // ---------------------------------------------------------------------------
