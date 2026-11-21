@@ -268,6 +268,17 @@ def structuralChecks (b : Blueprint) : Array Check := Id.run do
       if !b.contains l then
         cs := cs.push <| Check.warning "bad-link"
           s!"{o.source.file}: '{o.id}' links to [{l}], which is not an object" #[o.id]
+  -- links in a statement's `source`, Markdown with citations as in a body
+  for o in b.objects do
+    if let some (.str src) := o.attr? "source" then
+      for l in sortDedup (extractLinks src) do
+        if !b.contains l then
+          cs := cs.push <| Check.warning "bad-link"
+            s!"{o.source.file}: '{o.id}' has a source linking to [{l}], which is not an object" #[o.id]
+      for l in sortDedup (extractQuietLinks src) do
+        if !b.contains l then
+          cs := cs.push <| Check.warning "bad-link"
+            s!"{o.source.file}: '{o.id}' has a source linking to (@{l}), which is not an object" #[o.id]
   -- quiet links in prose, `[text](@slug)`
   for o in b.objects do
     for l in sortDedup (extractQuietLinks o.body) do

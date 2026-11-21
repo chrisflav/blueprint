@@ -153,6 +153,18 @@ export function titleOf(object) {
   return typeof t === 'string' && t.length ? t : object.id;
 }
 
+/**
+ * A statement's attribution to the literature, its `source` attribute:
+ * Markdown, words and citations as a body cites ("Kato [kato04, Thm.
+ * 12.5]"), which a heading sets after the title as a paper sets a theorem's
+ * optional argument, "Theorem 4.2 (Kato's Euler system; Kato [Kat04, Thm.
+ * 12.5])".  '' when there is none.  The graph's labels keep the title alone.
+ */
+export function sourceOf(object) {
+  const s = object && object.attrs && object.attrs.source;
+  return typeof s === 'string' ? s.trim() : '';
+}
+
 /** Derived status, or null when the kind carries no Lean reference at all. */
 export function statusOf(model, id) {
   const s = model.status[id];
@@ -2504,12 +2516,12 @@ export function isBareSugar(model, o) {
 }
 
 // The full-text index: per object, the words of each of its fields (id,
-// title, every Lean name, body) and the set of all of them.  A phrase never
-// runs from one field into the next.  Built once per model.
+// title, source, every Lean name, body) and the set of all of them.  A
+// phrase never runs from one field into the next.  Built once per model.
 function fullTextIndex(model) {
   if (!model._fullText) {
     model._fullText = model.objects.map((o) => {
-      const texts = [o.id, o.attrs.title, ...leanNamesOf(o), displayBody(o)];
+      const texts = [o.id, o.attrs.title, sourceOf(o), ...leanNamesOf(o), displayBody(o)];
       const fields = texts.map(searchWords).filter((f) => f.length);
       const words = new Set(fields.flat());
       for (const t of texts) for (const w of compoundWords(t)) words.add(w);

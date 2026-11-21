@@ -19,7 +19,8 @@
     "color": "#47a",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "subsection":
    {"sugar": false,
     "kinds": {},
@@ -28,7 +29,8 @@
     "color": "#99aabb",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "section":
    {"sugar": false,
     "kinds": {},
@@ -37,7 +39,8 @@
     "color": "#8899aa",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "remark":
    {"sugar": false,
     "kinds": {},
@@ -46,7 +49,8 @@
     "color": "#999",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "refines":
    {"sugar": true,
     "kinds": {"tgt": [], "src": []},
@@ -73,6 +77,7 @@
      "order",
      "aliases",
      "owner",
+     "source",
      "author",
      "editor",
      "year",
@@ -113,7 +118,8 @@
     "color": "#a98",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "proposition":
    {"sugar": false,
     "kinds": {},
@@ -122,7 +128,8 @@
     "color": "#46a",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "proof":
    {"sugar": false,
     "kinds":
@@ -149,7 +156,8 @@
     "color": "#8a93a0",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "matter":
    {"sugar": false,
     "kinds": {},
@@ -159,7 +167,8 @@
     "color": "#a4a8b0",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "lemma":
    {"sugar": false,
     "kinds": {},
@@ -168,7 +177,8 @@
     "color": "#57b",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "instance_of":
    {"sugar": true,
     "kinds": {"tgt": [], "src": []},
@@ -196,7 +206,8 @@
     "color": "#aaaaaa",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "generalises":
    {"sugar": true,
     "kinds": {"tgt": [], "src": []},
@@ -214,7 +225,8 @@
     "color": "#8a9",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "equivalent":
    {"sugar": true,
     "kinds": {"tgt": [], "src": []},
@@ -232,7 +244,8 @@
     "color": "#4a7",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "corollary":
    {"sugar": false,
     "kinds": {},
@@ -241,7 +254,8 @@
     "color": "#68b",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "concept":
    {"sugar": false,
     "kinds": {},
@@ -250,7 +264,8 @@
     "color": "#aa7",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "commutes":
    {"sugar": false,
     "kinds":
@@ -275,7 +290,8 @@
     "color": "#778899",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]},
+    "attrs":
+    ["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]},
    "appendix":
    {"sugar": false,
     "kinds": {},
@@ -285,7 +301,15 @@
     "color": "#99a0aa",
     "collapse": false,
     "boundary": {},
-    "attrs": ["title", "lean", "review", "tags", "order", "aliases", "owner"]}},
+    "attrs":
+    ["title",
+     "lean",
+     "review",
+     "tags",
+     "order",
+     "aliases",
+     "owner",
+     "source"]}},
   "defaultCollapse": "refines"},
  "project":
  {"title": "Compactness through finite intersections",

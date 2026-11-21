@@ -443,6 +443,9 @@ export function fakeMarked() {
         .map((p) => '<p>' + p.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>') + '</p>')
         .join('\n');
     },
+    parseInline(src) {
+      return String(src).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    },
   };
 }
 

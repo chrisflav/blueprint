@@ -571,6 +571,16 @@ export function titleToLatex(title, ctx) {
   return text.split(TOKEN_RE).map((part, k) => (k % 2 ? ctx.math({ ...spans[Number(part)], display: false }) : escapeText(part))).join('');
 }
 
+/**
+ * One line of Markdown as LaTeX, inline, as a paragraph of a body is set:
+ * maths, emphasis, references and citations through `ctx`.  A statement's
+ * `source` in its heading.
+ */
+export function inlineMarkdownToLatex(src, ctx) {
+  const { text, spans } = liftMath(String(src || '').replace(/\s+/g, ' ').trim());
+  return inlineToLatex(parseInline(text), { ...ctx, spans });
+}
+
 /** A title as plain text for PDF bookmarks: maths without its delimiters. */
 export function titleToPlain(title) {
   const { text, spans } = liftMath(String(title || ''));

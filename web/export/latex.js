@@ -30,7 +30,7 @@
 // reading of the snapshot.
 
 import * as M from '../model.js';
-import { markdownToLatex, titleToLatex, titleToPlain, escapeText, escapeCode } from './markdown-tex.js';
+import { markdownToLatex, inlineMarkdownToLatex, titleToLatex, titleToPlain, escapeText, escapeCode } from './markdown-tex.js';
 import { unicodeDeclarations, isTextLetter } from './unicode.js';
 
 /** Changes whenever the TeX written for the same request could change. */
@@ -677,8 +677,16 @@ export function exportLatex(model, request, options = {}) {
     out.push(`\\addcontentsline{toc}{${HEADINGS[Math.min(level, 2)]}}{\\texorpdfstring{${number ? number + '\\quad ' : ''}${tex}}{${escapePdf(numPrefix(raw) + plain)}}}`);
   };
 
+  // "Theorem~4.2 (Title; Kato [Kat04, Thm. 12.5])": the title and the
+  // statement's source (`M.sourceOf`) share the parenthesis, as a paper sets
+  // a theorem's optional argument; the source's citations count as cited.
   const statementHead = (o, word, number) => {
-    const t = o.attrs && typeof o.attrs.title === 'string' && o.attrs.title ? ` (${titleTex(o.attrs.title)})` : '';
+    current = o.id;
+    const parts = [];
+    if (o.attrs && typeof o.attrs.title === 'string' && o.attrs.title) parts.push(titleTex(o.attrs.title));
+    const source = M.sourceOf(o);
+    if (source) parts.push(inlineMarkdownToLatex(source, titleCtx));
+    const t = parts.length ? ` (${parts.join('; ')})` : '';
     return { lead: number == null ? escapeText(word) : `${escapeText(word)}~${escapeText(number)}`, rest: t };
   };
 

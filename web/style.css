@@ -2102,6 +2102,10 @@ button, select, input[type="text"], input[type="search"] { border-radius: 0; }
 .doc-entry .head .num { font-family: var(--serif); color: var(--fg); font-weight: 700; }
 .doc-entry .head :is(h1, h2, h3, h4, h5) .num { font-size: 1em; }
 .doc-entry .head a:not(.num):not(.doc-open):not(.doc-object) { color: var(--fg); }
+/* A statement's source after its title, "; Kato [Kat04, Thm. 12.5]": upright
+   text, its citations and references links as in the prose. */
+.heading-source { font-weight: 400; }
+.doc-entry .head .heading-source a.objlink:not(.broken) { color: var(--accent); }
 .doc-entry.is-section > .head, .doc-entry.page-head > .head {
   border-bottom: 2px solid var(--ptx-rule);
   padding-bottom: .25rem;

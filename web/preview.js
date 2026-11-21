@@ -44,6 +44,8 @@ export function previewTarget(model, a) {
   if (!model || !a || a.tagName !== 'A' || !a.classList) return null;
   if (!a.classList.contains('objlink') || a.classList.contains('broken')) return null;
   for (let p = a.parentNode; p && p.nodeType === 1; p = p.parentNode) {
+    // A citation in a statement's source is one, in its heading too.
+    if (p.classList && p.classList.contains('heading-source')) break;
     if (/^H[1-6]$/.test(p.tagName)) return null;
     if (p.classList && p.classList.contains('preview')) break;
   }

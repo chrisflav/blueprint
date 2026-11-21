@@ -390,7 +390,14 @@ def cmdRename (root : System.FilePath) (args : Args) : IO UInt32 := do
       | none => pure ()
       | some (front, rest) =>
         let isDeclaring := declaring.any fun o => o.source.file == relFull
-        let mut front := front.map fun line => rewriteQuoted line (rewriteSegments · old new)
+        let mut front := front.map fun line =>
+          let line := rewriteQuoted line (rewriteSegments · old new)
+          -- a statement's `source` cites as a body does, `[old]`
+          match line.splitOn "=" with
+          | key :: _ :: _ =>
+            if trim key == "source" then replaceAll line ("[" ++ old ++ "]") ("[" ++ new ++ "]")
+            else line
+          | _ => line
         if isDeclaring then
           front := recordAlias front old
           unless hasExplicitId front do

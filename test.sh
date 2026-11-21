@@ -755,6 +755,30 @@ if grep -q '"serial": "A"' "$TMP/serial.json" \
 else
   bad "serial: a string, a whole number or false on any kind; true refused"; cat "$TMP/serial.out"
 fi
+# `source`, a statement's attribution to the literature, is an attribute of
+# every node kind, and its `[slug]` links are checked as a body's
+cp -r examples/minimal "$TMP/source"
+printf '+++\nkind   = "reference"\nauthor = ["G. Peano"]\ntitle  = "Arithmetices principia"\nyear   = "1889"\n+++\n' \
+  > "$TMP/source/blueprint/peano.md"
+sed -i 's/^title  = "Addition is commutative"$/title  = "Addition is commutative"\nsource = "Peano [peano, §6]"/' "$TMP/source/blueprint/add-comm.md"
+sed -i 's/^title = "Addition"$/title = "Addition"\nsource = "after [nosuch]"/' "$TMP/source/blueprint/add.md"
+sed -i 's/^title  = "Addition is associative"$/title  = "Addition is associative"\nsource = "Peano [peano]"/' "$TMP/source/blueprint/add-assoc.md"
+"$BP" build --root "$TMP/source" -o "$TMP/source.json" > /dev/null 2>&1
+"$BP" check --root "$TMP/source" > "$TMP/source.out" 2>&1
+if grep -q '"source": "Peano \[peano, §6\]"' "$TMP/source.json" \
+   && ! grep -q "unknown-attr" "$TMP/source.out" \
+   && grep -q "warning: \[bad-link\] .*'add' has a source linking to \[nosuch\]" "$TMP/source.out" \
+   && [ "$(grep -c "bad-link" "$TMP/source.out")" -eq 1 ]; then
+  ok "source: accepted on a statement, its links checked as a body's"
+else
+  bad "source: accepted on a statement, its links checked as a body's"; cat "$TMP/source.out"
+fi
+if "$BP" rename peano peano89 --root "$TMP/source" > /dev/null 2>&1 \
+   && grep -q '^source = "Peano \[peano89\]"$' "$TMP/source/blueprint/add-assoc.md"; then
+  ok "rename rewrites [old] in a source, as in a body"
+else
+  bad "rename rewrites [old] in a source, as in a body"; cat "$TMP/source/blueprint/add-assoc.md"
+fi
 cp -r examples/minimal "$TMP/badlogo"
 printf '\n[site]\nlogoInk = true\n' >> "$TMP/badlogo/blueprint.toml"
 cp -r examples/minimal "$TMP/badink"

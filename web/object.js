@@ -29,12 +29,16 @@ export function render(root, app) {
   const of = o.kind === 'proof' ? M.attachedTo(o) : null;
   const ofTitle = of ? M.titleOf(m.byId.get(of)) : null;
   const own = o.attrs && o.attrs.title;
-  const heading = !of ? M.titleOf(o)
+  // A statement's attribution to the literature follows its title, as in the
+  // document, "Kato's Euler system; Kato [Kat04, Thm. 12.5]", and stands in
+  // its place when it has none.
+  const source = of ? null : app.headingSource(o, app.knownIds());
+  const heading = !of ? (source && !own ? null : M.titleOf(o))
     : !own ? 'Proof of ' + ofTitle
     : /^of\s/.test(own) ? 'Proof ' + own + ': ' + ofTitle
     : 'Proof (' + own + ') of ' + ofTitle;
   page.appendChild(el('div.obj-head',
-    el('h1', heading),
+    el('h1', heading, source),
     el('div.row', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status))));
   page.appendChild(el('div.obj-id', o.id));
 

@@ -1855,6 +1855,20 @@ check('references: citations name references, and only references', () => {
   eq(re.test('[sga4, x](https://e.org)'), false, 'not a Markdown link');
 });
 
+check('a statement\'s source: its attribution to the literature, found by the search', () => {
+  const snap = JSON.parse(JSON.stringify(snapshot));
+  const thm = snap.objects.find((o) => o.kind === 'theorem');
+  thm.attrs.source = '  Kato [del74, Thm. 12.5]\n';
+  snap.objects.push({ id: 'del74', kind: 'reference', boundary: [], depth: 0, body: '',
+    attrs: { author: ['P. Deligne'], title: 'La conjecture de Weil. I', year: '1974' } });
+  const m = M.buildModel(snap);
+  eq(M.sourceOf(m.byId.get(thm.id)), 'Kato [del74, Thm. 12.5]', 'trimmed');
+  eq(M.sourceOf(m.byId.get('del74')), '', 'none');
+  eq(M.sourceOf({ attrs: { source: 3 } }), '', 'not a string: none');
+  eq(M.titleOf(m.byId.get(thm.id)), thm.attrs.title || thm.id, 'the title, and the graph\'s label, stay as they are');
+  ok(M.fullTextSearch(m, 'kato').some((o) => o.id === thm.id), 'the search finds it by its source');
+});
+
 check('references: read in place under their labels, sorted by them', () => {
   const m = withReferences();
   const out = M.documentOutline(m, 'refines');

@@ -11,9 +11,12 @@ namespace Blueprint
 
 /-! ## The default schema -/
 
-/-- Attributes every node kind permits. -/
+/-- Attributes every node kind permits.  `source` is a statement's
+attribution to the literature, Markdown with citations as in a body
+(`"Kato [kato04, Thm. 12.5]"`), which its heading sets after the title as a
+paper sets a theorem's optional argument. -/
 def defaultNodeAttrs : Array String :=
-  #["title", "lean", "review", "tags", "order", "aliases", "owner"]
+  #["title", "lean", "review", "tags", "order", "aliases", "owner", "source"]
 
 /-- Attributes every edge kind permits. -/
 def defaultEdgeAttrs : Array String :=

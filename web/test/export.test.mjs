@@ -227,6 +227,32 @@ await check('a part ends with what is outside it, then the works it cites, each 
   ok(!bodyOf(exportLatex(m, { scope: 'sec2' }).tex).includes('{References}'), 'nothing cited, no References');
 });
 
+await check('a statement\'s source shares the parenthesis of its heading with the title, and what it cites is cited', () => {
+  const m = M.buildModel(snapshot([
+    node('sec', 'section', 'Opening.', { title: 'S', order: 1 }),
+    node('thm', 'theorem', 'A statement.', { title: 'Kato\'s Euler system', source: 'Kato [del74, Thm. 12.5]', order: 1 }),
+    node('lem', 'lemma', 'Another.', { source: 'after [sga4] for $\\ell$ *odd*', order: 2 }),
+    node('plain', 'lemma', 'A third.', { title: 'Plain', order: 3 }),
+    edge('refines', 'thm', 'sec'), edge('refines', 'lem', 'sec'), edge('refines', 'plain', 'sec'),
+    node('refs', 'section', '', { title: 'References', order: 2 }),
+    node('del74', 'reference', '', { author: ['P. Deligne'], title: 'La conjecture de Weil. I', year: '1974' }),
+    node('sga4', 'reference', '', { label: 'SGA4', title: 'Cohomologie étale', year: '1972' }),
+    node('unused', 'reference', '', { author: ['N. Body'], title: 'Uncited', year: '2000' }),
+    edge('refines', 'del74', 'refs'), edge('refines', 'sga4', 'refs'), edge('refines', 'unused', 'refs'),
+  ], { reference: { boundary: {}, graph: 'never' } }));
+  const res = exportLatex(m, { scope: 'sec' });
+  const t = bodyOf(res.tex);
+  ok(/\\begin\{bpstatementit\}\{Theorem~1\.1\}\{ \(Kato's Euler system; Kato \[\\hyperref\[bp\d+\]\{Del74\}, Thm\. 12\.5\]\)\}/.test(t),
+    `the title, then the source, its citation linked: ${t.match(/\\begin\{bpstatementit\}\{Theorem[^\n]*/)}`);
+  ok(/\\begin\{bpstatementit\}\{Lemma~1\.2\}\{ \(after \[\\hyperref\[bp\d+\]\{SGA4\}\] for \$\\ell\$ \\emph\{odd\}\)\}/.test(t),
+    `no title: the source alone, its maths and emphasis set: ${t.match(/\\begin\{bpstatementit\}\{Lemma~1\.2[^\n]*/)}`);
+  ok(t.includes('\\begin{bpstatementit}{Lemma~1.3}{ (Plain)}'), 'no source: as before');
+  const refsAt = t.indexOf('\\section*{References}');
+  ok(refsAt > 0, 'the part ends with the works its headings cite');
+  same([...t.slice(refsAt).matchAll(/\\bpbibitem\{([^}]*)\}/g)].map((x) => x[1]), ['Del74', 'SGA4'], 'those, and only those');
+  eq(res.stats.cited, 2, 'counted');
+});
+
 await check('with pdfReferences = "all" every PDF ends with the whole bibliography, on a page of its own', () => {
   const m = M.buildModel(snapshot([
     node('sec', 'section', 'Opening, as in [del74].', { title: 'S', order: 1 }),

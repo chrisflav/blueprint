@@ -213,6 +213,47 @@ export function renderBody(target, text, known, refs, { untrusted = false } = {}
   return target;
 }
 
+/**
+ * Render one line of Markdown into `target` inline, without the paragraph
+ * around it, as `renderBody` renders a body: maths, citations, `[slug]`
+ * references and quiet links.  Without marked the line is its text, whose
+ * references and citations are linked all the same.
+ */
+export function renderInline(target, text, known, refs) {
+  clear(target);
+  const src = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+  const r = refs === undefined ? pageReferences : refs;
+  if (window.marked && typeof window.marked.parseInline === 'function') {
+    try {
+      const { text, restore } = shieldMath(src);
+      target.innerHTML = restore(window.marked.parseInline(markCitations(text, r), { gfm: true }));
+    } catch (e) {
+      target.textContent = src;
+    }
+  } else {
+    target.textContent = src;
+  }
+  renderMath(target);
+  linkifySlugs(target, known, r);
+  quietLinks(target, known, r);
+  return target;
+}
+
+/**
+ * A statement's attribution to the literature (`model.sourceOf`) for its
+ * heading, set after the title as a paper sets a theorem's optional argument:
+ * "Kato's Euler system; Kato [Kat04, Thm. 12.5]", the citations read and
+ * linked as in a body.  An object with no title of its own has the source
+ * alone in its place.  null when it has none.
+ */
+export function headingSource(o, known, refs) {
+  const src = model.sourceOf(o);
+  if (!src) return null;
+  const titled = !!(o.attrs && typeof o.attrs.title === 'string' && o.attrs.title);
+  return el('span.heading-source', titled ? '; ' : null,
+    renderInline(el('span.heading-source-text'), src, known, refs));
+}
+
 // ---------------------------------------------------------------------------
 // untrusted markdown (comments)
 // ---------------------------------------------------------------------------
@@ -795,6 +836,8 @@ const app = {
   svgEl,
   clear,
   renderBody,
+  renderInline,
+  headingSource,
   renderMath,
   proofToggle,
   proofDisclosure,
