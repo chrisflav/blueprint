@@ -158,7 +158,10 @@ def leanNamesOf (facts : Option Facts) (o : Object) : Array String :=
   | none => o.leanNames
 
 /-- The derived status of one object: `proved` only if every name is proved,
-`missing` if any name is missing, else `stated`. -/
+`missing` if any name is missing, `stated` if any rests on `sorry`, and
+`absent` if any name's entry records no status at all.  `blueprint extract`
+always records one; a facts file written without Lean (source locations and
+signatures only) does not, and must not make its objects read `stated`. -/
 def statusOf (facts : Option Facts) (o : Object) : DerivedStatus :=
   let names := leanNamesOf facts o
   if names.isEmpty then .absent else
@@ -173,9 +176,11 @@ def statusOf (facts : Option Facts) (o : Object) : DerivedStatus :=
         else match d.status with
           | "proved" => .proved
           | "proved_with_axioms" => .provedWithAxioms
+          | "" => .absent
           | _ => .stated
     if sts.contains .missing then .missing
     else if sts.contains .stated then .stated
+    else if sts.contains .absent then .absent
     else if sts.contains .provedWithAxioms then .provedWithAxioms
     else .proved
 
