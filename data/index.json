@@ -902,4 +902,12 @@
     {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
    "sha": "0141303c1646df84168988ac099b0bb0f4056982",
    "file": "data/0141303c1646df84168988ac099b0bb0f4056982.json",
-   "date": "2026-11-17"}]}
+   "date": "2026-11-17"},
+  {"summary":
+   {"total": 6,
+    "proved": 2,
+    "byStatus":
+    {"stated": 1, "proved_with_axioms": 1, "proved": 2, "absent": 2}},
+   "sha": "016ea06af0db1528729d7cfb6bbc72ea90be8136",
+   "file": "data/016ea06af0db1528729d7cfb6bbc72ea90be8136.json",
+   "date": "2026-11-21"}]}
