@@ -64,6 +64,8 @@ const MATHS = {
   0x2115: '\\mathbb{N}', 0x2124: '\\mathbb{Z}', 0x211A: '\\mathbb{Q}', 0x211D: '\\mathbb{R}',
   0x2102: '\\mathbb{C}', 0x2119: '\\mathbb{P}', 0x210D: '\\mathbb{H}',
   0x00B9: '^{1}', 0x00B2: '^{2}', 0x00B3: '^{3}', 0x00B5: '\\mu',
+  // Ш, ш: Tate–Shafarevich groups, from the AMS Cyrillic font (the preamble)
+  0x0428: '\\bpSha', 0x0448: '\\bpsha',
 };
 
 // Mathematical alphanumerics: the double-struck capitals (𝔸 … 𝕐) and the

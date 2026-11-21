@@ -734,6 +734,15 @@ await check('a character with no LaTeX form is a visible placeholder and a diagn
   ok(res.diagnostics.some((d) => d.code === 'unknown-character' && /U\+6F22/.test(d.message)), 'said');
 });
 
+await check('Ш and ш are set from the AMS Cyrillic font, not as placeholders', () => {
+  const m = M.buildModel(snapshot([node('s', 'section', 'The group $Ш^1(K, A)$ and $ш$.', { title: 'S' })]));
+  const res = exportLatex(m, {});
+  ok(res.tex.includes('\\DeclareUnicodeCharacter{0428}{\\ensuremath{\\bpSha}}'), 'Ш');
+  ok(res.tex.includes('\\DeclareUnicodeCharacter{0448}{\\ensuremath{\\bpsha}}'), 'ш');
+  ok(res.tex.includes('\\DeclareMathSymbol{\\bpSha}'), 'declared in the preamble');
+  ok(!res.diagnostics.some((d) => d.code === 'unknown-character'), 'no placeholder');
+});
+
 // ---------------------------------------------------------------------------
 // 7. what the website offers, and where it is filed
 // ---------------------------------------------------------------------------

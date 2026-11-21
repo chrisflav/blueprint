@@ -10,6 +10,15 @@
 \usepackage[a4paper,margin=2.5cm,headheight=14pt]{geometry}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{amscd}  % KaTeX's CD diagrams; part of amsmath, so always there
+% Ш and ш in maths (Tate–Shafarevich groups), from the AMS Cyrillic font that
+% amsfonts ships with amssymb, declared here so that no .fd file is needed.
+\DeclareFontEncoding{OT2}{}{}
+\DeclareFontSubstitution{OT2}{wncyr}{m}{n}
+\DeclareFontFamily{OT2}{wncyr}{}
+\DeclareFontShape{OT2}{wncyr}{m}{n}{<->wncyr10}{}
+\DeclareSymbolFont{bpcyrletters}{OT2}{wncyr}{m}{n}
+\DeclareMathSymbol{\bpSha}{\mathalpha}{bpcyrletters}{"58}
+\DeclareMathSymbol{\bpsha}{\mathalpha}{bpcyrletters}{"78}
 \usepackage{mathtools}
 \usepackage{bm}
 \usepackage{graphicx}
