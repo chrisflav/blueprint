@@ -817,6 +817,91 @@ else
   bad "a [site] logoInk without a logo, or not a boolean, is refused"; cat "$TMP/badlogo.out" "$TMP/badink.out"
 fi
 
+# `[site.provenance]`: its attribute is every node kind's, its values and
+# colours reach the snapshot as `project.provenance`, and `check` holds the
+# attribute to the declared values; a project without it has neither
+cp -r examples/minimal "$TMP/prov"
+cat >> "$TMP/prov/blueprint.toml" <<'EOF'
+
+[site.provenance]
+attr = "origin"
+
+[[site.provenance.values]]
+value = "published"
+label = "Published"
+color = "#e8eef7"
+dark  = "#26303d"
+
+[[site.provenance.values]]
+value = "new"
+color = "#E3F1E6"
+EOF
+sed -i 's/^title  = "Addition is commutative"$/&\norigin = "published"/' "$TMP/prov/blueprint/add-comm.md"
+sed -i 's/^title  = "Addition is associative"$/&\norigin = "new"/' "$TMP/prov/blueprint/add-assoc.md"
+sed -i 's/^title = "Basics"$/&\norigin = "new"/' "$TMP/prov/blueprint/_section.md"
+"$BP" build --root "$TMP/prov" -o "$TMP/prov.json" > /dev/null 2>&1
+if "$BP" check --root "$TMP/prov" > "$TMP/prov.out" 2>&1 \
+   && ! grep -q "unknown-attr\|bad-attr" "$TMP/prov.out" \
+   && grep -q '"origin": "published"' "$TMP/prov.json" \
+   && [ "$(grep -c '"origin": "new"' "$TMP/prov.json")" -eq 2 ]; then
+  ok "provenance: its attribute permitted on every node kind (a section too) once declared"
+else
+  bad "provenance: its attribute permitted on every node kind (a section too) once declared"; cat "$TMP/prov.out"
+fi
+wants "$TMP/prov.json" '"attr": "origin"' '"value": "published"' '"label": "Published"' \
+  '"dark": "#26303d"' '"color": "#e8eef7"' '"label": "new"' '"color": "#E3F1E6"'
+if ! grep -q '"provenance"\|"origin"' "$TMP/minimal.json"; then
+  ok "provenance: a snapshot without it has no project.provenance"
+else
+  bad "provenance: a snapshot without it has no project.provenance"
+fi
+sed -i 's/^title = "Addition"$/&\norigin = "folklore"/' "$TMP/prov/blueprint/add.md"
+sed -i 's/^origin = "new"$/origin = 3/' "$TMP/prov/blueprint/add-assoc.md"
+if ! "$BP" check --root "$TMP/prov" > "$TMP/prov.bad" 2>&1 \
+   && grep -q "error: \[bad-attr\] .*'add' has origin = \"folklore\", which '\[site.provenance\]' does not declare; it takes \"published\", \"new\"" "$TMP/prov.bad" \
+   && grep -q "error: \[bad-attr\] .*'add-assoc' has origin = 3; it takes a string" "$TMP/prov.bad" \
+   && [ "$(grep -c "bad-attr" "$TMP/prov.bad")" -eq 2 ]; then
+  ok "provenance: an undeclared value, or one that is no string, is a bad-attr"
+else
+  bad "provenance: an undeclared value, or one that is no string, is a bad-attr"; cat "$TMP/prov.bad"
+fi
+# without the declaration the attribute is no attribute at all
+cp -r examples/minimal "$TMP/noprov"
+sed -i 's/^title  = "Addition is commutative"$/&\norigin = "published"/' "$TMP/noprov/blueprint/add-comm.md"
+if ! "$BP" check --root "$TMP/noprov" > "$TMP/noprov.out" 2>&1 \
+   && grep -q "unknown-attr.*'origin'" "$TMP/noprov.out"; then
+  ok "provenance: undeclared, its attribute is unknown as before"
+else
+  bad "provenance: undeclared, its attribute is unknown as before"; cat "$TMP/noprov.out"
+fi
+provbad=0
+for case in \
+    'attr = "uses"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|which is the name of a kind' \
+    'attr = "p"|needs .\[\[site.provenance.values\]\]' \
+    'attr = "kind"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|must name an attribute' \
+    'attr = "source"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|an attribute of its own' \
+    'attr = "serial"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|an attribute of its own' \
+    'attr = "hide_content"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|an attribute of its own' \
+    'attr = "title"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|an attribute of its own' \
+    'attr = "journal"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|an attribute of its own' \
+    '[[site.provenance.values]]\nvalue = "a"\ncolor = "light blue"|.color. must be a colour' \
+    '[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"\ndark = "#12"|.dark. must be a colour' \
+    '[[site.provenance.values]]\nvalue = "a,b"\ncolor = "#fff"|without commas' \
+    '[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#000"|lists "a" twice'; do
+  rm -rf "$TMP/provtoml"
+  cp -r examples/minimal "$TMP/provtoml"
+  printf "\n[site.provenance]\n${case%%|*}\n" >> "$TMP/provtoml/blueprint.toml"
+  if "$BP" build --root "$TMP/provtoml" -o "$TMP/provtoml.json" > "$TMP/provtoml.out" 2>&1 \
+     || ! grep -q -- "${case#*|}" "$TMP/provtoml.out"; then
+    provbad=1; echo "    [site.provenance] ${case%%|*}:"; cat "$TMP/provtoml.out"
+  fi
+done
+if [ "$provbad" -eq 0 ]; then
+  ok "provenance: a malformed [site.provenance] is refused, saying why"
+else
+  bad "provenance: a malformed [site.provenance] is refused, saying why"
+fi
+
 # `[site.intro]` reaches the snapshot as `project.intro`, its body inline or
 # read from a file, with its duration in milliseconds; `[site] assets` is
 # copied into the site as `assets/`

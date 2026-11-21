@@ -39,7 +39,8 @@ export function render(root, app) {
     : 'Proof (' + own + ') of ' + ofTitle;
   page.appendChild(el('div.obj-head',
     el('h1', heading, source),
-    el('div.row', app.kindBadge(o.kind), status === null ? null : app.statusBadge(status))));
+    el('div.row', app.kindBadge(o.kind), app.provenanceBadge(m, o),
+      status === null ? null : app.statusBadge(status))));
   page.appendChild(el('div.obj-id', o.id));
 
   // The toggle where there is a proof to fold: one of its own, or a section

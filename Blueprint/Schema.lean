@@ -11,6 +11,9 @@ namespace Blueprint
 
 /-! ## The default schema -/
 
+/-- Reserved front matter keys, never attributes or sugar. -/
+def reservedKeys : Array String := #["id", "kind", "boundary"]
+
 /-- Attributes every node kind permits.  `source` is a statement's
 attribution to the literature, Markdown with citations as in a body
 (`"Kato [kato04, Thm. 12.5]"`), which its heading sets after the title as a
@@ -311,6 +314,65 @@ def decodeIntroLayer (n : Nat) (l : TValue) : Except String IntroLayer := do
     | _ => throw s!"{at_}: an arrow must be a pair of node ids, [\"from\", \"to\"]"
   return { nodes, arrows }
 
+/-- Is this a colour the website can lighten and darken: `#rgb` or `#rrggbb`? -/
+def isHexColor (s : String) : Bool :=
+  s.startsWith "#" && (s.length == 4 || s.length == 7) &&
+    (s.drop 1).all fun c => c.isDigit || ('a' ≤ c && c ≤ 'f') || ('A' ≤ c && c ≤ 'F')
+
+/-- `[site.provenance]`: the attribute (`attr`, `"provenance"` when not given)
+and its `[[site.provenance.values]]`, each a `value` with an optional `label`,
+a light `color` and an optional `dark` one.  `("", #[])` when there is no such
+table. -/
+def decodeProvenance (site : Option TValue) :
+    Except String (String × Array ProvenanceValue) := do
+  match site.bind (·.get? "provenance") with
+  | none => pure ("", #[])
+  | some pt@(.table _) =>
+    let attr ← match pt.get? "attr" with
+      | none => pure "provenance"
+      | some v => match v.asString? with
+        | some s => pure s
+        | none => throw s!"'[site.provenance] attr' must be a string, got a {v.typeName}"
+    if attr.isEmpty || reservedKeys.contains attr then
+      throw s!"'[site.provenance] attr' must name an attribute, got \"{attr}\""
+    -- an attribute the tool reads for something else, with checks of its own
+    if referenceAttrs.contains attr || defaultEdgeAttrs.contains attr || universalAttrs.contains attr then
+      throw s!"'[site.provenance] attr' is \"{attr}\", which is an attribute of its own; \
+        name one for the provenance alone, such as \"provenance\""
+    let vals ← match pt.get? "values" with
+      | some (.arr xs) => pure xs
+      | some v => throw s!"'[site.provenance] values' must be an array of tables, got a {v.typeName}"
+      | none => throw "'[site.provenance]' needs '[[site.provenance.values]]', the values and their colours"
+    if vals.isEmpty then
+      throw "'[site.provenance]' needs at least one '[[site.provenance.values]]'"
+    let mut out : Array ProvenanceValue := #[]
+    for v in vals do
+      let at_ := s!"'[[site.provenance.values]]' number {out.size + 1}"
+      unless v matches .table _ do
+        throw s!"{at_} must be a table, got a {v.typeName}"
+      let str (k : String) : Except String String :=
+        match v.get? k with
+        | none => pure ""
+        | some x => match x.asString? with
+          | some s => pure s
+          | none => throw s!"{at_}: '{k}' must be a string, got a {x.typeName}"
+      let value ← str "value"
+      -- the graph's link lists the hidden values with commas between them
+      if value.isEmpty || value.any (· == ',') then
+        throw s!"{at_} needs a 'value', a non-empty string without commas"
+      if out.any (·.value == value) then
+        throw s!"'[[site.provenance.values]]' lists \"{value}\" twice"
+      let label ← str "label"
+      let color ← str "color"
+      unless isHexColor color do
+        throw s!"{at_}: 'color' must be a colour #rgb or #rrggbb, got \"{color}\""
+      let dark ← str "dark"
+      unless dark.isEmpty || isHexColor dark do
+        throw s!"{at_}: 'dark' must be a colour #rgb or #rrggbb, got \"{dark}\""
+      out := out.push { value, label := if label.isEmpty then value else label, color, dark }
+    pure (attr, out)
+  | some v => throw s!"'[site] provenance' must be a table, got a {v.typeName}"
+
 /-- Decode a whole `blueprint.toml` on top of the default schema. -/
 def decodeConfig (t : TValue) (defaultName : String) :
     Except String (Project × Schema) := do
@@ -441,9 +503,10 @@ def decodeConfig (t : TValue) (defaultName : String) :
         throw s!"'[site.comments] server' must be an http(s) address, got {server}"
       pure (zulip, channel, server)
     | some v => throw s!"'[site] comments' must be a table, got a {v.typeName}"
+  let (provenanceAttr, provenanceValues) ← decodeProvenance site
   let project : Project :=
     { name, title, dir, leanModules, leanDescend, katexMacros, numbering, pdfDetails,
-      pdfScopes, pdfReferences, logo, logoInk, docgen,
+      pdfScopes, pdfReferences, logo, logoInk, docgen, provenanceAttr, provenanceValues,
       intro, introFile, introMs, introBackground, introHoldMs, introStepMs, introZoom,
       assets, blog, commentsZulip, commentsChannel, commentsServer, visits }
   let mut schema := defaultSchema
@@ -466,6 +529,15 @@ def decodeConfig (t : TValue) (defaultName : String) :
     | none => throw s!"defaultCollapse names an unknown kind '{c}'"
     | some k => unless k.collapse do
         throw s!"defaultCollapse names '{c}', which is not declared collapse = true"
+  -- The provenance attribute is every node kind's, so that a project need
+  -- not list it in each kind's `attrs`; a kind of that name would make the
+  -- key ambiguous between the attribute and the kind's sugar.
+  unless provenanceAttr.isEmpty do
+    if (schema.kind? provenanceAttr).isSome then
+      throw s!"'[site.provenance] attr' is \"{provenanceAttr}\", which is the name of a kind"
+    for k in schema.kinds do
+      if k.roles.isEmpty && !k.attrs.contains provenanceAttr then
+        schema := schema.insertKind { k with attrs := k.attrs.push provenanceAttr }
   -- A name in `[site] pdfScopes` that is no kind is an object's id, which
   -- `structuralChecks` looks for once the objects are read.
   return (project, schema)

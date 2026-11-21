@@ -755,6 +755,19 @@ export function kindBadge(kind) {
   return el('span.badge.kind', kind);
 }
 
+/**
+ * The badge naming where `o` comes from, its provenance value's label on the
+ * value's colour (`model.provenanceOf`); null when the project declares no
+ * provenance or `o` carries no declared value.  Unlike the status it is
+ * about the mathematics, so it shows whether or not the progress does.
+ */
+export function provenanceBadge(m, o) {
+  const p = model.provenanceOf(m);
+  const v = model.provenanceValueOf(m, o);
+  if (!v) return null;
+  return el('span.badge.prov.pv', { style: model.provenanceStyle(v), title: p.attr + ': ' + v.value }, v.label);
+}
+
 /** A progress bar; none while the progress is hidden, unless `opts.always` (the Progress page). */
 export function progressBar(p, opts = {}) {
   if (!app.showProgress && !opts.always) return null;
@@ -848,6 +861,7 @@ const app = {
   objectHref,
   statusBadge,
   kindBadge,
+  provenanceBadge,
   progressBar,
   objectHeadBadges,
   /** How a reference to `id` reads here: {word, number, href}, or null. */

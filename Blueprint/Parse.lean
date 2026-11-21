@@ -18,9 +18,6 @@ between `+++` lines, plus four conveniences:
 
 namespace Blueprint
 
-/-- Reserved front matter keys, never attributes or sugar. -/
-def reservedKeys : Array String := #["id", "kind", "boundary"]
-
 /-- The basename of the file that declares a directory's section object. -/
 def sectionFileStem : String := "_section"
 

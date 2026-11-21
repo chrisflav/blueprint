@@ -123,6 +123,8 @@ export function buildModel(snapshot) {
     _mixes: new Map(), // memoised status counts under each object, per collapse kind
     _types: new Map(), // memoised `nodeType`, per object
     _graphModels: new Map(), // memoised `graphModel`, per choice of what to hide
+    _provenance: undefined, // the project's provenance (`provenanceOf`), once read
+    _provMixes: new Map(), // memoised provenance counts under each object, per collapse kind
     _namingRe: null, // the words that already name a reference, see `referenceLabel`
   };
   return model;
@@ -601,6 +603,157 @@ export function progressMixOf(model, kind, id) {
         mix[s] = (mix[s] || 0) + 1;
       }
       out = { proved: mix.proved || 0, total: counted.length, mix };
+    }
+    memo.set(id, out);
+  }
+  return memo.get(id);
+}
+
+// ---------------------------------------------------------------------------
+// Provenance: where a statement comes from
+// ---------------------------------------------------------------------------
+
+// A project may declare, as `[site.provenance]` in blueprint.toml, one
+// attribute whose values say where a statement comes from, the published
+// literature, a modification of it, or the project itself, each with a light
+// colour (`project.provenance` in the snapshot).  The graph fills a node with
+// its value's colour, the document and the object page set a badge with its
+// label, and the graph can leave the objects of a value out.  Without the
+// declaration none of this shows.
+
+const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
+
+/** `#rgb` or `#rrggbb` as [r, g, b] in 0..255. */
+function hexRgb(hex) {
+  let h = hex.slice(1);
+  if (h.length === 3) h = [...h].map((c) => c + c).join('');
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+}
+
+/**
+ * A fill for the dark colour scheme from a light one, when the project gives
+ * none: the same hue, its saturation held to a quarter, at a fifth of full
+ * lightness, which sits on the dark graph as the light colour sits on the
+ * light one.
+ */
+export function darkFill(hex) {
+  const [r, g, b] = hexRgb(hex).map((x) => x / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l0 = (max + min) / 2;
+  const d = max - min;
+  const s0 = d === 0 ? 0 : d / (1 - Math.abs(2 * l0 - 1));
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+  }
+  h = (h * 60 + 360) % 360;
+  const s = Math.min(s0, 0.25);
+  const l = 0.2;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const [r1, g1, b1] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  const m = l - c / 2;
+  return '#' + [r1, g1, b1].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * The project's provenance, `{attr, values: [{value, label, color, dark}]}`
+ * with every value's dark fill (`darkFill` when the snapshot has none), or
+ * null when the project declares none.  A value without a colour of the form
+ * `#rgb` or `#rrggbb` is left out, so that a colour is never written into a
+ * style unchecked.  Memoised on the model.
+ */
+export function provenanceOf(model) {
+  if (model._provenance !== undefined) return model._provenance;
+  const p = model.project && model.project.provenance;
+  let out = null;
+  if (p && typeof p.attr === 'string' && p.attr && Array.isArray(p.values)) {
+    const values = p.values
+      .filter((v) => v && typeof v.value === 'string' && v.value && HEX_COLOR.test(v.color || ''))
+      .map((v) => ({
+        value: v.value,
+        label: typeof v.label === 'string' && v.label ? v.label : v.value,
+        color: v.color,
+        dark: HEX_COLOR.test(v.dark || '') ? v.dark : darkFill(v.color),
+      }));
+    if (values.length) out = { attr: p.attr, values };
+  }
+  model._provenance = out;
+  return out;
+}
+
+/** The declared provenance value `o` carries, `{value, label, color, dark}`, or null. */
+export function provenanceValueOf(model, o) {
+  const p = provenanceOf(model);
+  const v = p && o && o.attrs ? o.attrs[p.attr] : undefined;
+  return typeof v === 'string' ? p.values.find((x) => x.value === v) || null : null;
+}
+
+/**
+ * The inline style that hands a value's colours to style.css, which takes
+ * `--pv` under the light colour scheme and `--pv-dark` under the dark one.
+ */
+export function provenanceStyle(v) {
+  return `--pv:${v.color};--pv-dark:${v.dark}`;
+}
+
+/**
+ * What is directly below `id` in a collapse order, read as the graph reads
+ * it: its children, and what is attached to it with no parent of its own (a
+ * proof, which stands for its statement, DESIGN 3), whose children are
+ * below the statement too.
+ */
+function belowIn(model, order, id) {
+  const out = childrenOf(order, id).slice();
+  for (const { object } of incidentTo(model, id)) {
+    if (attachedTo(object) === id && parentsOf(order, object.id).length === 0) out.push(object.id);
+  }
+  return out;
+}
+
+/**
+ * What a collapsed section holds, by provenance: `{parts: [{value, n}],
+ * unmarked, total}`, the parts in the declared order.  Every node (an object
+ * with an empty boundary) in the whole subtree below `id` counts once: one
+ * carrying a value as that value, whatever is above or below it, and one
+ * carrying none, a heading apart, as unmarked.  The walk goes through
+ * everything, nodes with or without a value, proofs and relations with
+ * something below them alike, so a "modified" theorem with a hundred "new"
+ * lemmas inside counts as one modified and a hundred new.  null when nothing
+ * below carries a value, so a section whose contents say nothing is drawn as
+ * it always was.  Memoised per model and kind.
+ */
+export function provenanceMixOf(model, kind, id) {
+  const p = provenanceOf(model);
+  if (!p || !model.byId.has(id)) return null;
+  let memo = model._provMixes.get(kind);
+  if (!memo) model._provMixes.set(kind, (memo = new Map()));
+  if (!memo.has(id)) {
+    const order = collapseOrder(model, kind);
+    const counts = new Map();
+    let unmarked = 0;
+    const seen = new Set([id]);
+    const stack = belowIn(model, order, id);
+    while (stack.length) {
+      const x = stack.pop();
+      if (seen.has(x)) continue;
+      seen.add(x);
+      const o = model.byId.get(x);
+      if (!o) continue;
+      stack.push(...belowIn(model, order, x));
+      if (o.boundary.length) continue;
+      const v = provenanceValueOf(model, o);
+      if (v) counts.set(v.value, (counts.get(v.value) || 0) + 1);
+      else if (!isSectionKind(o.kind)) unmarked += 1;
+    }
+    let out = null;
+    if (counts.size) {
+      const parts = p.values.filter((v) => counts.has(v.value)).map((v) => ({ value: v, n: counts.get(v.value) }));
+      out = { parts, unmarked, total: unmarked + parts.reduce((a, x) => a + x.n, 0) };
     }
     memo.set(id, out);
   }
@@ -1605,9 +1758,26 @@ export function graphHint(model, kindName) {
  * a kind drawn `through` (a part) is left out with the relations touching it,
  * but not with what is below it, which then stands where it stood: its
  * chapters become roots.
+ *
+ * `hideValues` names provenance values (`provenanceOf`) the reader hides:
+ * an object carrying one of them is left out as a part is, with the
+ * relations touching it but not with what is below it, which `graphModel`
+ * lifts to the nearest ancestor still drawn, so a new lemma refining a
+ * hidden theorem from the literature stays; its proof (attached to it, with
+ * no parent of its own) goes with it the same way.  A section (`isSectionKind`)
+ * that carries no value of its own is left out too once nothing below it is
+ * drawn, some of it for a hidden value, so that hiding the published
+ * statements leaves no empty section behind; a statement stays whatever is
+ * hidden inside it.
  */
-export function outOfGraph(model, { hideOptional = false } = {}) {
+export function outOfGraph(model, opts = {}) {
+  return graphOmissions(model, opts).out;
+}
+
+/** `outOfGraph`, and of its ids those left out for carrying a hidden value. */
+function graphOmissions(model, { hideOptional = false, hideValues = [] } = {}) {
   const out = new Set();
+  const byValue = new Set();
   const stack = [];
   for (const o of model.objects) {
     const g = graphHint(model, o.kind);
@@ -1621,31 +1791,139 @@ export function outOfGraph(model, { hideOptional = false } = {}) {
   // Built only when something is left out: most snapshots leave nothing, and
   // the graph and object pages then need no order but the one they show.
   let orders = null;
-  while (stack.length) {
-    const id = stack.pop();
-    if (out.has(id)) continue;
-    out.add(id);
+  const drain = () => {
+    while (stack.length) {
+      const id = stack.pop();
+      if (out.has(id)) continue;
+      out.add(id);
+      if (!orders) orders = model.collapseKinds.map((k) => collapseOrder(model, k));
+      for (const order of orders) for (const c of childrenOf(order, id)) stack.push(c);
+      for (const { object } of incidentTo(model, id)) stack.push(object.id);
+    }
+  };
+  drain();
+  const hidden = new Set(hideValues);
+  if (hidden.size && provenanceOf(model)) {
+    const before = new Set(out);
     if (!orders) orders = model.collapseKinds.map((k) => collapseOrder(model, k));
-    for (const order of orders) for (const c of childrenOf(order, id)) stack.push(c);
-    for (const { object } of incidentTo(model, id)) stack.push(object.id);
+    // As a part: the object and the relations touching it, not what is below.
+    // What is attached to it with no parent of its own (its proof, which
+    // stands for it) goes the same way, so what refines the proof is lifted
+    // as what refines the statement is.
+    const through = [];
+    for (const o of model.objects) {
+      const v = provenanceValueOf(model, o);
+      if (v && hidden.has(v.value) && !out.has(o.id)) through.push(o.id);
+    }
+    while (through.length) {
+      const id = through.pop();
+      if (out.has(id)) continue;
+      out.add(id);
+      byValue.add(id);
+      for (const { object } of incidentTo(model, id)) {
+        const attached = attachedTo(object) === id &&
+          orders.every((order) => parentsOf(order, object.id).length === 0);
+        if (attached) through.push(object.id); else stack.push(object.id);
+      }
+    }
+    drain();
+    // A section without a value of its own that the hiding leaves with
+    // nothing drawn below it goes too: one pass, below before above.
+    const emptied = new Set();
+    const memo = new Map(); // id -> {alive: something at or below is drawn, hid: something at or below was hidden}
+    const visit = (x) => {
+      if (memo.has(x)) return memo.get(x);
+      memo.set(x, { alive: false, hid: false }); // a cycle reads as nothing
+      let alive = false;
+      let hid = false;
+      for (const order of orders) {
+        for (const c of belowIn(model, order, x)) {
+          const r = visit(c);
+          alive = alive || r.alive;
+          hid = hid || r.hid;
+        }
+      }
+      const o = model.byId.get(x);
+      if (o && !out.has(x) && !alive && hid && isSectionKind(o.kind) && !provenanceValueOf(model, o)) emptied.add(x);
+      const gone = out.has(x) || emptied.has(x);
+      const r = { alive: alive || !gone, hid: hid || (gone && !before.has(x)) };
+      memo.set(x, r);
+      return r;
+    };
+    for (const o of model.objects) visit(o.id);
+    stack.push(...emptied);
+    drain();
   }
-  return out;
+  return { out, byValue };
+}
+
+/**
+ * The relations of a collapse kind that put what was below an object hidden
+ * for its value (`byValue`) under the nearest ancestors still drawn, looked
+ * for through further hidden ones, and from a hidden proof through the
+ * statement it stands for: `{id, kind, boundary: [src, tgt]}` for each pair
+ * no surviving relation already joins.  Only what has no parent left in the
+ * order is lifted; something that keeps another parent stays under that one
+ * alone, and something with no ancestor drawn becomes a root.
+ */
+function liftedEdges(model, out, byValue) {
+  const lifted = [];
+  const have = new Set(model.objects.filter((o) => !out.has(o.id)).map((o) => o.id));
+  for (const kind of model.collapseKinds) {
+    const order = collapseOrder(model, kind);
+    // The nearest ancestors drawn of a hidden object, once per object.
+    const memo = new Map();
+    const above = (id) => {
+      if (memo.has(id)) return memo.get(id);
+      memo.set(id, []); // a cycle reads as none
+      let ps = parentsOf(order, id);
+      const of = attachedTo(model.byId.get(id));
+      if (!ps.length && of != null && byValue.has(of)) ps = [of];
+      const found = new Set();
+      for (const p of ps) {
+        if (!out.has(p)) found.add(p);
+        else if (byValue.has(p)) for (const a of above(p)) found.add(a);
+      }
+      memo.set(id, [...found]);
+      return memo.get(id);
+    };
+    const kids = new Set();
+    for (const h of byValue) for (const c of childrenOf(order, h)) if (!out.has(c)) kids.add(c);
+    for (const c of kids) {
+      const ps = parentsOf(order, c);
+      if (!ps.every((p) => out.has(p))) continue;
+      const targets = new Set();
+      for (const p of ps) if (byValue.has(p)) for (const a of above(p)) targets.add(a);
+      for (const a of targets) {
+        const id = `${kind}/${c}/${a}`;
+        if (have.has(id)) continue;
+        have.add(id);
+        lifted.push({ id, kind, attrs: {}, body: '', depth: 1,
+          boundary: [{ role: 'src', id: c }, { role: 'tgt', id: a }] });
+      }
+    }
+  }
+  return lifted;
 }
 
 /**
  * The model the graph page draws: `model` itself when nothing is left out, and
  * otherwise the model of the same snapshot without the objects `outOfGraph`
  * names.  Every view, quotient, consistency state and reduction computed on it
- * is then that of a blueprint in which those objects were never written.
- * Memoised on the model.
+ * is then that of a blueprint in which those objects were never written,
+ * except that what was below an object hidden for its provenance value sits
+ * under that object's nearest ancestors still drawn (`liftedEdges`).
+ * Memoised on the model, per choice of what to hide.
  */
-export function graphModel(model, { hideOptional = false } = {}) {
-  const key = hideOptional ? 'optional' : 'never';
+export function graphModel(model, { hideOptional = false, hideValues = [] } = {}) {
+  const key = (hideOptional ? 'optional' : 'never') +
+    (hideValues.length ? '\n' + [...hideValues].sort().join('\n') : '');
   const hit = model._graphModels.get(key);
   if (hit) return hit;
-  const out = outOfGraph(model, { hideOptional });
+  const { out, byValue } = graphOmissions(model, { hideOptional, hideValues });
   const gm = out.size === 0 ? model
-    : buildModel({ ...model.snapshot, objects: model.objects.filter((o) => !out.has(o.id)) });
+    : buildModel({ ...model.snapshot, objects: model.objects.filter((o) => !out.has(o.id))
+      .concat(byValue.size ? liftedEdges(model, out, byValue) : []) });
   model._graphModels.set(key, gm);
   return gm;
 }

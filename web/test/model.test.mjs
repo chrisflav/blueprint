@@ -2038,6 +2038,166 @@ check('sourceUrl: a declaration\'s lines on GitHub, by the package that holds it
 });
 
 // ---------------------------------------------------------------------------
+// provenance, `[site.provenance]`
+// ---------------------------------------------------------------------------
+
+/**
+ * Three chapters: `ch1` holds a published theorem with a new lemma refining
+ * it, a new definition and a new theorem; `ch2` holds only published
+ * statements, two of them in a section; `ch3` holds an unmarked remark and
+ * one with an undeclared value.  The new theorem uses two published ones,
+ * the new lemma the new definition.
+ */
+function provenanceSnapshot(provenance) {
+  const node = (id, kind, attrs = {}) => ({ id, kind, boundary: [], attrs, body: '', depth: 0 });
+  const edge = (kind, src, tgt) => ({ id: `${kind}/${src}/${tgt}`, kind, attrs: {}, body: '', depth: 1,
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }] });
+  const binary = { boundary: { src: { min: 1, max: 1 }, tgt: { min: 1, max: 1 } } };
+  const pv = (v) => ({ provenance: v });
+  return {
+    version: 1,
+    project: { name: 'p', title: 'p', dir: 'blueprint', ...(provenance ? { provenance } : {}) },
+    schema: { defaultCollapse: 'refines', kinds: {
+      chapter: { boundary: {} }, section: { boundary: {} }, theorem: { boundary: {}, countable: true },
+      lemma: { boundary: {}, countable: true }, definition: { boundary: {}, countable: true },
+      remark: { boundary: {} }, refines: { ...binary, collapse: true }, uses: binary } },
+    objects: [
+      node('ch1', 'chapter'), node('ch2', 'chapter'), node('ch3', 'chapter'),
+      node('pub', 'theorem', pv('published')), node('lem', 'lemma', pv('new')),
+      node('def', 'definition', pv('new')), node('thm', 'theorem', pv('new')),
+      node('sec', 'section'), node('p1', 'theorem', pv('published')), node('p2', 'lemma', pv('published')),
+      node('p3', 'lemma', pv('published')), node('rem', 'remark'), node('odd', 'remark', pv('bogus')),
+      edge('refines', 'pub', 'ch1'), edge('refines', 'lem', 'pub'), edge('refines', 'def', 'ch1'),
+      edge('refines', 'thm', 'ch1'), edge('refines', 'sec', 'ch2'), edge('refines', 'p1', 'sec'),
+      edge('refines', 'p2', 'sec'), edge('refines', 'p3', 'ch2'), edge('refines', 'rem', 'ch3'),
+      edge('refines', 'odd', 'ch3'), edge('uses', 'thm', 'pub'), edge('uses', 'thm', 'p1'),
+      edge('uses', 'lem', 'def'),
+    ],
+    derived: {},
+  };
+}
+const PROVENANCE = {
+  attr: 'provenance',
+  values: [
+    { value: 'published', label: 'Published', color: '#e8eef7', dark: '#26303d' },
+    { value: 'new', label: 'New', color: '#e3f1e6' },
+    { value: 'evil', label: 'Evil', color: 'red;background:url(x)' },
+  ],
+};
+
+check('provenance: read off the snapshot, a dark fill derived where none is given', () => {
+  eq(M.provenanceOf(M.buildModel(provenanceSnapshot(null))), null, 'none declared, none read');
+  const m = M.buildModel(provenanceSnapshot(PROVENANCE));
+  const p = M.provenanceOf(m);
+  eq(p.attr, 'provenance', 'the attribute');
+  eq(p.values.map((v) => v.value).join(), 'published,new', 'in the declared order, a colour that is no colour left out');
+  eq(p.values[0].dark, '#26303d', 'a dark fill given is kept');
+  ok(/^#[0-9a-f]{6}$/.test(p.values[1].dark), `a dark fill derived: ${p.values[1].dark}`);
+  eq(M.darkFill('#e3f1e6'), M.darkFill('#E3F1E6'), 'case does not matter');
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(M.darkFill('#e3f1e6').slice(i, i + 2), 16));
+  ok(g > r && g > b && g < 80, `the hue kept, the colour dark: ${M.darkFill('#e3f1e6')}`);
+  eq(M.darkFill('#fff'), '#333333', 'a grey stays grey');
+  eq(M.provenanceValueOf(m, m.byId.get('pub')).label, 'Published', 'an object\'s value');
+  eq(M.provenanceValueOf(m, m.byId.get('rem')), null, 'none');
+  eq(M.provenanceValueOf(m, m.byId.get('odd')), null, 'an undeclared value is none');
+  eq(M.provenanceStyle(p.values[0]), '--pv:#e8eef7;--pv-dark:#26303d', 'the style handing the colours on');
+});
+
+/**
+ * `provenanceSnapshot` and, in `ch1`: a proof of the published theorem with
+ * a new step refining it; an unmarked theorem `ut` refined by a published
+ * lemma `ul` only; a new lemma `mp` refining both the published theorem and
+ * the new definition.
+ */
+function provenanceSnapshotMore() {
+  const s = provenanceSnapshot(PROVENANCE);
+  const node = (id, kind, attrs = {}) => ({ id, kind, boundary: [], attrs, body: '', depth: 0 });
+  const edge = (kind, src, tgt) => ({ id: `${kind}/${src}/${tgt}`, kind, attrs: {}, body: '', depth: 1,
+    boundary: [{ role: 'src', id: src }, { role: 'tgt', id: tgt }] });
+  s.schema.kinds.proof = { boundary: { of: { min: 1, max: 1 } } };
+  s.objects.push(
+    { id: 'proof/pub', kind: 'proof', boundary: [{ role: 'of', id: 'pub' }], attrs: {}, body: '', depth: 1 },
+    node('step', 'lemma', { provenance: 'new' }), edge('refines', 'step', 'proof/pub'),
+    node('ut', 'theorem'), edge('refines', 'ut', 'ch1'),
+    node('ul', 'lemma', { provenance: 'published' }), edge('refines', 'ul', 'ut'),
+    node('mp', 'lemma', { provenance: 'new' }), edge('refines', 'mp', 'pub'), edge('refines', 'mp', 'def'));
+  return s;
+}
+
+check('provenance: a collapsed section counts every node with a value below it, through everything', () => {
+  const mixOf = (m) => (id) => {
+    const x = M.provenanceMixOf(m, 'refines', id);
+    return x && x.parts.map((q) => q.value.value + ':' + q.n).join(' ') + ' unmarked:' + x.unmarked + ' total:' + x.total;
+  };
+  const mix = mixOf(M.buildModel(provenanceSnapshot(PROVENANCE)));
+  // `lem`, below the published `pub`, counts for itself.
+  eq(mix('ch1'), 'published:1 new:3 unmarked:0 total:4', 'ch1');
+  // `sec`, a heading without a value, is looked through and not counted.
+  eq(mix('ch2'), 'published:3 unmarked:0 total:3', 'ch2');
+  eq(mix('ch3'), null, 'nothing declared inside, nothing to show');
+  eq(M.provenanceMixOf(M.buildModel(provenanceSnapshot(null)), 'refines', 'ch1'), null, 'no provenance, no mix');
+  // Through a proof to the step refining it, through an unmarked theorem to
+  // its lemma, a node below two parents once; the unmarked theorem counts.
+  const more = mixOf(M.buildModel(provenanceSnapshotMore()));
+  eq(more('ch1'), 'published:2 new:5 unmarked:1 total:8', 'ch1, with more inside');
+  eq(more('pub'), 'new:3 unmarked:0 total:3', 'a theorem holds its lemmas and its proof\'s step');
+});
+
+check('provenance: hiding a value leaves its objects out of the graph, not what is below them, and the sections it empties', () => {
+  const m = M.buildModel(provenanceSnapshot(PROVENANCE));
+  const out = M.outOfGraph(m, { hideValues: ['published'] });
+  sameSet(out, ['pub', 'refines/pub/ch1', 'refines/lem/pub', 'uses/thm/pub',
+    'p1', 'p2', 'p3', 'sec', 'ch2', 'refines/p1/sec', 'refines/p2/sec', 'refines/p3/ch2',
+    'refines/sec/ch2', 'uses/thm/p1'], 'the published statements and their relations, ch2 emptied');
+  ok(!out.has('lem'), 'the new lemma below the published theorem stays');
+  ok(!out.has('uses/lem/def'), 'and so does a relation between two that stay');
+  ok(!out.has('ch3'), 'a chapter that had nothing hidden stays');
+  eq(M.outOfGraph(m, { hideValues: ['nonsense'] }).size, 0, 'an unknown value hides nothing');
+  eq(M.outOfGraph(M.buildModel(provenanceSnapshot(null)), { hideValues: ['published'] }).size, 0,
+    'without a provenance nothing is hidden');
+  const gm = M.graphModel(m, { hideValues: ['published'] });
+  eq(gm === M.graphModel(m, { hideValues: ['published'] }), true, 'memoised');
+  eq(gm === M.graphModel(m), false, 'apart from the unhidden one');
+  sameSet(M.visibleNodes(M.makeView(gm, 'refines', ['ch1'])).map((o) => o.id), ['lem', 'def', 'thm', 'ch3'],
+    'the new argument\'s skeleton, the lemma lifted into the chapter');
+  sameSet(M.parentsOf(M.collapseOrder(gm, 'refines'), 'lem'), ['ch1'], 'under the hidden theorem\'s parent');
+  ok(gm.byId.has('uses/lem/def'), 'its use of the definition drawn');
+  eq(M.provenanceMixOf(gm, 'refines', 'ch1').parts.map((q) => q.value.value + ':' + q.n).join(), 'new:3',
+    'counted on what is drawn');
+  eq(M.graphModel(m).byId.has('refines/lem/ch1'), false, 'nothing lifted while nothing is hidden');
+  // Hiding a value inside a hidden one lifts through both; what is left of a
+  // chapter decides whether it stays.
+  const both = M.graphModel(m, { hideValues: ['published', 'new'] });
+  sameSet(M.visibleNodes(M.makeView(both, 'refines', [])).map((o) => o.id), ['ch3'], 'only the unmarked chapter');
+  const deep = provenanceSnapshot(PROVENANCE);
+  deep.objects.push({ id: 'step', kind: 'lemma', boundary: [], attrs: {}, body: '', depth: 0 },
+    { id: 'refines/step/lem', kind: 'refines', attrs: {}, body: '', depth: 1,
+      boundary: [{ role: 'src', id: 'step' }, { role: 'tgt', id: 'lem' }] });
+  const dm = M.graphModel(M.buildModel(deep), { hideValues: ['published', 'new'] });
+  sameSet(M.parentsOf(M.collapseOrder(dm, 'refines'), 'step'), ['ch1'], 'lifted through two hidden levels');
+  ok(dm.byId.has('ch1'), 'the chapter keeps it, so it stays');
+});
+
+check('provenance: a hidden statement\'s proof is lifted through, a statement is no section, a second parent stays alone', () => {
+  const m = M.buildModel(provenanceSnapshotMore());
+  const out = M.outOfGraph(m, { hideValues: ['published'] });
+  ok(out.has('proof/pub'), 'the hidden theorem\'s proof goes with it');
+  ok(!out.has('step'), 'what refines the proof stays');
+  ok(out.has('ul') && !out.has('ut'), 'an unmarked theorem whose lemmas are all hidden stays');
+  ok(!out.has('mp'), 'a lemma with a parent left stays');
+  const gm = M.graphModel(m, { hideValues: ['published'] });
+  const order = M.collapseOrder(gm, 'refines');
+  sameSet(M.parentsOf(order, 'step'), ['ch1'], 'the proof\'s step lifted, through the statement, into the chapter');
+  sameSet(M.parentsOf(order, 'mp'), ['def'], 'a second parent kept, and nothing lifted beside it');
+  sameSet(M.visibleNodes(M.makeView(gm, 'refines', ['ch1'])).map((o) => o.id), ['lem', 'def', 'thm', 'step', 'ut', 'ch3'],
+    'what is drawn in ch1');
+  eq(gm.byId.has('ut') && M.childrenOf(order, 'ut').length, 0, 'the unmarked theorem with nothing left in it');
+  // With every value hidden the unmarked theorem keeps its chapter.
+  const all = M.graphModel(m, { hideValues: ['published', 'new'] });
+  sameSet(M.visibleNodes(M.makeView(all, 'refines', [])).map((o) => o.id), ['ch1', 'ch3'], 'ch1 kept by ut');
+});
+
+// ---------------------------------------------------------------------------
 
 if (failures.length) {
   console.error(`\n${failures.length} FAILED, ${passed} passed\n`);

@@ -336,6 +336,22 @@ def structuralChecks (b : Blueprint) : Array Check := Id.run do
     | some v =>
       cs := cs.push <| Check.error "bad-attr"
         s!"{o.source.file}: '{o.id}' has serial = {v}; it takes a string or a whole number (its number), or false (no number)" #[o.id]
+  -- the provenance attribute of `[site.provenance]`: one of its declared
+  -- values, each of which has its colour in the graph
+  unless b.project.provenanceAttr.isEmpty do
+    let attr := b.project.provenanceAttr
+    let values := b.project.provenanceValues.map (·.value)
+    let allowed := String.intercalate ", " (values.toList.map fun v => s!"\"{v}\"")
+    for o in b.objects do
+      match o.attr? attr with
+      | none => pure ()
+      | some (.str v) =>
+        unless values.contains v do
+          cs := cs.push <| Check.error "bad-attr"
+            s!"{o.source.file}: '{o.id}' has {attr} = \"{v}\", which '[site.provenance]' does not declare; it takes {allowed}" #[o.id]
+      | some v =>
+        cs := cs.push <| Check.error "bad-attr"
+          s!"{o.source.file}: '{o.id}' has {attr} = {v}; it takes a string, one of {allowed}" #[o.id]
   -- links in prose
   for o in b.objects do
     for l in sortDedup (extractLinks o.body) do
