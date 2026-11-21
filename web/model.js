@@ -702,13 +702,30 @@ export function provenanceStyle(v) {
 }
 
 /**
- * What a collapsed object holds, by provenance: `{parts: [{value, n}],
- * unmarked, total}`, the parts in the declared order.  Counted are the nodes
- * below `id` in the collapse order, each once: one carrying a value counts
- * as that value, and what is below it is not looked into; one carrying none
- * is looked through to what is below it, and counts as unmarked when nothing
- * is.  null when nothing below carries a value, so a section whose contents
- * say nothing is drawn as it always was.  Memoised per model and kind.
+ * What is directly below `id` in a collapse order, read as the graph reads
+ * it: its children, and what is attached to it with no parent of its own (a
+ * proof, which stands for its statement, DESIGN 3), whose children are
+ * below the statement too.
+ */
+function belowIn(model, order, id) {
+  const out = childrenOf(order, id).slice();
+  for (const { object } of incidentTo(model, id)) {
+    if (attachedTo(object) === id && parentsOf(order, object.id).length === 0) out.push(object.id);
+  }
+  return out;
+}
+
+/**
+ * What a collapsed section holds, by provenance: `{parts: [{value, n}],
+ * unmarked, total}`, the parts in the declared order.  Every node (an object
+ * with an empty boundary) in the whole subtree below `id` counts once: one
+ * carrying a value as that value, whatever is above or below it, and one
+ * carrying none, a heading apart, as unmarked.  The walk goes through
+ * everything, nodes with or without a value, proofs and relations with
+ * something below them alike, so a "modified" theorem with a hundred "new"
+ * lemmas inside counts as one modified and a hundred new.  null when nothing
+ * below carries a value, so a section whose contents say nothing is drawn as
+ * it always was.  Memoised per model and kind.
  */
 export function provenanceMixOf(model, kind, id) {
   const p = provenanceOf(model);
@@ -720,18 +737,18 @@ export function provenanceMixOf(model, kind, id) {
     const counts = new Map();
     let unmarked = 0;
     const seen = new Set([id]);
-    const stack = [...childrenOf(order, id)];
+    const stack = belowIn(model, order, id);
     while (stack.length) {
       const x = stack.pop();
       if (seen.has(x)) continue;
       seen.add(x);
       const o = model.byId.get(x);
-      if (!o || o.boundary.length) continue;
+      if (!o) continue;
+      stack.push(...belowIn(model, order, x));
+      if (o.boundary.length) continue;
       const v = provenanceValueOf(model, o);
-      const kids = childrenOf(order, x);
       if (v) counts.set(v.value, (counts.get(v.value) || 0) + 1);
-      else if (kids.length) stack.push(...kids);
-      else unmarked += 1;
+      else if (!isSectionKind(o.kind)) unmarked += 1;
     }
     let out = null;
     if (counts.size) {
@@ -1746,10 +1763,12 @@ export function graphHint(model, kindName) {
  * an object carrying one of them is left out as a part is, with the
  * relations touching it but not with what is below it, which `graphModel`
  * lifts to the nearest ancestor still drawn, so a new lemma refining a
- * hidden theorem from the literature stays.  An object that carries no value
- * of its own is left out too once everything below it is, some of it for a
- * hidden value, so that hiding the published statements leaves no empty
- * section behind.
+ * hidden theorem from the literature stays; its proof (attached to it, with
+ * no parent of its own) goes with it the same way.  A section (`isSectionKind`)
+ * that carries no value of its own is left out too once nothing below it is
+ * drawn, some of it for a hidden value, so that hiding the published
+ * statements leaves no empty section behind; a statement stays whatever is
+ * hidden inside it.
  */
 export function outOfGraph(model, opts = {}) {
   return graphOmissions(model, opts).out;
@@ -1786,27 +1805,54 @@ function graphOmissions(model, { hideOptional = false, hideValues = [] } = {}) {
   const hidden = new Set(hideValues);
   if (hidden.size && provenanceOf(model)) {
     const before = new Set(out);
+    if (!orders) orders = model.collapseKinds.map((k) => collapseOrder(model, k));
     // As a part: the object and the relations touching it, not what is below.
+    // What is attached to it with no parent of its own (its proof, which
+    // stands for it) goes the same way, so what refines the proof is lifted
+    // as what refines the statement is.
+    const through = [];
     for (const o of model.objects) {
       const v = provenanceValueOf(model, o);
-      if (!v || !hidden.has(v.value) || out.has(o.id)) continue;
-      out.add(o.id);
-      byValue.add(o.id);
-      for (const { object } of incidentTo(model, o.id)) stack.push(object.id);
+      if (v && hidden.has(v.value) && !out.has(o.id)) through.push(o.id);
+    }
+    while (through.length) {
+      const id = through.pop();
+      if (out.has(id)) continue;
+      out.add(id);
+      byValue.add(id);
+      for (const { object } of incidentTo(model, id)) {
+        const attached = attachedTo(object) === id &&
+          orders.every((order) => parentsOf(order, object.id).length === 0);
+        if (attached) through.push(object.id); else stack.push(object.id);
+      }
     }
     drain();
-    if (!orders) orders = model.collapseKinds.map((k) => collapseOrder(model, k));
-    // Containers emptied by the hiding go too, until none is left: nothing
-    // below them, at any depth, is drawn any more.
-    for (;;) {
-      for (const o of model.objects) {
-        if (out.has(o.id) || provenanceValueOf(model, o)) continue;
-        const below = orders.flatMap((order) => descendantsOf(order, o.id));
-        if (below.length && below.every((c) => out.has(c)) && below.some((c) => !before.has(c))) stack.push(o.id);
+    // A section without a value of its own that the hiding leaves with
+    // nothing drawn below it goes too: one pass, below before above.
+    const emptied = new Set();
+    const memo = new Map(); // id -> {alive: something at or below is drawn, hid: something at or below was hidden}
+    const visit = (x) => {
+      if (memo.has(x)) return memo.get(x);
+      memo.set(x, { alive: false, hid: false }); // a cycle reads as nothing
+      let alive = false;
+      let hid = false;
+      for (const order of orders) {
+        for (const c of belowIn(model, order, x)) {
+          const r = visit(c);
+          alive = alive || r.alive;
+          hid = hid || r.hid;
+        }
       }
-      if (!stack.length) break;
-      drain();
-    }
+      const o = model.byId.get(x);
+      if (o && !out.has(x) && !alive && hid && isSectionKind(o.kind) && !provenanceValueOf(model, o)) emptied.add(x);
+      const gone = out.has(x) || emptied.has(x);
+      const r = { alive: alive || !gone, hid: hid || (gone && !before.has(x)) };
+      memo.set(x, r);
+      return r;
+    };
+    for (const o of model.objects) visit(o.id);
+    stack.push(...emptied);
+    drain();
   }
   return { out, byValue };
 }
@@ -1814,35 +1860,46 @@ function graphOmissions(model, { hideOptional = false, hideValues = [] } = {}) {
 /**
  * The relations of a collapse kind that put what was below an object hidden
  * for its value (`byValue`) under the nearest ancestors still drawn, looked
- * for through further hidden ones: `{id, kind, boundary: [src, tgt]}` for
- * each pair no surviving relation already joins.  What has no such ancestor
- * becomes a root.
+ * for through further hidden ones, and from a hidden proof through the
+ * statement it stands for: `{id, kind, boundary: [src, tgt]}` for each pair
+ * no surviving relation already joins.  Only what has no parent left in the
+ * order is lifted; something that keeps another parent stays under that one
+ * alone, and something with no ancestor drawn becomes a root.
  */
 function liftedEdges(model, out, byValue) {
   const lifted = [];
   const have = new Set(model.objects.filter((o) => !out.has(o.id)).map((o) => o.id));
   for (const kind of model.collapseKinds) {
     const order = collapseOrder(model, kind);
-    const above = (id, seen = new Set()) => {
-      const found = [];
-      for (const p of parentsOf(order, id)) {
-        if (seen.has(p)) continue;
-        seen.add(p);
-        if (!out.has(p)) found.push(p);
-        else if (byValue.has(p)) found.push(...above(p, seen));
+    // The nearest ancestors drawn of a hidden object, once per object.
+    const memo = new Map();
+    const above = (id) => {
+      if (memo.has(id)) return memo.get(id);
+      memo.set(id, []); // a cycle reads as none
+      let ps = parentsOf(order, id);
+      const of = attachedTo(model.byId.get(id));
+      if (!ps.length && of != null && byValue.has(of)) ps = [of];
+      const found = new Set();
+      for (const p of ps) {
+        if (!out.has(p)) found.add(p);
+        else if (byValue.has(p)) for (const a of above(p)) found.add(a);
       }
-      return found;
+      memo.set(id, [...found]);
+      return memo.get(id);
     };
-    for (const h of byValue) {
-      for (const c of childrenOf(order, h)) {
-        if (out.has(c)) continue;
-        for (const a of above(h)) {
-          const id = `${kind}/${c}/${a}`;
-          if (have.has(id) || parentsOf(order, c).includes(a)) continue;
-          have.add(id);
-          lifted.push({ id, kind, attrs: {}, body: '', depth: 1,
-            boundary: [{ role: 'src', id: c }, { role: 'tgt', id: a }] });
-        }
+    const kids = new Set();
+    for (const h of byValue) for (const c of childrenOf(order, h)) if (!out.has(c)) kids.add(c);
+    for (const c of kids) {
+      const ps = parentsOf(order, c);
+      if (!ps.every((p) => out.has(p))) continue;
+      const targets = new Set();
+      for (const p of ps) if (byValue.has(p)) for (const a of above(p)) targets.add(a);
+      for (const a of targets) {
+        const id = `${kind}/${c}/${a}`;
+        if (have.has(id)) continue;
+        have.add(id);
+        lifted.push({ id, kind, attrs: {}, body: '', depth: 1,
+          boundary: [{ role: 'src', id: c }, { role: 'tgt', id: a }] });
       }
     }
   }

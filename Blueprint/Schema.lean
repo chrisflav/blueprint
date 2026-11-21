@@ -11,6 +11,9 @@ namespace Blueprint
 
 /-! ## The default schema -/
 
+/-- Reserved front matter keys, never attributes or sugar. -/
+def reservedKeys : Array String := #["id", "kind", "boundary"]
+
 /-- Attributes every node kind permits.  `source` is a statement's
 attribution to the literature, Markdown with citations as in a body
 (`"Kato [kato04, Thm. 12.5]"`), which its heading sets after the title as a
@@ -330,8 +333,12 @@ def decodeProvenance (site : Option TValue) :
       | some v => match v.asString? with
         | some s => pure s
         | none => throw s!"'[site.provenance] attr' must be a string, got a {v.typeName}"
-    if attr.isEmpty || ["id", "kind", "boundary"].contains attr then
+    if attr.isEmpty || reservedKeys.contains attr then
       throw s!"'[site.provenance] attr' must name an attribute, got \"{attr}\""
+    -- an attribute the tool reads for something else, with checks of its own
+    if referenceAttrs.contains attr || defaultEdgeAttrs.contains attr || universalAttrs.contains attr then
+      throw s!"'[site.provenance] attr' is \"{attr}\", which is an attribute of its own; \
+        name one for the provenance alone, such as \"provenance\""
     let vals ← match pt.get? "values" with
       | some (.arr xs) => pure xs
       | some v => throw s!"'[site.provenance] values' must be an array of tables, got a {v.typeName}"

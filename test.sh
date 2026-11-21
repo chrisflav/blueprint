@@ -878,6 +878,12 @@ provbad=0
 for case in \
     'attr = "uses"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|which is the name of a kind' \
     'attr = "p"|needs .\[\[site.provenance.values\]\]' \
+    'attr = "kind"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|must name an attribute' \
+    'attr = "source"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|an attribute of its own' \
+    'attr = "serial"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|an attribute of its own' \
+    'attr = "hide_content"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|an attribute of its own' \
+    'attr = "title"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|an attribute of its own' \
+    'attr = "journal"\n[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"|an attribute of its own' \
     '[[site.provenance.values]]\nvalue = "a"\ncolor = "light blue"|.color. must be a colour' \
     '[[site.provenance.values]]\nvalue = "a"\ncolor = "#fff"\ndark = "#12"|.dark. must be a colour' \
     '[[site.provenance.values]]\nvalue = "a,b"\ncolor = "#fff"|without commas' \

@@ -1711,18 +1711,20 @@ function cssEscape(s) {
 /**
  * What fills a node, when the project declares a provenance (`M.provenanceOf`):
  * `{value}` for an object carrying a value of its own, which fills it in that
- * value's colour; `{mix}` (`M.provenanceMixOf`) for a collapsed object with
- * none whose contents carry some, filled with a band per value as wide as
- * its share; null otherwise, and always for an expanded section, whose
- * contents are drawn in it with their own fills.  Without a provenance,
- * null, and the fill says the status as it always did.
+ * value's colour; `{mix}` (`M.provenanceMixOf`) for a collapsed section
+ * with none whose contents carry some, filled with a band per value as wide
+ * as its share; null otherwise: a statement without a value, whatever is
+ * inside it, and always an expanded section, whose contents are drawn in it
+ * with their own fills.  Without a provenance, null, and the fill says the
+ * status as it always did.
  */
 export function provenanceFill(view, id, compound) {
   const m = view.model;
   if (compound || !M.provenanceOf(m)) return null;
-  const value = M.provenanceValueOf(m, m.byId.get(id));
+  const o = m.byId.get(id);
+  const value = M.provenanceValueOf(m, o);
   if (value) return { value };
-  if (!view.isExpandable(id)) return null;
+  if (!view.isExpandable(id) || !M.isSectionKind(o.kind)) return null;
   const mix = M.provenanceMixOf(m, view.kind, id);
   return mix ? { mix } : null;
 }

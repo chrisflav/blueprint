@@ -171,17 +171,22 @@ drawn as it always was.
   its coloured outline, a little heavier, and the dashes of `missing`; the
   key at the foot of the stage calls the statuses *outline*. A collapsed
   section with no value of its own is filled with a band per value as wide
-  as its share of what is inside (`provenanceMixOf`: a node with a value
-  counts for what is below it, one without is looked through), and a band
-  in the plain fill for what carries none; an expanded section is never
-  filled, its contents showing their own.
+  as its share of what is inside (`provenanceMixOf`: every node of the
+  whole subtree counts once, by its own value, the walk going through
+  statements, proofs and relations alike), and a band in the plain fill for
+  the unmarked ones (headings apart); a statement without a value is never
+  banded, and an expanded section is never filled, its contents showing
+  their own.
 * The toolbar has, beside *Collapse all* and outside the *Filters* fold, a
   chip per value in its colour with its label: the key to the fills and a
   checkbox. Unticked, the objects of that value leave the graph with the
-  relations touching them (`outOfGraph`'s `hideValues`), as a part does, but
-  what is below them stays: `graphModel` puts it under the nearest ancestor
-  still drawn (`liftedEdges`), through further hidden ones. A section
-  without a value of its own left with nothing drawn below it goes too, so
+  relations touching them and their proofs (`outOfGraph`'s `hideValues`),
+  as a part does, but what is below them or their proofs stays:
+  `graphModel` puts what has no parent left under the nearest ancestor
+  still drawn (`liftedEdges`), through further hidden ones, and what has
+  one keeps that one alone. A section (not a statement) without a value of
+  its own left with nothing drawn below it goes too, in one pass from the
+  bottom up, so
   hiding what is published leaves the skeleton of the new argument, new
   lemmas refining a published theorem included. `hide=` keeps the choice in
   the URL.

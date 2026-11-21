@@ -2689,6 +2689,10 @@ await check('provenance: fills in the graph, a key in the toolbar that hides a v
   mark('thm-tychonoff', 'new');
   // a section from the literature, whose lemmas are not marked
   mark('sec-main-induction', 'published');
+  // an unmarked definition with a new lemma inside it
+  snap.objects.push({ id: 'lem-net', kind: 'lemma', boundary: [], attrs: { title: 'Nets', provenance: 'new' }, body: '', depth: 0 },
+    { id: 'refines/lem-net/def-net', kind: 'refines', attrs: {}, body: '', depth: 1,
+      boundary: [{ role: 'src', id: 'lem-net' }, { role: 'tgt', id: 'def-net' }] });
   app.snapshot = snap;
   app.model = modelMod1.buildModel(snap);
   try {
@@ -2713,8 +2717,11 @@ await check('provenance: fills in the graph, a key in the toolbar that hides a v
     ok(bands.length >= 1 && bands[0].classList.contains('pv'), `sec-main's bands: ${bands.length}`);
     eq(graphMod.provenanceFill(M.makeView(app.model, 'refines', ['sec-foundations']), 'sec-foundations', true), null,
       'no fill for a compound');
-    eq(graphMod.provenanceFill(M.makeView(app.model, 'refines', []), 'sec-foundations', false).mix.total, 5,
-      'collapsed, its five statements');
+    eq(graphMod.provenanceFill(M.makeView(app.model, 'refines', []), 'sec-foundations', false).mix.total, 6,
+      'collapsed, its six statements, the lemma inside def-net too');
+    eq(graphMod.provenanceFill(M.makeView(app.model, 'refines', ['sec-foundations']), 'def-net', false), null,
+      'bands for a collapsed statement without a value');
+    ok(!node('def-net').classList.contains('prov-mix'), 'def-net is banded');
     // Unticking a chip hides that value, written to the URL.
     fire(chips[0].querySelector('input'), 'change', { target: { checked: false } });
     await tick(5);

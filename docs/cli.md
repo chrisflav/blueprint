@@ -898,7 +898,10 @@ and so may a section or a chapter.  Once declared, the attribute is every
 node kind's, whatever its `attrs` say; `check` reports a value that is not
 one of the declared ones, or one that is not a string, as `bad-attr`, and an
 object without the attribute is fine.  `attr` may not be `id`, `kind`,
-`boundary` or the name of a kind.  The declaration reaches the snapshot as
+`boundary`, the name of a kind, or an attribute the tool reads for
+something else (`title`, `source`, `serial`, `hide_content`, the other
+attributes of the default schema and a reference's fields).  The
+declaration reaches the snapshot as
 `project.provenance`; without it nothing below shows, and the attribute is
 an unknown one as before.
 
@@ -907,22 +910,27 @@ an unknown one as before.
   The fill then says the provenance alone: the status keeps its coloured
   outline (dashed for `missing`), drawn a little heavier, and the legend at
   the foot of the stage calls the statuses *outline* rather than *fill*.  An
-  object without a value keeps the plain fill.  A collapsed section without
-  a value of its own is filled with a band per value, side by side, as wide
-  as its share of what is inside (each node below it counted once, one with
-  a value standing for what is below it, one without looked through to what
-  is below it), and a band in the plain fill for what carries none; with
-  nothing inside carrying a value it is plain.  An expanded section is
-  never filled: its contents are drawn in it with their own fills.  The
-  node's tooltip lists the counts.
+  object without a value keeps the plain fill, a statement with something
+  inside it too.  A collapsed section without a value of its own is filled
+  with a band per value, side by side, as wide as its share of what is
+  inside: every node in the whole subtree counts once, one with a value as
+  that value and one without (a heading apart) as unmarked, through
+  statements, proofs and relations alike, so a "modified" theorem holding a
+  hundred "new" lemmas counts one modified and a hundred new.  A band in the
+  plain fill stands for the unmarked; with nothing inside carrying a value
+  the section is plain.  An expanded section is never filled: its contents
+  are drawn in it with their own fills.  The node's tooltip lists the
+  counts.
 * **Key and filter.**  The graph's toolbar, beside *Collapse all* and not
   folded behind *Filters*, has a chip per value in its colour with its
   label, which is the key to the fills and a checkbox: unticked, the
   objects of that value are left out of the graph with the relations
-  touching them, but not what is below them: that stays, whatever its own
-  value, under the nearest ancestor still drawn, as the chapters of a
-  `part` stand without it.  A section without a value of its own that this
-  leaves with nothing drawn below it goes too.  Hiding `published` thus
+  touching them, and their proofs, but not what is below them or their
+  proofs: that stays, whatever its own value, under the nearest ancestor
+  still drawn, as the chapters of a `part` stand without it; something
+  with another parent left stays under that one alone.  A section (not a
+  statement) without a value of its own that this leaves with nothing drawn
+  below it goes too.  Hiding `published` thus
   leaves the skeleton of the new argument, a new lemma refining a published
   theorem included.  The choice is
   in the URL, `hide=published,modified`, as the graph's other options are.
