@@ -30,7 +30,7 @@ export function render(root, app) {
   const ofTitle = of ? M.titleOf(m.byId.get(of)) : null;
   const own = o.attrs && o.attrs.title;
   // A statement's attribution to the literature follows its title, as in the
-  // document, "Kato's Euler system; Kato [Kat04, Thm. 12.5]", and stands in
+  // document, "Kato's Euler system (Kato [Kat04, Thm. 12.5])", and stands in
   // its place when it has none.
   const source = of ? null : app.headingSource(o, app.knownIds());
   const heading = !of ? (source && !own ? null : M.titleOf(o))

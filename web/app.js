@@ -241,17 +241,18 @@ export function renderInline(target, text, known, refs) {
 
 /**
  * A statement's attribution to the literature (`model.sourceOf`) for its
- * heading, set after the title as a paper sets a theorem's optional argument:
- * "Kato's Euler system; Kato [Kat04, Thm. 12.5]", the citations read and
- * linked as in a body.  An object with no title of its own has the source
- * alone in its place.  null when it has none.
+ * heading, in parentheses after the title as a paper sets a theorem's
+ * optional argument: "Kato's Euler system (Kato [Kat04, Thm. 12.5])", the
+ * citations read and linked as in a body, the parentheses plain text.  An
+ * object with no title of its own has the parenthesis alone in its place.
+ * null when it has none.
  */
 export function headingSource(o, known, refs) {
   const src = model.sourceOf(o);
   if (!src) return null;
   const titled = !!(o.attrs && typeof o.attrs.title === 'string' && o.attrs.title);
-  return el('span.heading-source', titled ? '; ' : null,
-    renderInline(el('span.heading-source-text'), src, known, refs));
+  return el('span.heading-source', titled ? ' (' : '(',
+    renderInline(el('span.heading-source-text'), src, known, refs), ')');
 }
 
 // ---------------------------------------------------------------------------

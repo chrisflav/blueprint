@@ -1055,11 +1055,13 @@ source = "Kato [kato04, Thm. 12.5]"
 +++
 ```
 
-The heading sets it after the title, in the same parenthesis: the PDF reads
-"Theorem 4.2 (Kato's Euler system; Kato [Kat04, Thm. 12.5]).", and the
-document and the object page, which set a title without parentheses,
-"Theorem 4.2. Kato's Euler system; Kato [Kat04, Thm. 12.5]".  Without a
-title the source stands alone, "(Kato [Kat04, Thm. 12.5])" in the PDF.  Its
+The heading sets it after the title.  The PDF puts both in the same
+parenthesis, "Theorem 4.2 (Kato's Euler system; Kato [Kat04, Thm. 12.5]).",
+and without a title "Theorem 4.2 (Kato [Kat04, Thm. 12.5]).".  The document
+and the object page, which set a title without parentheses, put the source
+in parentheses of its own after it, "Theorem 4.2. Kato's Euler system (Kato
+[Kat04, Thm. 12.5])", and without a title "Theorem 4.2. (Kato [Kat04, Thm.
+12.5])"; the parentheses are plain text, the citations links.  Its
 citations read, link and preview as in a body, maths in it is set, and a
 work it cites is cited: a PDF that does not write the bibliography out ends
 with that entry.  `[slug]` in it is checked as in a body (`bad-link`), and

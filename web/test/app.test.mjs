@@ -1397,28 +1397,31 @@ await check('a statement\'s source follows its title in its heading, its citatio
     eq(title.querySelector('.doc-title-text').textContent, 'Compact space', 'the title, in the heading\'s link');
     const src = h.querySelector('span.heading-source');
     ok(src && src.parentNode === h && !title.querySelector('span.heading-source'), 'the source after it, outside the link');
-    eq(src.textContent.slice(0, 2), '; ', 'after a semicolon');
+    const parens = (s) => [s.childNodes[0], s.childNodes[s.childNodes.length - 1]].map((n) => (n.nodeType === 3 ? n.nodeValue : null)).join('|');
+    eq(parens(src), ' (|)', 'in parentheses after the title, plain text');
+    ok(src.textContent.startsWith(' (Bourbaki, after [Del74]') && src.textContent.endsWith(')'), `as written: ${src.textContent}`);
     const cite = src.querySelector('a.cite-label');
     eq(cite && cite.textContent, 'Del74', '[id] reads as its label');
     eq(cite.getAttribute('href'), '#/document/sec-refs?collapse=refines&focus=del74', 'and leads to its entry, as in a body');
     eq(preview.previewTarget(app.model, cite), 'del74', 'with a preview on hover, in a heading too');
     ok(src.querySelector('.heading-source-text').innerHTML.includes('<strong><span class="cite">&#91;<a class="objlink ref cite-label" href="#/document/sec-refs?collapse=refines&amp;focus=del74" title="del74" data-ref="del74">Del74</a>, Thm. 1&#93;</span></strong>'),
       `a locator, as in a body, inline Markdown around it: ${src.querySelector('.heading-source-text').innerHTML}`);
-    // No title: the source stands in its place, rather than the id.
+    // No title: the parenthesis stands in its place, rather than the id.
     delete def.attrs.title;
     app.model = modelMod1.buildModel(snap);
     await go('#/document/sec-foundations?collapse=refines');
     await app.rendered;
     const h2 = root.querySelectorAll('section.doc-entry').find((s) => s.getAttribute('id') === 'doc-def-compact').querySelector('div.head').firstChild;
     eq(h2.querySelector('.doc-title-text'), null, 'no id for a title');
-    ok(h2.querySelector('span.heading-source').textContent.startsWith('Bourbaki'), 'the source alone, with no semicolon');
+    eq(parens(h2.querySelector('span.heading-source')), '(|)', 'the parenthesis alone');
+    ok(h2.textContent.includes('1.1 (Bourbaki'), `after the number: ${h2.textContent}`);
     // The object page's heading reads the same way.
     def.attrs.title = 'Compact space';
     app.model = modelMod1.buildModel(snap);
     await go('#/object/def-compact');
     await app.rendered;
     const h1 = root.querySelector('.obj-head h1');
-    ok(h1.textContent.startsWith('Compact space; Bourbaki, after [Del74]'), `the object page too: ${h1.textContent}`);
+    ok(h1.textContent.startsWith('Compact space (Bourbaki, after [Del74]'), `the object page too: ${h1.textContent}`);
     eq(h1.querySelector('a.cite-label').getAttribute('data-ref'), 'del74', 'its citation linked');
   } finally {
     app.model = saved.model;

@@ -268,8 +268,9 @@ export function render(root, app) {
     const isSection = M.isSectionKind(o.kind);
     // A statement's attribution to the literature follows its title, outside
     // the heading's link, so that its citations are links of their own:
-    // "Theorem 4.2. Kato's Euler system; Kato [Kat04, Thm. 12.5]".  Without a
-    // title the source stands in its place, rather than the id.
+    // "Theorem 4.2. Kato's Euler system (Kato [Kat04, Thm. 12.5])", the
+    // parentheses plain text.  Without a title the parenthesis stands in its
+    // place, rather than the id: "Theorem 4.2. (Kato [Kat04, Thm. 12.5])".
     const source = isSection ? null : app.headingSource(o, known, refs);
     const untitled = source && !(o.attrs && typeof o.attrs.title === 'string' && o.attrs.title);
     const head = el('div.head',
