@@ -66,8 +66,10 @@ kind needs.  Slashes in `id` become `~` in the file name.
 
 Rewrites every reference to `old` in every source file: front matter strings
 (including `old` appearing as one `/` or `~` separated segment of a derived
-id), sugar values, and `[old]` links and `[text](@old)` quiet links in
-bodies.  The file that declares the
+id), sugar values, and in bodies and `source` values `[old]` links, the
+ids of citations (`[old, Thm. 1]`, `[a, old]`: every leading id that names a
+reference) and `[text](@old)` quiet links.  A link's text, `[old](url)`,
+is prose and is left alone.  The file that declares the
 object gets `new` as its `id` and `old` appended to its `aliases`.  Files are
 never renamed or moved; if the id used to come from the file name, an
 explicit `id` key is inserted instead.
@@ -1064,8 +1066,15 @@ in parentheses of its own after it, "Theorem 4.2. Kato's Euler system (Kato
 12.5])"; the parentheses are plain text, the citations links.  Its
 citations read, link and preview as in a body, maths in it is set, and a
 work it cites is cited: a PDF that does not write the bibliography out ends
-with that entry.  `[slug]` in it is checked as in a body (`bad-link`), and
-`blueprint rename` rewrites `[old]` in it.  The graph's labels keep the
+with that entry.  `check` reports a `[slug]` or a quiet link in it that
+resolves to no object, as in a body, and also a citation `[id, locator]` or
+`[a, b]` whose first id is not an object (`bad-link`, a warning; maths and
+numbers such as `[0, 1]` are left alone).  A body's citations are not checked
+so, since bracketed prose there, `[m, n]`, reads the same.  A `source` that
+is not a string is a `bad-attr` error.  `blueprint rename` rewrites it as it
+rewrites a body: `[old]`, every leading id of a citation that names the old
+reference (`[a, old, Thm. 1]`), and quiet links `[text](@old)`, in a
+multi-line string (`source = """…"""`) too.  The graph's labels keep the
 title alone.  A section's heading does not show it.
 
 ## The examples

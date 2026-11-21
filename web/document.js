@@ -272,7 +272,7 @@ export function render(root, app) {
     // parentheses plain text.  Without a title the parenthesis stands in its
     // place, rather than the id: "Theorem 4.2. (Kato [Kat04, Thm. 12.5])".
     const source = isSection ? null : app.headingSource(o, known, refs);
-    const untitled = source && !(o.attrs && typeof o.attrs.title === 'string' && o.attrs.title);
+    const untitled = source && M.ownTitle(o) === null;
     const head = el('div.head',
       el('h' + hLevel, el('a.doc-title', { href: href(pageId, o.id), 'data-here': o.id },
         isSection ? null : [el('span.kindword', M.kindWord(o.kind)), ' '],

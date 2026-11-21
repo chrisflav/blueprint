@@ -28,7 +28,7 @@ export function render(root, app) {
   // one titled "of the detailed form", "Proof of the detailed form: <statement>".
   const of = o.kind === 'proof' ? M.attachedTo(o) : null;
   const ofTitle = of ? M.titleOf(m.byId.get(of)) : null;
-  const own = o.attrs && o.attrs.title;
+  const own = M.ownTitle(o);
   // A statement's attribution to the literature follows its title, as in the
   // document, "Kato's Euler system (Kato [Kat04, Thm. 12.5])", and stands in
   // its place when it has none.

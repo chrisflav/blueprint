@@ -251,6 +251,16 @@ await check('a statement\'s source shares the parenthesis of its heading with th
   ok(refsAt > 0, 'the part ends with the works its headings cite');
   same([...t.slice(refsAt).matchAll(/\\bpbibitem\{([^}]*)\}/g)].map((x) => x[1]), ['Del74', 'SGA4'], 'those, and only those');
   eq(res.stats.cited, 2, 'counted');
+  // Its maths has a body's diagnostics, and is set as its source when unsafe.
+  const bad = M.buildModel(snapshot([
+    node('sec', 'section', 'Opening.', { title: 'S', order: 1 }),
+    node('thm', 'theorem', 'A statement.', { source: 'after $\\input{x}$ and ${a$', order: 1 }),
+    edge('refines', 'thm', 'sec'),
+  ]));
+  const r = exportLatex(bad, {});
+  ok(r.diagnostics.some((d) => d.code === 'unsafe-maths' && d.object === 'thm'), 'an unsafe formula in a source is reported');
+  ok(r.diagnostics.some((d) => d.code === 'broken-maths' && d.object === 'thm'), 'and a broken one');
+  ok(r.tex.includes('(after \\texttt{\\$\\textbackslash{}input\\{x\\}\\$}'), `and set as its source: ${r.tex.match(/\\begin\{bpstatementit\}[^\n]*/)}`);
 });
 
 await check('with pdfReferences = "all" every PDF ends with the whole bibliography, on a page of its own', () => {

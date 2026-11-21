@@ -250,7 +250,7 @@ export function renderInline(target, text, known, refs) {
 export function headingSource(o, known, refs) {
   const src = model.sourceOf(o);
   if (!src) return null;
-  const titled = !!(o.attrs && typeof o.attrs.title === 'string' && o.attrs.title);
+  const titled = model.ownTitle(o) !== null;
   return el('span.heading-source', titled ? ' (' : '(',
     renderInline(el('span.heading-source-text'), src, known, refs), ')');
 }

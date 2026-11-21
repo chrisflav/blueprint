@@ -1867,6 +1867,16 @@ check('a statement\'s source: its attribution to the literature, found by the se
   eq(M.sourceOf({ attrs: { source: 3 } }), '', 'not a string: none');
   eq(M.titleOf(m.byId.get(thm.id)), thm.attrs.title || thm.id, 'the title, and the graph\'s label, stay as they are');
   ok(M.fullTextSearch(m, 'kato').some((o) => o.id === thm.id), 'the search finds it by its source');
+  ok(M.search(m, 'thm. 12.5').some((h) => h.object.id === thm.id), 'the top bar\'s search too');
+  ok(M.searchIds(m, 'kato').has(thm.id), 'and the graph\'s highlighting');
+});
+
+check('ownTitle: a title of its own, a non-empty string, or null', () => {
+  eq(M.ownTitle({ id: 'x', attrs: { title: 'Tube lemma' } }), 'Tube lemma', 'a title');
+  eq(M.ownTitle({ id: 'x', attrs: { title: '' } }), null, 'empty');
+  eq(M.ownTitle({ id: 'x', attrs: { title: 42 } }), null, 'not a string');
+  eq(M.ownTitle({ id: 'x', attrs: {} }), null, 'none');
+  eq(M.titleOf({ id: 'x', attrs: { title: 42 } }), 'x', 'titleOf falls back to the id');
 });
 
 check('references: read in place under their labels, sorted by them', () => {

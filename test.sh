@@ -756,28 +756,53 @@ else
   bad "serial: a string, a whole number or false on any kind; true refused"; cat "$TMP/serial.out"
 fi
 # `source`, a statement's attribution to the literature, is an attribute of
-# every node kind, and its `[slug]` links are checked as a body's
+# every node kind; its `[slug]` links are checked as a body's, and so is
+# what its citations `[id, …]` cite first (in a source only: a body's `[m, n]`
+# is no citation); anything but a string is refused
 cp -r examples/minimal "$TMP/source"
 printf '+++\nkind   = "reference"\nauthor = ["G. Peano"]\ntitle  = "Arithmetices principia"\nyear   = "1889"\n+++\n' \
   > "$TMP/source/blueprint/peano.md"
+printf '+++\nkind   = "reference"\nauthor = ["R. Dedekind"]\ntitle  = "Was sind und was sollen die Zahlen?"\nyear   = "1888"\n+++\n' \
+  > "$TMP/source/blueprint/other.md"
 sed -i 's/^title  = "Addition is commutative"$/title  = "Addition is commutative"\nsource = "Peano [peano, §6]"/' "$TMP/source/blueprint/add-comm.md"
-sed -i 's/^title = "Addition"$/title = "Addition"\nsource = "after [nosuch]"/' "$TMP/source/blueprint/add.md"
+printf 'See [peano, §2]; the pair [m, peano] stays.\n' >> "$TMP/source/blueprint/add-comm.md"
+sed -i 's/^title = "Addition"$/title = "Addition"\nsource = "after [nosuch], [nowhere, §2] and $[x, y]$ on [0, 1]"/' "$TMP/source/blueprint/add.md"
 sed -i 's/^title  = "Addition is associative"$/title  = "Addition is associative"\nsource = "Peano [peano]"/' "$TMP/source/blueprint/add-assoc.md"
+printf '+++\nkind  = "definition"\ntitle = "The natural numbers"\nsource = """\nDedekind [other, peano, Thm. 1],\nafter [Peano](@peano "the entry")\n"""\n+++\nThe free monoid on one generator.\n' \
+  > "$TMP/source/blueprint/nat.md"
 "$BP" build --root "$TMP/source" -o "$TMP/source.json" > /dev/null 2>&1
 "$BP" check --root "$TMP/source" > "$TMP/source.out" 2>&1
 if grep -q '"source": "Peano \[peano, §6\]"' "$TMP/source.json" \
    && ! grep -q "unknown-attr" "$TMP/source.out" \
    && grep -q "warning: \[bad-link\] .*'add' has a source linking to \[nosuch\]" "$TMP/source.out" \
-   && [ "$(grep -c "bad-link" "$TMP/source.out")" -eq 1 ]; then
-  ok "source: accepted on a statement, its links checked as a body's"
+   && grep -q "warning: \[bad-link\] .*'add' has a source citing \[nowhere, …\]" "$TMP/source.out" \
+   && [ "$(grep -c "bad-link" "$TMP/source.out")" -eq 2 ]; then
+  ok "source: accepted on a statement, its links and citations checked; maths, numbers and bodies left alone"
 else
-  bad "source: accepted on a statement, its links checked as a body's"; cat "$TMP/source.out"
+  bad "source: accepted on a statement, its links and citations checked; maths, numbers and bodies left alone"; cat "$TMP/source.out"
 fi
-if "$BP" rename peano peano89 --root "$TMP/source" > /dev/null 2>&1 \
-   && grep -q '^source = "Peano \[peano89\]"$' "$TMP/source/blueprint/add-assoc.md"; then
-  ok "rename rewrites [old] in a source, as in a body"
+cp -r examples/minimal "$TMP/badsource"
+sed -i 's/^title = "Addition"$/title = "Addition"\nsource = 3/' "$TMP/badsource/blueprint/add.md"
+if ! "$BP" check --root "$TMP/badsource" > "$TMP/badsource.out" 2>&1 \
+   && grep -q "error: \[bad-attr\] .*'add' has source = 3" "$TMP/badsource.out"; then
+  ok "a source that is not a string is refused (bad-attr)"
 else
-  bad "rename rewrites [old] in a source, as in a body"; cat "$TMP/source/blueprint/add-assoc.md"
+  bad "a source that is not a string is refused (bad-attr)"; cat "$TMP/badsource.out"
+fi
+# `rename` rewrites a source as a body: `[old]`, the leading ids of a
+# citation that name references, quiet links, multi-line strings
+if "$BP" rename peano peano89 --root "$TMP/source" > /dev/null 2>&1 \
+   && grep -q '^source = "Peano \[peano89\]"$' "$TMP/source/blueprint/add-assoc.md" \
+   && grep -q '^source = "Peano \[peano89, §6\]"$' "$TMP/source/blueprint/add-comm.md" \
+   && grep -q '^See \[peano89, §2\]; the pair \[m, peano\] stays\.$' "$TMP/source/blueprint/add-comm.md" \
+   && grep -q '^Dedekind \[other, peano89, Thm\. 1\],$' "$TMP/source/blueprint/nat.md" \
+   && grep -q '^after \[Peano\](@peano89 "the entry")$' "$TMP/source/blueprint/nat.md" \
+   && "$BP" check --root "$TMP/source" > "$TMP/source.after" 2>&1 \
+   && [ "$(grep -c "bad-link" "$TMP/source.after")" -eq 2 ]; then
+  ok "rename rewrites citations, quiet links and multi-line strings in a source, and citations in a body"
+else
+  bad "rename rewrites citations, quiet links and multi-line strings in a source, and citations in a body"
+  cat "$TMP/source/blueprint/add-comm.md" "$TMP/source/blueprint/nat.md" "$TMP/source.after"
 fi
 cp -r examples/minimal "$TMP/badlogo"
 printf '\n[site]\nlogoInk = true\n' >> "$TMP/badlogo/blueprint.toml"

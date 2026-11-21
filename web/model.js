@@ -149,8 +149,16 @@ export function objectsOfKind(model, kind) {
 /** Display title for an object. */
 export function titleOf(object) {
   if (!object) return '(unknown)';
-  const t = object.attrs && object.attrs.title;
-  return typeof t === 'string' && t.length ? t : object.id;
+  return ownTitle(object) || object.id;
+}
+
+/**
+ * An object's own title, a non-empty string, or null: what a heading writes
+ * as its title, where `titleOf` falls back to the id.
+ */
+export function ownTitle(object) {
+  const t = object && object.attrs && object.attrs.title;
+  return typeof t === 'string' && t.length ? t : null;
 }
 
 /**
@@ -1863,7 +1871,7 @@ export function documentOutline(model, kind) {
   const order = collapseOrder(model, kind);
 
   const hasProse = (o) => !!(o.body && o.body.trim());
-  const hasTitle = (o) => !!(o.attrs && typeof o.attrs.title === 'string' && o.attrs.title);
+  const hasTitle = (o) => ownTitle(o) !== null;
   // A section contains the proofs read in it, too (`proofPlacement`).
   const { bySection } = proofPlacement(model, kind);
   const hasKids = (id) => childrenOf(order, id).length > 0 || bySection.has(id);
@@ -2281,8 +2289,9 @@ export function documentPageEntries(outline, pageId, levels) {
 // ---------------------------------------------------------------------------
 
 /**
- * Substring search over id, title, the Lean declaration names (`attrs.lean`)
- * and body.  Returns objects ranked by where the match was found.  Empty
+ * Substring search over id, title, the Lean declaration names (`attrs.lean`),
+ * the source (`sourceOf`) and body.  Returns objects ranked by where the
+ * match was found.  Empty
  * query returns [].
  *
  * `limit` may be `Infinity`.  `accept`, when given, is asked about every
@@ -2302,6 +2311,7 @@ export function search(model, query, limit = 200, { accept = null } = {}) {
     else if (row.id.includes(q)) score = 60;
     else if (row.title.includes(q)) score = 50;
     else if (row.lean.some((n) => n.includes(q))) score = 40;
+    else if (row.source.includes(q)) score = 30;
     else if (row.body.includes(q)) score = 20;
     if (score > 0) hits.push({ object: row.object, score });
   }
@@ -2335,6 +2345,7 @@ function searchIndex(model) {
       id: o.id.toLowerCase(),
       title: titleOf(o).toLowerCase(),
       lean: leanNamesOf(o).map((n) => n.toLowerCase()),
+      source: sourceOf(o).toLowerCase(),
       body: displayBody(o).toLowerCase(),
     }));
   }

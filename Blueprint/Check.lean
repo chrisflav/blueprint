@@ -134,6 +134,80 @@ def extractQuietLinks (body : String) : Array String :=
   let cs := body.toList
   scanQuietLinks cs.length cs ' ' #[]
 
+/-- Scan for the first parts of bracketed lists, `[a, …]`, that read as an
+id (not a number): what a citation `[id, locator]` or `[a, b]` cites first.
+Maths is skipped, and so is a link's text, `[a, b](url)`. -/
+private def scanCitations : Nat → List Char → Char → Array String → Array String
+  | 0, _, _, acc => acc
+  | _, [], _, acc => acc
+  | fuel + 1, c :: rest, prev, acc =>
+    if c == '$' && prev != '\\' then
+      match rest with
+      | '$' :: r => scanCitations fuel (skipMath fuel r true) '$' acc
+      | r => scanCitations fuel (skipMath fuel r false) '$' acc
+    else if c == '[' && prev != '\\' && prev != '[' && prev != '!' then
+      let inner := rest.takeWhile fun d => d != ']' && d != '[' && d != '\n'
+      match rest.drop inner.length with
+      | ']' :: after =>
+        let first := trim (String.ofList (inner.takeWhile (· != ',')))
+        if after.head? != some '(' && inner.contains ',' && !first.isEmpty
+            && (first.toList.head?.any Char.isAlphanum) && first.toList.all isSlugChar
+            && !first.toList.all Char.isDigit then
+          scanCitations fuel after ']' (acc.push first)
+        else scanCitations fuel rest c acc
+      | _ => scanCitations fuel rest c acc
+    else scanCitations fuel rest c acc
+
+/-- The ids that citations with more than one part, `[id, locator]` and `[a, b,
+…]`, cite first, in order of appearance.  Ordinary bracketed text reads the
+same (`[m, n]`, `[0, 1]`), so only a statement's `source`, which is an
+attribution, is checked with it. -/
+def extractCitations (text : String) : Array String :=
+  let cs := text.toList
+  scanCitations cs.length cs ' ' #[]
+
+/-- One bracket's text with `old` renamed `new`: `[old]` itself, and in a
+citation, `[a, old, locator]`, every leading id that names a reference
+(`isRef`) and is `old`, as the website reads the citation.  The rest, the
+locator included, is left alone. -/
+def renameInBracket (isRef : String → Bool) (old new inner : String) : String :=
+  if inner == old then new else
+    let rec go : List String → List String
+      | [] => []
+      | p :: ps =>
+        let t := trim p
+        if t.isEmpty || !t.toList.all isSlugChar || !isRef t then p :: ps
+        else (if t == old then replaceAll p old new else p) :: go ps
+    match inner.splitOn "," with
+    | parts@(_ :: _ :: _) => String.intercalate "," (go parts)
+    | _ => inner
+
+/-- Rewrite the text of every bracket of a line with `f`. -/
+private def renameBrackets (f : String → String) : Nat → List Char → String → String
+  | 0, cs, acc => acc ++ String.ofList cs
+  | _, [], acc => acc
+  | fuel + 1, c :: rest, acc =>
+    if c == '[' then
+      let inner := rest.takeWhile fun d => d != ']' && d != '[' && d != '\n'
+      match rest.drop inner.length with
+      | ']' :: after =>
+        -- `[text](url)` is a link, and its text no reference
+        let text := String.ofList inner
+        let text := if after.head? == some '(' then text else f text
+        renameBrackets f fuel after (acc ++ "[" ++ text ++ "]")
+      | _ => renameBrackets f fuel rest (acc.push c)
+    else renameBrackets f fuel rest (acc.push c)
+
+/-- A line of Markdown, a body's or a `source`'s, with every reference to
+`old` renamed `new`: `[old]`, the ids of a citation (`renameInBracket`) and
+the target of a quiet link, `[text](@old)` and `[text](@old "title")`.
+`blueprint rename` rewrites bodies and sources alike with it. -/
+def renameInMarkdown (isRef : String → Bool) (old new line : String) : String :=
+  let line := replaceAll line ("](@" ++ old ++ ")") ("](@" ++ new ++ ")")
+  let line := replaceAll line ("](@" ++ old ++ " ") ("](@" ++ new ++ " ")
+  let cs := line.toList
+  renameBrackets (renameInBracket isRef old new) cs.length cs ""
+
 /-! ## Structural checks -/
 
 /-- A canonical rendering of a boundary, used for the `unique` constraint. -/
@@ -268,17 +342,28 @@ def structuralChecks (b : Blueprint) : Array Check := Id.run do
       if !b.contains l then
         cs := cs.push <| Check.warning "bad-link"
           s!"{o.source.file}: '{o.id}' links to [{l}], which is not an object" #[o.id]
-  -- links in a statement's `source`, Markdown with citations as in a body
+  -- a statement's `source`: Markdown, a string, with citations as in a body;
+  -- its links are checked as a body's, and, an attribution being no place
+  -- for an interval or a pair, so is what a citation `[id, …]` cites first
   for o in b.objects do
-    if let some (.str src) := o.attr? "source" then
+    match o.attr? "source" with
+    | none => pure ()
+    | some (.str src) =>
       for l in sortDedup (extractLinks src) do
         if !b.contains l then
           cs := cs.push <| Check.warning "bad-link"
             s!"{o.source.file}: '{o.id}' has a source linking to [{l}], which is not an object" #[o.id]
+      for l in sortDedup (extractCitations src) do
+        if !b.contains l then
+          cs := cs.push <| Check.warning "bad-link"
+            s!"{o.source.file}: '{o.id}' has a source citing [{l}, …], which is not an object" #[o.id]
       for l in sortDedup (extractQuietLinks src) do
         if !b.contains l then
           cs := cs.push <| Check.warning "bad-link"
             s!"{o.source.file}: '{o.id}' has a source linking to (@{l}), which is not an object" #[o.id]
+    | some v =>
+      cs := cs.push <| Check.error "bad-attr"
+        s!"{o.source.file}: '{o.id}' has source = {v}; it takes a string, Markdown as in a body" #[o.id]
   -- quiet links in prose, `[text](@slug)`
   for o in b.objects do
     for l in sortDedup (extractQuietLinks o.body) do

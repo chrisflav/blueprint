@@ -1406,15 +1406,19 @@ await check('a statement\'s source follows its title in its heading, its citatio
     eq(preview.previewTarget(app.model, cite), 'del74', 'with a preview on hover, in a heading too');
     ok(src.querySelector('.heading-source-text').innerHTML.includes('<strong><span class="cite">&#91;<a class="objlink ref cite-label" href="#/document/sec-refs?collapse=refines&amp;focus=del74" title="del74" data-ref="del74">Del74</a>, Thm. 1&#93;</span></strong>'),
       `a locator, as in a body, inline Markdown around it: ${src.querySelector('.heading-source-text').innerHTML}`);
-    // No title: the parenthesis stands in its place, rather than the id.
-    delete def.attrs.title;
+    // No title of its own (a title that is no string is none): the
+    // parenthesis stands in its place, rather than the id.
+    def.attrs.title = 42;
     app.model = modelMod1.buildModel(snap);
     await go('#/document/sec-foundations?collapse=refines');
     await app.rendered;
     const h2 = root.querySelectorAll('section.doc-entry').find((s) => s.getAttribute('id') === 'doc-def-compact').querySelector('div.head').firstChild;
     eq(h2.querySelector('.doc-title-text'), null, 'no id for a title');
     eq(parens(h2.querySelector('span.heading-source')), '(|)', 'the parenthesis alone');
-    ok(h2.textContent.includes('1.1 (Bourbaki'), `after the number: ${h2.textContent}`);
+    ok(h2.textContent.includes('1.1 (Bourbaki') && !h2.textContent.includes('def-compact'), `after the number: ${h2.textContent}`);
+    await go('#/object/def-compact');
+    await app.rendered;
+    ok(root.querySelector('.obj-head h1').textContent.startsWith('(Bourbaki'), `the object page: ${root.querySelector('.obj-head h1').textContent}`);
     // The object page's heading reads the same way.
     def.attrs.title = 'Compact space';
     app.model = modelMod1.buildModel(snap);
