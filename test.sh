@@ -649,6 +649,23 @@ else
   bad "a proof after an example is a proof file of its own"; cat "$TMP/lirem/in.tex"; find "$TMP/lirem/out"
 fi
 
+# A label is slugged as it always was (`a--b` is `a-b`), unless the file is
+# the graph editor's Export TeX, whose labels are ids already and are kept.
+mkdir -p "$TMP/lilab"
+printf '\\chapter{One}\n\\begin{lemma}\\label{a--b}\nA.\n\\end{lemma}\n\\begin{lemma}\\label{c.d}\nC.\n\\end{lemma}\n' \
+  > "$TMP/lilab/plain.tex"
+{ printf '%% Blueprint: the blueprint as reorganised in the graph editor.\n%% Written by blueprint-edit-tex/1.  Read back with\n'
+  cat "$TMP/lilab/plain.tex"; } > "$TMP/lilab/edited.tex"
+"$BP" import-latex "$TMP/lilab/plain.tex" --out "$TMP/lilab/plain/blueprint" > /dev/null 2>&1
+"$BP" import-latex "$TMP/lilab/edited.tex" --out "$TMP/lilab/edited/blueprint" > /dev/null 2>&1
+if [ -f "$TMP/lilab/plain/blueprint/one/a-b.md" ] && [ ! -e "$TMP/lilab/plain/blueprint/one/a--b.md" ] \
+   && [ -f "$TMP/lilab/plain/blueprint/one/c.d.md" ] \
+   && [ -f "$TMP/lilab/edited/blueprint/one/a--b.md" ] && [ -f "$TMP/lilab/edited/blueprint/one/c.d.md" ]; then
+  ok "labels: slugged as before, kept as they are in the graph editor's TeX"
+else
+  bad "labels: slugged as before, kept as they are in the graph editor's TeX"; find "$TMP/lilab"
+fi
+
 rm -rf "$TMP/li"
 if "$BP" import-latex examples/latex-import/src/content.tex --out "$TMP/li/blueprint" \
      --toml "$TMP/li/blueprint.toml" --report "$TMP/li/report.txt" \

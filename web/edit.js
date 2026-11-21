@@ -1,8 +1,8 @@
 // edit.js — edit mode: reorganising the dependency graph in the browser.
 //
-// Loaded only when the reader asks for it (the `e` key, *Edit graph* behind
-// the graph's Filters, or `?edit=1` in the page's URL; app.js,
-// `setEditing`), so reading mode downloads, draws and does nothing new.
+// Loaded only when the reader asks for it (*Edit graph* behind the graph's
+// Filters, or `?edit=1` in the page's URL; app.js, `setEditing`), so reading
+// mode downloads, draws and does nothing new.
 //
 // The snapshot is never changed.  What the reader does is an op of
 // `edit-model.js`, kept in a log: the edited snapshot is the base with the log
@@ -13,7 +13,12 @@
 // exported and imported as an edit file; *Export TeX* writes the edited
 // blueprint as a leanblueprint LaTeX document (`export/blueprint-tex.js`).
 //
+// The log is untrusted: an edit file can come from anyone, so whatever it
+// holds is checked (`E.checkOps`) and the prose of every object it puts in
+// place is rendered through app.js's sanitiser (`untrusted`).
+//
 // The pages call in through `app.editor` (null in reading mode):
+//   untrusted(object)                 'edited' for an object of the log, else false
 //   decorateNode(g, object, {strip})  a node of the graph, before graph.js wires it
 //   decorateEdge(g, entity)           an arc of the graph
 //   sidePanel(side, object|null)      the graph's side panel, once it is built
@@ -39,6 +44,8 @@ export function enter(app) {
     app,
     base,
     baseModel: app.model,
+    baseById: new Map(base.objects.map((o) => [o.id, o])),
+    trust: new WeakMap(), // object -> untrusted(object), once asked
     baseCycles: new Set(E.findCycles(E.usesRelation(base)).map((c) => [...c].sort().join(' '))),
     key: STORE_PREFIX + project + ':' + (app.dataUrlOriginal || app.dataUrl || ''),
     ops: [],
@@ -70,7 +77,7 @@ export function enter(app) {
   on(window, 'blur', closeMenu);
   recompute();
   return {
-    decorateNode, decorateEdge, sidePanel, objectPage,
+    untrusted, decorateNode, decorateEdge, sidePanel, objectPage,
     exit,
     // for tests and the console
     get ops() { return S ? S.ops.slice() : []; },
@@ -102,18 +109,73 @@ function storage() {
 }
 
 function loadStored() {
+  let data;
   try {
     const store = storage();
     const raw = store && store.getItem(S.key);
     if (!raw) return;
-    const data = JSON.parse(raw);
-    if (!data || !Array.isArray(data.ops)) return;
-    S.ops = data.ops;
-    S.redo = Array.isArray(data.redo) ? data.redo : [];
-    if (data.base && !E.sameBase(data.base, E.fingerprint(S.base)) && S.ops.length) {
-      setTimeout(() => toast('Your edits were made on another version of this blueprint; they have been replayed onto this one.'), 0);
-    }
-  } catch (e) { /* unreadable: start afresh */ }
+    data = JSON.parse(raw);
+  } catch (e) { return; /* unreadable: start afresh */ }
+  try {
+    // As untrusted as an edit file: anything on this origin could have written it.
+    E.checkOps(data && data.ops);
+    if (data.redo !== undefined) E.checkOps(data.redo);
+  } catch (e) {
+    setTimeout(() => toast('The edits kept in this browser could not be read and were dropped: ' + e.message, 'warn'), 0);
+    return;
+  }
+  S.ops = data.ops;
+  S.redo = data.redo || [];
+  const other = !!data.base && !E.sameBase(data.base, E.fingerprint(S.base));
+  if (S.ops.length) setTimeout(() => { if (S) replayNotice('Your edits kept in this browser', other); }, 0);
+}
+
+/**
+ * Say what replaying the log onto this snapshot undoes: the objects changed
+ * upstream since the edits were made, which the edits put back as they were
+ * (`E.replayConflicts`).  `lead` names the edits, `other` says they were made
+ * on another version of the blueprint.  Silent when there is nothing to say.
+ */
+function replayNotice(lead, other, { loaded = '' } = {}) {
+  const all = E.replayConflicts(S.base, S.ops);
+  // A change recorded without the version it was made on can only be told
+  // apart on another snapshot.
+  const list = all.filter((c) => c.how !== 'unknown' || other);
+  if (!list.length) {
+    if (other) toast(`${lead} were made on another version of this blueprint and have been replayed onto this one; none of the objects they change has changed since.`);
+    else if (loaded) toast(loaded);
+    return;
+  }
+  const { el } = S.app;
+  const how = {
+    changed: 'changed since the edit',
+    removed: 'removed since the edit',
+    added: 'added since, under the id the edit gives a new object',
+    unknown: 'not checked: the edit did not record the version it was made on',
+  };
+  const shown = list.slice(0, 30);
+  openDialog('Edits replayed onto a newer blueprint', el('div',
+    el('p', `${lead} put whole objects in place, as they were when the edits were made${other ? ', on another version of this blueprint' : ''}. ` +
+      `${list.length === 1 ? 'This object has' : `These ${list.length} objects have`} changed upstream since, and the edited blueprint shows ` +
+      'the edits\' version, without the upstream change:'),
+    el('ul.ed-conflicts', ...shown.map((c) => el('li', el('code', c.id), ` — ${how[c.how]} (${c.label})`)),
+      list.length > shown.length ? el('li', `and ${list.length - shown.length} more`) : null),
+    el('p.ed-fhint', 'Check them, or undo the edits that touch them and make those again on this version.')),
+  [{ label: 'OK', primary: true, run: () => true }]);
+}
+
+/** 'edited' when the prose of `o` is not the snapshot's but the log's, for app.js to sanitise. */
+function untrusted(o) {
+  if (!S || !o) return false;
+  const b = S.baseById.get(o.id);
+  if (b === o) return false;
+  let v = S.trust.get(o);
+  if (v === undefined) {
+    const same = !!b && b.kind === o.kind && b.body === o.body && JSON.stringify(b.attrs) === JSON.stringify(o.attrs);
+    v = same ? false : 'edited';
+    S.trust.set(o, v);
+  }
+  return v;
 }
 
 function saveStored() {
@@ -130,24 +192,29 @@ function saveStored() {
 /** Put the edited snapshot in the base's place. */
 function recompute() {
   const app = S.app;
-  let edited;
+  let edited = S.base;
+  let model = S.baseModel;
+  let summary = null;
   try {
-    edited = E.applyOps(S.base, S.ops);
+    // All of it here, so that a log the model cannot be built from leaves
+    // the base on screen rather than edit mode half entered.
+    const e = E.applyOps(S.base, S.ops);
+    if (e !== S.base) {
+      model = M.buildModel(e);
+      summary = E.summarize(S.base, e);
+      edited = e;
+    }
   } catch (e) {
     console.error(e);
-    toast('The edits could not be replayed: ' + e.message);
+    toast('The edits could not be replayed: ' + e.message, 'warn');
     S.ops = [];
     edited = S.base;
+    model = S.baseModel;
+    summary = null;
   }
-  if (edited === S.base) {
-    app.snapshot = S.base;
-    app.model = S.baseModel;
-    S.summary = { added: [], removed: [], changed: [], usesAdded: [], usesRemoved: [], marks: new Map() };
-  } else {
-    app.snapshot = edited;
-    app.model = M.buildModel(edited);
-    S.summary = E.summarize(S.base, edited);
-  }
+  app.snapshot = edited;
+  app.model = model;
+  S.summary = summary || { added: [], removed: [], changed: [], usesAdded: [], usesRemoved: [], marks: new Map() };
   S.check = E.checkGraph(app.snapshot);
   for (const id of [...S.marked]) if (!app.model.byId.has(id)) S.marked.delete(id);
   saveStored();
@@ -427,15 +494,20 @@ function onImportFile(ev) {
 /** Load an edit file's text in place of the current log. */
 export function importEdits(text) {
   let parsed;
-  try { parsed = E.parseEdits(text); } catch (e) { toast(e.message, 'warn'); return false; }
+  try {
+    parsed = E.parseEdits(text, { snapshot: S.base });
+  } catch (e) {
+    toast('Not loaded: ' + e.message, 'warn');
+    return false;
+  }
   if (S.ops.length && !window.confirm(`Replace your ${S.ops.length} current edits with the ${parsed.ops.length} in this file?`)) return false;
   S.ops = parsed.ops;
   S.redo = [];
   recompute();
-  const other = parsed.base && !E.sameBase(parsed.base, E.fingerprint(S.base));
-  toast(`Loaded ${parsed.ops.length} edit${parsed.ops.length === 1 ? '' : 's'}` +
-    (other ? ', made on another version of this blueprint and replayed onto this one.' : '.'));
+  const other = !!parsed.base && !E.sameBase(parsed.base, E.fingerprint(S.base));
+  const n = `${parsed.ops.length} edit${parsed.ops.length === 1 ? '' : 's'}`;
   reveal(null);
+  replayNotice(`The ${n} loaded`, other, { loaded: `Loaded ${n}.` });
   return true;
 }
 
@@ -722,6 +794,8 @@ function onKey(ev) {
   if (k === '?') return act(openHelp);
   if (k === 'n' || k === 'N') return act(() => openNodeDialog(null, id ? { near: id } : {}));
   if (k === 'c' || k === 'C') return act(togglePanel);
+  // Leaving by key, once in; no key enters (app.js).
+  if (k === 'e' || k === 'E') return act(() => S.app.setEditing(false));
   if (!o) return;
   if (k === 'Delete' || k === 'Backspace') return act(() => openDeleteDialog(id));
   if (k === 'F2' || k === 'r' || k === 'R') return act(() => openNodeDialog(id));
@@ -873,10 +947,12 @@ function preview(textarea) {
     onclick: () => {
       box.hidden = !box.hidden;
       toggle.textContent = box.hidden ? 'Preview' : 'Hide preview';
-      if (!box.hidden) S.app.renderBody(S.app.clear(box), textarea.value, S.app.knownIds());
+      if (!box.hidden) draw();
     },
   });
-  textarea.addEventListener('input', () => { if (!box.hidden) S.app.renderBody(S.app.clear(box), textarea.value, S.app.knownIds()); });
+  // What is typed here goes into the log, and is shown as it will be: sanitised.
+  const draw = () => S.app.renderBody(S.app.clear(box), textarea.value, S.app.knownIds(), undefined, { untrusted: 'edited' });
+  textarea.addEventListener('input', () => { if (!box.hidden) draw(); });
   return [toggle, box];
 }
 
@@ -902,6 +978,14 @@ function nodeFields(id, init = {}) {
   f.statement = textArea(o ? o.body : (init.statement || ''), { rows: 6, placeholder: 'Statement: Markdown with $maths$ and [slug] references' });
   f.proof = sec ? null : textArea(proof ? proof.body : (init.proof || ''), { rows: 6, placeholder: 'Proof (optional)' });
   f.lean = textInput(o ? (o.attrs.lean || []).join(', ') : '', { placeholder: 'Lean declarations, comma separated' });
+  // A name that is not one is marked as it is typed; saving refuses it
+  // (`E.LEAN_NAME_RE`, `Draft.checkLean`), unless the blueprint has it already.
+  const leanNow = new Set(o ? o.attrs.lean || [] : []);
+  f.lean.addEventListener('input', () => {
+    const bad = f.lean.value.split(',').map((x) => x.trim()).filter((x) => x && !leanNow.has(x) && !E.LEAN_NAME_RE.test(x));
+    f.lean.setCustomValidity(bad.length ? `Not a Lean name: ${bad.join(', ')}` : '');
+    f.lean.title = bad.length ? `Not a Lean name: ${bad.join(', ')}` : '';
+  });
   const grid = el('div.ed-form',
     el('div.ed-row', field('Kind', f.kind), field('Title', f.title), field('Id', f.id)),
     field(sec ? 'Text' : 'Statement', f.statement), el('div.ed-under', ...preview(f.statement)),

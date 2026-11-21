@@ -378,12 +378,12 @@ function renderToolbar(app, st) {
         }), 'hide appendix')
       : null));
 
-  // Edit mode (edit.js; also the `e` key): behind Filters, so the graph as it
+  // Edit mode (edit.js; also `?edit=1`): behind Filters, so the graph as it
   // opens is the reading graph, with nothing added.
   filters.appendChild(el('div.group.tb-edit', el('button', {
     type: 'button',
     title: 'reorganise the graph: delete, add, split and merge nodes, edit their dependencies, ' +
-      'and export the result as TeX (key E)',
+      'and export the result as TeX',
     onclick: () => app.setEditing(!app.editor),
   }, app.editor ? 'Leave edit mode' : 'Edit graph')));
 
@@ -2624,7 +2624,7 @@ function renderSide(app, st, view, quot) {
   if (o.body && o.body.trim()) {
     const box = el('div.excerpt.body-prose');
     side.appendChild(fold(el, 'prose', 'Prose', box));
-    app.renderBody(box, excerpt(o.body, 700), app.knownIds());
+    app.renderBody(box, excerpt(o.body, 700), app.knownIds(), undefined, { untrusted: app.untrustedOf(o) });
   }
 
   // A relation's boundary is what the relation is, and only a few rows long,

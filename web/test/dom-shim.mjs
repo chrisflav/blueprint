@@ -47,6 +47,10 @@ class Node2 {
     this.childNodes.push(c);
     return c;
   }
+  append(...cs) {
+    for (const c of cs) this.appendChild(typeof c === 'string' ? new Text2(c) : c);
+  }
+  remove() { if (this.parentNode) this.parentNode.removeChild(this); }
   insertBefore(c, ref) {
     if (!ref) return this.appendChild(c);
     if (c.nodeType === FRAGMENT_NODE) {
@@ -250,6 +254,10 @@ const document2 = {
   addEventListener(t, fn) {
     if (!this._listeners.has(t)) this._listeners.set(t, []);
     this._listeners.get(t).push(fn);
+  },
+  removeEventListener(t, fn) {
+    const fns = this._listeners.get(t) || [];
+    if (fns.includes(fn)) fns.splice(fns.indexOf(fn), 1);
   },
   dispatch(t, ev) { for (const fn of this._listeners.get(t) || []) fn(ev); },
   title: '',

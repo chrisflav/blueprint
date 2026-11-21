@@ -6,14 +6,17 @@
 //
 //   { op: 'split', label: 'Split thm-main into lem-a, lem-b', at: ISO date,
 //     ids: [the objects to show for it],
-//     changes: [ {put: object} | {del: id} | {rename: {from, to}} ] }
+//     changes: [ {put: object, was} | {del: id, was} | {rename: {from, to}} ] }
 //
 // a list of whole objects to put in place and ids to delete, computed against
-// the snapshot as edited so far.  The edited snapshot is the base with every
-// op's changes applied in turn (`applyOps`), so undo is dropping the last op
-// and redo putting it back; the log is what is saved in the browser and in an
-// edit file, and it replays onto a later snapshot of the same blueprint as
-// long as the objects it names are still there.
+// the snapshot as edited so far; `was` is the version (`versionOf`) of the
+// object a change replaces, null for a new one.  The edited snapshot is the
+// base with every op's changes applied in turn (`applyOps`), so undo is
+// dropping the last op and redo putting it back; the log is what is saved in
+// the browser and in an edit file, and it replays onto a later snapshot of the
+// same blueprint as long as the objects it names are still there
+// (`replayConflicts` says which of them changed upstream since, a change the
+// replay undoes).
 //
 // Pure: no DOM, no fetch, so the tests run it under node.
 
@@ -22,8 +25,24 @@ import { SLUG_PATTERN, isSectionKind, TEXT_KIND } from './model.js';
 export const EDIT_FORMAT = 'blueprint-edits';
 export const EDIT_VERSION = 1;
 
-/** An id the authoring format accepts for an object of its own file. */
-export const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+/**
+ * An id for a node the editor makes or renames: one that `blueprint
+ * import-latex` keeps as it is when it reads the editor's Export TeX back
+ * (`labelId` in Blueprint/ImportLatex.lean): lower case letters, digits, `.`,
+ * `_` and `-`, starting with a letter or digit and not ending in `-` or `.`.
+ */
+export const ID_RE = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9_])?$/;
+const ID_RULE = 'lower case letters, digits, ".", "_" and "-", not ending in "-" or "."';
+
+// Any object's id, as a `[slug]` reference may name it: the ids an edit file
+// may mention (a node's, or a derived one such as `proof/lem-a`).
+const OBJECT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._~/-]*$/;
+
+// A Lean declaration name: dot-separated parts, each an identifier or a
+// «quoted» one.  Nothing in it may mean anything to TeX (`{}%#\`), so that
+// Export TeX can write it into `\lean{…}` as it stands.
+const LEAN_PART = "(?:«[^«»\\s{}%#\\\\,]+»|[\\p{L}_][\\p{L}\\p{N}_'!?]*)";
+export const LEAN_NAME_RE = new RegExp(`^${LEAN_PART}(?:\\.${LEAN_PART})*$`, 'u');
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const enc = (id) => String(id).replace(/\//g, '~');
@@ -84,7 +103,8 @@ export class Draft {
     this.k = editKinds(snapshot);
     this.cur = new Map();
     for (const o of snapshot.objects) this.cur.set(o.id, o);
-    this.baseIds = new Set(this.cur.keys());
+    // What each object was when this draft began, for the op's `was`.
+    this.orig = new Map(this.cur);
     this.touched = new Set();
     this.renames = [];
     this._inc = null;
@@ -125,8 +145,9 @@ export class Draft {
   changes() {
     const out = this.renames.map(([from, to]) => ({ rename: { from, to } }));
     for (const id of this.touched) {
-      if (this.cur.has(id)) out.push({ put: clone(this.cur.get(id)) });
-      else if (this.baseIds.has(id)) out.push({ del: id });
+      const was = this.orig.has(id) ? versionOf(this.orig.get(id)) : null;
+      if (this.cur.has(id)) out.push({ put: clone(this.cur.get(id)), was });
+      else if (this.orig.has(id)) out.push({ del: id, was });
     }
     return out;
   }
@@ -384,7 +405,7 @@ export class Draft {
   /** Give `from` the id `to`, carrying every edge, proof and reference along. */
   rename(from, to) {
     if (from === to) return;
-    if (!ID_RE.test(to)) fail(`"${to}" is not a valid id (letters, digits, ".", "_" and "-")`);
+    if (!ID_RE.test(to)) fail(`"${to}" is not a valid id (${ID_RULE})`);
     if (this.has(to)) fail(`there is already an object "${to}"`);
     const o = clone(this.get(from));
     o.id = to;
@@ -447,6 +468,20 @@ export class Draft {
     return max + 1;
   }
 
+  /**
+   * Refuse a Lean name that is not one (`LEAN_NAME_RE`), as the reader typed
+   * it.  A name some object of the blueprint carries already is let through,
+   * so that a merge never trips over one the blueprint was built with.
+   */
+  checkLean(names) {
+    let carried = null;
+    for (const n of names || []) {
+      if (typeof n === 'string' && LEAN_NAME_RE.test(n)) continue;
+      if (!carried) carried = new Set([...this.orig.values()].flatMap((o) => (o.attrs && Array.isArray(o.attrs.lean) ? o.attrs.lean : [])));
+      if (!carried.has(n)) fail(`"${n}" is not a Lean name (identifiers joined by ".", or «quoted» parts without {}%#\\)`);
+    }
+  }
+
   /** A fresh id for a statement of `kind` titled `title`. */
   suggestId(kind, title) {
     const prefix = { definition: 'def', lemma: 'lem', theorem: 'thm', proposition: 'prop',
@@ -467,9 +502,10 @@ export class Draft {
    */
   createNode(spec) {
     const id = spec.id || this.suggestId(spec.kind, spec.title);
-    if (!ID_RE.test(id)) fail(`"${id}" is not a valid id (letters, digits, ".", "_" and "-")`);
+    if (!ID_RE.test(id)) fail(`"${id}" is not a valid id (${ID_RULE})`);
     if (this.has(id)) fail(`there is already an object "${id}"`);
     if (!this.k.nodes.includes(spec.kind)) fail(`"${spec.kind}" is not a kind of statement in this blueprint`);
+    this.checkLean(spec.lean);
     const section = spec.section && this.has(spec.section) ? spec.section : null;
     const attrs = {};
     if (spec.title) attrs.title = spec.title;
@@ -502,7 +538,7 @@ export class Draft {
     }
     const attrs = {};
     if (spec.title !== undefined) attrs.title = spec.title.trim();
-    if (spec.lean !== undefined) attrs.lean = spec.lean;
+    if (spec.lean !== undefined) { this.checkLean(spec.lean); attrs.lean = spec.lean; }
     if (Object.keys(attrs).length) this.setAttrs(id, attrs);
     if (spec.statement !== undefined && spec.statement !== this.get(id).body) this.setBody(id, spec.statement);
     if (spec.proof !== undefined) {
@@ -915,23 +951,150 @@ export function serializeEdits(base, ops) {
     saved: new Date().toISOString(), ops }, null, 1);
 }
 
-/** Read an edit file; throws EditError when it is not one. */
-export function parseEdits(text) {
+// What an edit file may hold.  Its ops are replayed as they stand and their
+// objects drawn on every page, so a file (or a log in localStorage) is read
+// as untrusted: every field of every op is checked here, and the prose it
+// carries is rendered through the sanitiser (app.js, `untrustedOf`).
+const OP_KINDS = ['add', 'delete', 'edit', 'use', 'unuse', 'split', 'merge'];
+const OP_KEYS = new Set(['op', 'label', 'at', 'ids', 'changes', 'removed', 'bridged']);
+const KIND_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
+const VERSION_RE = /^[0-9a-f]{8}$/;
+
+const isPlain = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
+const isId = (x) => typeof x === 'string' && OBJECT_ID_RE.test(x);
+const strings = (x) => Array.isArray(x) && x.every((s) => typeof s === 'string');
+const BAD_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+function checkObject(o, where) {
+  if (!isPlain(o)) fail(`${where}: "put" is not an object`);
+  if (!isId(o.id)) fail(`${where}: ${JSON.stringify(o.id)} is not an id`);
+  where = `${where} (${o.id})`;
+  if (typeof o.kind !== 'string' || !KIND_RE.test(o.kind)) fail(`${where}: ${JSON.stringify(o.kind)} is not a kind`);
+  if (!Array.isArray(o.boundary) || !o.boundary.every((b) => isPlain(b) && typeof b.role === 'string' && KIND_RE.test(b.role) && isId(b.id))) {
+    fail(`${where}: "boundary" is not a list of {role, id}`);
+  }
+  if (!isPlain(o.attrs)) fail(`${where}: "attrs" is not an object`);
+  for (const k of Object.keys(o.attrs)) if (BAD_KEYS.includes(k)) fail(`${where}: an attribute "${k}"`);
+  const a = o.attrs;
+  if (a.title !== undefined && typeof a.title !== 'string') fail(`${where}: its title is not a string`);
+  if (a.source !== undefined && typeof a.source !== 'string') fail(`${where}: its source is not a string`);
+  if (a.order !== undefined && typeof a.order !== 'number') fail(`${where}: its order is not a number`);
+  for (const k of ['lean', 'aliases', 'tags']) if (a[k] !== undefined && !strings(a[k])) fail(`${where}: its ${k} is not a list of strings`);
+  if (o.body !== undefined && typeof o.body !== 'string') fail(`${where}: its body is not a string`);
+  if (o.source !== undefined && !(isPlain(o.source) && (o.source.file === undefined || typeof o.source.file === 'string'))) {
+    fail(`${where}: its "source" is not a {file}`);
+  }
+  if (o.depth !== undefined && typeof o.depth !== 'number') fail(`${where}: its depth is not a number`);
+}
+
+function checkOp(op, n) {
+  const where = `edit ${n}`;
+  if (!isPlain(op)) fail(`${where} is not an object`);
+  for (const k of Object.keys(op)) if (!OP_KEYS.has(k)) fail(`${where} has an unknown field "${k}"`);
+  if (!OP_KINDS.includes(op.op)) fail(`${where}: ${JSON.stringify(op.op)} is not a kind of edit (${OP_KINDS.join(', ')})`);
+  if (typeof op.label !== 'string') fail(`${where} has no "label"`);
+  if (op.at !== undefined && typeof op.at !== 'string') fail(`${where}: "at" is not a date`);
+  if (!Array.isArray(op.ids) || !op.ids.every(isId)) fail(`${where}: "ids" is not a list of ids`);
+  if (op.removed !== undefined && !(Array.isArray(op.removed) && op.removed.every(isId))) fail(`${where}: "removed" is not a list of ids`);
+  if (op.bridged !== undefined && typeof op.bridged !== 'number') fail(`${where}: "bridged" is not a number`);
+  if (!Array.isArray(op.changes) || !op.changes.length) fail(`${where} has no "changes"`);
+  op.changes.forEach((ch, i) => {
+    const at = `${where}, change ${i + 1}`;
+    if (!isPlain(ch)) fail(`${at} is not an object`);
+    const keys = Object.keys(ch).filter((k) => k !== 'was');
+    if (keys.length !== 1 || !['put', 'del', 'rename'].includes(keys[0])) fail(`${at} is neither one "put", "del" nor "rename"`);
+    if (ch.was !== undefined && ch.was !== null && !(typeof ch.was === 'string' && VERSION_RE.test(ch.was))) fail(`${at}: "was" is not a version`);
+    if (ch.put !== undefined) checkObject(ch.put, at);
+    else if (ch.del !== undefined) { if (!isId(ch.del)) fail(`${at}: ${JSON.stringify(ch.del)} is not an id`); }
+    else if (!(isPlain(ch.rename) && Object.keys(ch.rename).length === 2 && isId(ch.rename.from) && isId(ch.rename.to))) {
+      fail(`${at}: "rename" is not a {from, to} of ids`);
+    }
+  });
+}
+
+/** Check a log (an edit file's, or the one kept in the browser); throws EditError on anything amiss. */
+export function checkOps(ops) {
+  if (!Array.isArray(ops)) fail('the edits are not a list');
+  ops.forEach((op, i) => checkOp(op, i + 1));
+  return ops;
+}
+
+/**
+ * Read an edit file; throws EditError when it is not one, or (with
+ * `snapshot`) when it was made on another blueprint.
+ */
+export function parseEdits(text, { snapshot = null } = {}) {
   let data;
   try { data = JSON.parse(text); } catch (e) { fail('not a JSON file'); }
-  if (!data || data.format !== EDIT_FORMAT) fail('not a blueprint edit file (no "format": "blueprint-edits")');
+  if (!isPlain(data) || data.format !== EDIT_FORMAT) fail('not a blueprint edit file (no "format": "blueprint-edits")');
   if (data.version !== EDIT_VERSION) fail(`edit file version ${data.version} is not supported`);
+  const base = data.base === undefined || data.base === null ? null : data.base;
+  if (base !== null && !(isPlain(base) && typeof base.project === 'string' && typeof base.hash === 'string')) {
+    fail('the edit file\'s "base" does not name a snapshot');
+  }
+  if (base && snapshot) {
+    const here = fingerprint(snapshot).project;
+    if (base.project !== here) fail(`these edits were made on the blueprint "${base.project}", not on "${here}"`);
+  }
   if (!Array.isArray(data.ops)) fail('the edit file has no "ops" list');
-  for (const op of data.ops) {
-    if (!op || !Array.isArray(op.changes)) fail('an op without "changes"');
-    for (const ch of op.changes) {
-      const ok = (ch.put && typeof ch.put.id === 'string' && typeof ch.put.kind === 'string')
-        || typeof ch.del === 'string'
-        || (ch.rename && typeof ch.rename.from === 'string' && typeof ch.rename.to === 'string');
-      if (!ok) fail('a change that is neither "put", "del" nor "rename"');
+  checkOps(data.ops);
+  return { ops: data.ops, base };
+}
+
+// ---------------------------------------------------------------------------
+// replaying onto another snapshot
+// ---------------------------------------------------------------------------
+
+function canonical(v) {
+  if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']';
+  if (isPlain(v)) return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}';
+  return JSON.stringify(v === undefined ? null : v);
+}
+
+/**
+ * A short hash of what an object says — its kind, boundary, attributes and
+ * body, not where its file is or how deep it sits — recorded with each change
+ * as `was`, the version of the object the change was made against.
+ */
+export function versionOf(o) {
+  const s = canonical({ kind: o.kind, boundary: o.boundary || [], attrs: o.attrs || {}, body: o.body || '' });
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
+
+/**
+ * An op puts whole objects in place, so replayed onto a snapshot in which one
+ * of them has changed since (upstream) it puts back the version it was made
+ * on, undoing that change.  This finds them: every object a change touches
+ * whose version on `base`, as edited by the ops before, is not the `was` the
+ * change was recorded against.  `[{id, label, how}]`, `how` one of
+ * 'changed' (since the edit), 'removed', 'added' (an object the edit creates
+ * that `base` already has) or 'unknown' (a change recorded without `was`).
+ */
+export function replayConflicts(base, ops) {
+  const cur = new Map();
+  for (const o of base.objects) cur.set(o.id, o);
+  const out = [];
+  const seen = new Set();
+  for (const op of ops || []) {
+    for (const ch of op.changes || []) {
+      const id = ch.put ? ch.put.id : ch.del;
+      if (id === undefined) continue;
+      if (!seen.has(id)) {
+        let how = null;
+        if (ch.was === undefined) how = 'unknown';
+        else {
+          const now = cur.has(id) ? versionOf(cur.get(id)) : null;
+          if (now !== ch.was) how = ch.was === null ? 'added' : now === null ? 'removed' : 'changed';
+        }
+        if (how) { out.push({ id, label: op.label, how }); seen.add(id); }
+      }
+      if (ch.put) cur.set(id, ch.put);
+      else cur.delete(id);
     }
   }
-  return { ops: data.ops, base: data.base || null };
+  return out;
 }
 
 /** Whether an edit file's base is this snapshot (same project and the same nodes). */

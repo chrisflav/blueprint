@@ -3771,6 +3771,91 @@ await check('the top bar\'s icon replays the intro, once at a time', async () =>
 });
 
 // ---------------------------------------------------------------------------
+// edit mode: no bare key enters it, and what its log brings is sanitised
+// ---------------------------------------------------------------------------
+
+await check('edit mode: no bare key enters it, and a past snapshot says why it does not open', async () => {
+  await go('#/graph');
+  let prevented = false;
+  dom.document.dispatch('keydown', { key: 'e', target: dom.document.documentElement, preventDefault() { prevented = true; } });
+  await tick(20);
+  eq(app.editor, null, 'the e key entered edit mode');
+  ok(!prevented, 'the e key was taken');
+  const banner = dom.document.getElementById('banner');
+  app.viewingSha = 'abcdef1234567';
+  try {
+    await app.setEditing(true);
+    eq(app.editor, null, 'edit mode on a past snapshot');
+    ok(banner.querySelector('.edit-refused'), 'no word of why in the banner');
+  } finally {
+    app.viewingSha = null;
+  }
+});
+
+await check('edit mode: hostile prose and titles from an edit file never reach the page as markup', async () => {
+  const E = await import(path.join(webDir, 'edit-model.js'));
+  const edit = await import(path.join(webDir, 'edit.js'));
+  const evil = '<img src=x onerror=alert(1)>';
+  // Every element whose HTML was set as markup, and with what.
+  const markup = (node, out = []) => {
+    if (node._html !== undefined && /onerror|<img/i.test(node._html)) out.push(node._html);
+    for (const c of node.childNodes || []) markup(c, out);
+    return out;
+  };
+  // The detector detects: the same prose, trusted, is set as HTML.
+  const control = dom.document.createElement('div');
+  app.renderBody(control, 'S ' + evil, app.knownIds());
+  ok(markup(control).length, 'the control did not set HTML');
+  // A DOMParser that records what the sanitiser is handed and keeps none of it.
+  const handed = [];
+  global.DOMParser = class { parseFromString(html) { handed.push(html); return { body: { childNodes: [] } }; } };
+  try {
+    const op = E.opEdit(app.snapshot, 'def-compact', { title: 'T ' + evil, statement: 'S ' + evil });
+    for (const ch of op.changes) if (ch.put && ch.put.id === 'def-compact') ch.put.attrs.source = 'Src ' + evil;
+    const file = E.serializeEdits(app.snapshot, [op]);
+    await app.setEditing(true);
+    ok(app.editor, 'edit mode did not open');
+    ok(edit.importEdits(file), 'the edit file was not loaded');
+    eq(app.model.byId.get('def-compact').attrs.title, 'T ' + evil, 'the edit is not in place');
+    eq(app.untrustedOf(app.model.byId.get('def-compact')), 'edited', 'the edited object is trusted');
+    eq(app.untrustedOf(app.model.byId.get('thm-product') || app.snapshot.objects.find((o) => o.id !== 'def-compact')), false,
+      'an object the edits leave alone is not trusted');
+    await go('#/object/def-compact');
+    const root = dom.document.getElementById('app');
+    eq(markup(root).join(' | '), '', 'markup set on the object page');
+    ok(handed.some((h) => h.includes('S ' + evil)), 'the statement did not go through the sanitiser');
+    ok(handed.some((h) => h.includes('Src ' + evil)), 'the source did not go through the sanitiser');
+    ok(root.textContent.includes('T ' + evil), 'the title is not shown as text');
+    await go('#/graph?sel=def-compact');
+    eq(markup(root).join(' | '), '', 'markup set on the graph\'s side panel');
+    await go('#/document');
+    eq(markup(root).join(' | '), '', 'markup set in the document');
+  } finally {
+    delete global.DOMParser;
+    if (app.editor) await app.setEditing(false);
+  }
+  await go('#/object/def-compact');
+  eq(app.untrustedOf(app.model.byId.get('def-compact')), false, 'reading mode trusts the snapshot');
+});
+
+await check('edit mode: a malformed or foreign edit file is refused, saying why', async () => {
+  const E = await import(path.join(webDir, 'edit-model.js'));
+  const edit = await import(path.join(webDir, 'edit.js'));
+  await app.setEditing(true);
+  try {
+    const toasts = () => [...dom.document.querySelectorAll('.ed-toast')].map((t) => t.textContent).join(' | ');
+    const good = JSON.parse(E.serializeEdits(app.snapshot, [E.opEdit(app.snapshot, 'def-compact', { title: 'New' })]));
+    ok(!edit.importEdits(JSON.stringify({ ...good, ops: [{ ...good.ops[0], op: 'script' }] })), 'an unknown kind of edit was loaded');
+    ok(/"script" is not a kind of edit/.test(toasts()), 'no reason given: ' + toasts());
+    ok(!edit.importEdits(JSON.stringify({ ...good, base: { ...good.base, project: 'another' } })), 'another project\'s edits were loaded');
+    ok(/made on the blueprint "another"/.test(toasts()), 'no reason given: ' + toasts());
+    eq(app.editor.ops.length, 0, 'a refused file left edits behind');
+  } finally {
+    await app.setEditing(false);
+  }
+});
+
+// ---------------------------------------------------------------------------
 
 if (failures.length) {
   console.error(`\n${failures.length} FAILED, ${passed} passed\n`);

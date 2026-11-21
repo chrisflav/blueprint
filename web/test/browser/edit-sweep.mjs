@@ -12,7 +12,7 @@
 //     same snapshot served from a site built without edit mode, e.g. from the
 //     default branch) the graph, the toolbar and the side panel are compared
 //     with it box for box;
-//   * `e` enters edit mode; every operation through the UI — delete (both
+//   * the bare `e` key does not enter edit mode; *Edit graph* does; every operation through the UI — delete (both
 //     ways), undo and redo by key, Shift+drag a dependency, the right-click
 //     menu, a new node, split, merge, the side panel's inline edit, removing
 //     a dependency there — and the graph each one draws;
@@ -195,11 +195,18 @@ async function main() {
     }
 
     // ------------------------------------------------------------- entering
+    // No bare key enters edit mode: a reader pressing `e` stays reading.
     await key(d, 'e');
+    await sleep(400);
+    await check('the e key does not enter edit mode', async () => {
+      const r = await d.js(`return { dock: !!document.querySelector('.ed-dock'), cls: document.documentElement.className };`);
+      return { ok: !r.dock && !/bp-editing/.test(r.cls), evidence: j(r) };
+    });
+    await d.js(`document.querySelector('.tb-edit button').click(); return true;`);
     await waitFor(d, `return !!document.querySelector('.ed-dock')`, { label: 'the dock' });
     await idle(d, 'edit-mode layout');
     await d.shot(path.join(SHOTS, 'edit-1-entered.png'));
-    await check('e enters edit mode: the dock, the side panel editor, the sheet', async () => {
+    await check('Edit graph enters edit mode: the dock, the side panel editor, the sheet', async () => {
       const r = await d.js(`return { dock: (document.querySelector('.ed-bar') || {}).innerText, side: !!document.querySelector('.ed-side textarea'),
         cls: document.documentElement.className, css: !!document.querySelector('link[href="edit.css"]') };`);
       return { ok: /Editing/.test(r.dock) && r.side && /bp-editing/.test(r.cls) && r.css, evidence: j(r) };
@@ -429,6 +436,30 @@ async function main() {
       return { ok: /Edit/.test(r.bar) && r.h1 === 'Slices are compact' && /Each slice is compact/.test(r.prose || ''), evidence: j(r) };
     });
     await d.shot(path.join(SHOTS, 'edit-10-object.png'));
+    await d.js(`history.back(); return 1;`);
+    await idle(d, 'graph again');
+
+    // ------------------------------------------------- a hostile edit file
+    // Its prose goes through the sanitiser: no element, no handler survives,
+    // while maths, references and quiet links still work.
+    await d.js(`window.confirm = function () { return true; }; window.__xss = 0;
+      return Promise.all([import('./edit-model.js'), import('./edit.js'), fetch('blueprint.json').then(function (r) { return r.json(); })]).then(function (ms) {
+        var E = ms[0], evil = '<img src=x onerror="window.__xss = 1"><script>window.__xss = 2</script>';
+        var op = E.opEdit(ms[2], 'thm-product', { title: 'T ' + evil,
+          statement: 'S ' + evil + ' $x^2$ by [def-compact], as [this one](@def-compact) says.' });
+        return ms[1].importEdits(E.serializeEdits(ms[2], [op]));
+      });`);
+    await d.js(`location.hash = '#/object/thm-product'; return 1;`);
+    await waitFor(d, `return !!document.querySelector('.ed-objbar')`, { label: 'object page editor' });
+    await sleep(500);
+    await check('a hostile edit file: no markup of its prose survives, its maths and links do', async () => {
+      const r = await d.js(`var p = document.querySelector('.body-prose');
+        return { xss: window.__xss, imgs: document.querySelectorAll('#app img, #app script').length,
+          h1: document.querySelector('.obj-head h1').textContent, katex: !!p.querySelector('.katex'),
+          ref: !!p.querySelector('a.objlink'), quiet: !!p.querySelector('.quietlink[data-quiet="def-compact"]'), text: p.textContent.slice(0, 120) };`);
+      return { ok: r.xss === 0 && r.imgs === 0 && r.h1.includes('<img') && r.katex && r.ref && r.quiet, evidence: j(r) };
+    });
+    await d.shot(path.join(SHOTS, 'edit-10b-hostile.png'));
     await d.js(`history.back(); return 1;`);
     await idle(d, 'graph again');
 

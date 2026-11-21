@@ -297,8 +297,110 @@ check('edit file: serialise, parse, refuse what is not one', () => {
   eq(JSON.stringify(E.applyOps(base, back.ops)), JSON.stringify(snap), 'replays to the same snapshot');
   throws(() => E.parseEdits('{'), /JSON/, 'not JSON');
   throws(() => E.parseEdits('{"format":"x"}'), /not a blueprint edit file/, 'wrong format');
-  throws(() => E.parseEdits('{"format":"blueprint-edits","version":1,"ops":[{"changes":[{"oops":1}]}]}'), /neither/, 'bad change');
+  throws(() => E.parseEdits('{"format":"blueprint-edits","version":1,"ops":[{"op":"edit","label":"x","ids":[],"changes":[{"oops":1}]}]}'), /neither/, 'bad change');
   ok(!E.sameBase(E.fingerprint(E.applyOps(base, ops)), E.fingerprint(base)), 'another base differs');
+});
+
+check('ids: only what import-latex keeps as it is', () => {
+  for (const id of ['lem-a', 'a.b_c', 'sec-rings--lemma-1', 'x', '0', 'lem_']) ok(E.ID_RE.test(id), `${id} refused`);
+  for (const id of ['Lem-a', 'a-', 'a.', '-a', '.a', 'a b', 'a/b', 'lem-ä', '']) ok(!E.ID_RE.test(id), `${id} accepted`);
+  // `labelId` in Blueprint/ImportLatex.lean, for the editor's file: a label
+  // all of `a-z0-9-_.`, not starting or ending with `-`, is kept.
+  const kept = (l) => /^[a-z0-9._-]+$/.test(l) && !l.startsWith('-') && !l.endsWith('-');
+  for (const id of ['lem-a', 'a.b_c', 'sec-rings--lemma-1', 'lem_']) ok(kept(id), `${id} would be renamed`);
+  const base = fresh();
+  throws(() => E.opEdit(base, 'thm-fip', { id: 'Thm-Fip' }), /valid id \(lower case/, 'upper case');
+  throws(() => E.opAdd(base, { id: 'lem-a.', kind: 'lemma' }), /valid id/, 'a trailing dot');
+});
+
+check('Lean names: refused unless they are names, stripped by the TeX export', () => {
+  const base = fresh();
+  for (const n of ['Foo}bar%', 'a b', 'x#y', 'a\\b', 'Nat.', '.x', '1x', '«a{b»']) {
+    throws(() => E.opEdit(base, 'thm-fip', { lean: [n] }), /not a Lean name/, n);
+  }
+  throws(() => E.opAdd(base, { kind: 'lemma', title: 'New', lean: ['ok.name', 'bad}'] }), /"bad}" is not a Lean name/, 'add');
+  const good = ['Nat.add_comm', 'CategoryTheory.Functor.map_comp\'', '«my-thm».x₁', 'α.β!', 'h?'];
+  const s = E.applyOps(base, [E.opEdit(base, 'thm-fip', { lean: good })]);
+  eq(byId(s, 'thm-fip').attrs.lean, good, 'names kept');
+  // A name the blueprint already carries goes through, however odd.
+  const odd = { ...base, objects: base.objects.map((o) => (o.id === 'def-fip' ? { ...o, attrs: { ...o.attrs, lean: ['Foo}bar%'] } } : o)) };
+  const merged = E.applyOps(odd, [E.opMerge(odd, ['def-fip', 'thm-fip'], { keep: 'thm-fip' })]);
+  eq(byId(merged, 'thm-fip').attrs.lean, ['Foo}bar%'], 'a merge carries an odd name along');
+  const { tex, diagnostics } = exportBlueprintTex(merged);
+  ok(tex.includes('\\lean{Foobar}'), 'the name is not stripped in the TeX');
+  ok(!tex.includes('Foo}bar%'), 'the raw name is in the TeX');
+  ok(diagnostics.some((d) => d.code === 'lean-name' && d.object === 'thm-fip'), 'no note of it');
+});
+
+check('edit file: a malformed one is refused, saying what is wrong', () => {
+  const base = fresh();
+  const good = JSON.parse(E.serializeEdits(base, [E.opEdit(base, 'thm-fip', { title: 'Closed' })]));
+  const put = good.ops[0].changes.find((c) => c.put);
+  const variant = (f) => { const d = JSON.parse(JSON.stringify(good)); f(d, d.ops[0], d.ops[0].changes.find((c) => c.put)); return JSON.stringify(d); };
+  ok(put && typeof put.was === 'string', 'a put records the version it replaces');
+  E.parseEdits(JSON.stringify(good));
+  const cases = [
+    [(d, op) => { op.op = 'script'; }, /"script" is not a kind of edit/],
+    [(d, op) => { delete op.op; }, /undefined is not a kind of edit/],
+    [(d, op) => { op.label = 5; }, /no "label"/],
+    [(d, op) => { op.ids = ['<img src=x onerror=alert(1)>']; }, /"ids" is not a list of ids/],
+    [(d, op) => { op.extra = 1; }, /unknown field "extra"/],
+    [(d, op) => { op.changes = []; }, /no "changes"/],
+    [(d, op, p) => { p.put.id = '<img src=x onerror=alert(1)>'; }, /is not an id/],
+    [(d, op, p) => { p.put.kind = 'x y'; }, /is not a kind/],
+    [(d, op, p) => { p.put.body = { html: '<b>' }; }, /body is not a string/],
+    [(d, op, p) => { p.put.attrs.title = ['<img>']; }, /title is not a string/],
+    [(d, op, p) => { p.put.attrs.lean = 'Nat'; }, /lean is not a list of strings/],
+    [(d, op, p) => { p.put.attrs = null; }, /"attrs" is not an object/],
+    [(d, op, p) => { p.put.boundary = [{ role: 'of', id: 'a b' }]; }, /"boundary" is not a list/],
+    [(d, op, p) => { p.was = 'nope'; }, /"was" is not a version/],
+    [(d, op, p) => { p.del = 'x'; }, /neither one "put", "del" nor "rename"/],
+    [(d, op) => { op.changes.push({ rename: { from: 'a', to: 5 } }); }, /"rename" is not a \{from, to\}/],
+    [(d) => { d.base = 'x'; }, /does not name a snapshot/],
+    [(d) => { d.ops = {}; }, /no "ops" list/],
+  ];
+  for (const [f, re] of cases) throws(() => E.parseEdits(variant(f)), re, String(re));
+  throws(() => E.parseEdits(variant((d) => { d.base.project = 'another'; }), { snapshot: base }), /made on the blueprint "another", not on "paper"/, 'another project');
+  E.parseEdits(variant((d) => { d.base.hash = '00000000'; }), { snapshot: base });
+  throws(() => E.checkOps([{ op: 'edit' }]), /no "label"/, 'checkOps');
+});
+
+check('edit file: hostile prose is kept as text, for the site to sanitise', () => {
+  // The model never interprets prose; what it must do is keep a hostile
+  // body or title a plain string, which the site renders through its
+  // sanitiser (app.test.mjs checks that), and never let one into an id.
+  const base = fresh();
+  const evil = '<img src=x onerror=alert(1)>';
+  const op = E.opEdit(base, 'thm-fip', { title: evil, statement: evil });
+  const back = E.parseEdits(E.serializeEdits(base, [op]));
+  const s = E.applyOps(base, back.ops);
+  eq(byId(s, 'thm-fip').attrs.title, evil, 'title');
+  eq(byId(s, 'thm-fip').body, evil, 'body');
+  throws(() => E.opEdit(base, 'thm-fip', { id: evil }), /valid id/, 'as an id');
+});
+
+check('replay onto another snapshot: what changed upstream since is listed', () => {
+  const base = fresh();
+  const { ops } = run(base,
+    (s) => E.opEdit(s, 'thm-fip', { title: 'Closed sets' }),
+    (s) => E.opEdit(s, 'thm-fip', { statement: 'Again.' }),
+    (s) => E.opDelete(s, 'rem-infinite', { mode: 'drop' }),
+    (s) => E.opAdd(s, { id: 'lem-new', kind: 'lemma', title: 'New' }));
+  eq(E.replayConflicts(base, ops), [], 'on its own base: nothing');
+  const upstream = (f) => { const b = fresh(); f(b); return b; };
+  const changed = upstream((b) => { byId(b, 'thm-fip').body = 'Changed upstream.'; });
+  eq(E.replayConflicts(changed, ops).map((c) => [c.id, c.how]), [['thm-fip', 'changed']], 'a body changed upstream');
+  eq(E.replayConflicts(changed, ops)[0].label, ops[0].label, 'by the first edit that touches it');
+  const moved = upstream((b) => { byId(b, 'thm-fip').source.file = 'elsewhere.md'; byId(b, 'thm-fip').depth = 7; });
+  eq(E.replayConflicts(moved, ops), [], 'a file moved, a depth changed: nothing');
+  const elsewhere = upstream((b) => { byId(b, 'def-fip').body = 'Untouched by the edits.'; });
+  eq(E.replayConflicts(elsewhere, ops), [], 'an object the edits leave alone');
+  const removed = upstream((b) => { b.objects = b.objects.filter((o) => o.id !== 'rem-infinite'); });
+  ok(E.replayConflicts(removed, ops).some((c) => c.id === 'rem-infinite' && c.how === 'removed'), 'removed upstream');
+  const added = upstream((b) => { b.objects.push({ id: 'lem-new', kind: 'lemma', boundary: [], attrs: {}, body: 'Upstream.' }); });
+  ok(E.replayConflicts(added, ops).some((c) => c.id === 'lem-new' && c.how === 'added'), 'added upstream');
+  const old = ops.map((op) => ({ ...op, changes: op.changes.map(({ was, ...c }) => c) }));
+  ok(E.replayConflicts(base, old).every((c) => c.how === 'unknown'), 'a log without versions');
 });
 
 check('dependency order is stable and puts what is used first', () => {
@@ -315,6 +417,8 @@ check('TeX export: environments, labels, \\uses, proofs, sections, order', () =>
     (s) => E.opDelete(s, 'rem-infinite'));
   const { tex, diagnostics, stats } = exportBlueprintTex(snap);
   ok(tex.includes('\\begin{document}') && tex.trim().endsWith('\\end{document}'), 'a whole document');
+  // The line `editorGenerated` in Blueprint/ImportLatex.lean looks for, to keep the labels.
+  ok(tex.split('\n').slice(0, 3).some((l) => l.startsWith('% Written by blueprint-edit-tex/')), 'the generator line');
   ok(tex.includes('\\begin{lemma}[Slices]\n\\label{lem-slice}\n\\uses{def-compact}'), 'the new lemma');
   ok(tex.includes('By \\cref{def-compact}, slices are compact.'), 'reference as \\cref');
   ok(!tex.includes('rem-infinite'), 'the deleted remark is gone');
@@ -342,7 +446,7 @@ if (bin && fs.existsSync(bin)) {
         statement: 'Slices are compact.', proof: 'Clear.', uses: ['def-cover'], usedBy: ['thm-product'] }),
       (s) => E.opSplit(s, 'lem-tube', { pieces: [{ id: 'lem-boxes', kind: 'lemma', title: 'Boxes', from: 'proof', statement: 'Boxes form a basis.' }] }),
       (s) => E.opMerge(s, ['lem-complements', 'lem-finite-subfamily'], { keep: 'lem-complements' }),
-      (s) => E.opEdit(s, 'thm-fip', { id: 'thm-closed', title: 'Closed sets' }),
+      (s) => E.opEdit(s, 'thm-fip', { id: 'thm-closed--sets.v2_x', title: 'Closed sets', lean: ['Nat.add_comm'] }),
       (s) => E.opRemoveUse(s, 'thm-product', 'lem-tube'),
       (s) => E.opAddUse(s, 'thm-product', 'lem-boxes'));
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-edit-'));

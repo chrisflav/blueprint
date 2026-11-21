@@ -422,9 +422,9 @@ page, opened all the same, says there is no blog.
 ### Edit mode
 
 The graph can be reorganised in the browser and written out as LaTeX
-(`../docs/graph-edit.md`).  It is opt-in: `e` anywhere that is not taking
-text, *Edit graph* behind the graph's Filters, or `?edit=1` in the page's
-address (before the `#`).  Until then nothing of it is fetched, and the pages
+(`../docs/graph-edit.md`).  It is opt-in: *Edit graph* behind the graph's
+Filters, or `?edit=1` in the page's address (before the `#`); no bare key
+enters it.  Until then nothing of it is fetched, and the pages
 call into it only through `app.editor`, which is `null`: the graph, its side
 panel and the object pages draw exactly what they draw without it.  While it
 is on, `app.snapshot` and `app.model` are the edited blueprint (the snapshot
@@ -865,7 +865,7 @@ the pages knowing about it.
 | `prefetch.js` | fetching what the reader may open next, one file at a time, while the browser is idle |
 | `preview.js` | the card a link to an object opens while the pointer rests on it, and the card of Lean names the document's "object" link opens |
 | `pdf.js` | the Export PDF button and dialog: the part, the detail, finding or making the PDF, the TeX source |
-| `edit.js`, `edit.css` | edit mode (`../docs/graph-edit.md`): loaded only when the reader enters it (`e`, *Edit graph* behind the graph's Filters, `?edit=1`); the bar, the menus, the dialogs, the side panel's editor, the log in `localStorage` |
+| `edit.js`, `edit.css` | edit mode (`../docs/graph-edit.md`): loaded only when the reader enters it (*Edit graph* behind the graph's Filters, `?edit=1`); the bar, the menus, the dialogs, the side panel's editor, the log in `localStorage` |
 | `edit-model.js` | **pure**: the editor's operations as a log of changes over the snapshot, replayed by `applyOps`; the summary, the checks, the edit file |
 | `export/latex.js` | **pure**: a part of the document as a LaTeX document — the request, the plan (order, shared objects, depth), the TeX. Imported by the dialog and by the command line |
 | `export/blueprint-tex.js` | **pure**: the whole (edited) blueprint as a `leanblueprint` LaTeX document that `blueprint import-latex` reads back: the editor's *Export TeX* |

@@ -86,7 +86,7 @@ export function previewCard(ctx, id) {
     : null;
 
   const body = el('div.preview-body.body-prose');
-  ctx.renderBody(body, M.displayBody(o), ctx.knownIds());
+  ctx.renderBody(body, M.displayBody(o), ctx.knownIds(), undefined, { untrusted: ctx.untrustedOf(o) });
   // The statement is what a preview is for: a proof in it starts folded.
   for (const d of body.querySelectorAll('details.proof')) d.open = false;
 

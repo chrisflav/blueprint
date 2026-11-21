@@ -10,8 +10,10 @@
 // that a blueprint reorganised in the browser comes out as an argument that can
 // be read, compiled and imported again.
 //
-//   * Every label is the object's id, which `import-latex` keeps (an id is
-//     already a slug), so a re-import gives the same ids and the same edges.
+//   * Every label is the object's id, which `import-latex` keeps as it is in
+//     a file whose opening comments name `GENERATOR` (`labelId` in
+//     Blueprint/ImportLatex.lean), so a re-import gives the same ids and the
+//     same edges.
 //   * Sections keep their nesting and order.  Within a section the statements
 //     are put in dependency order: each after what it uses from the same
 //     section, otherwise in the order the document reads them.  A statement
@@ -186,6 +188,15 @@ export function exportBlueprintTex(snapshot, { title = null } = {}) {
     return ts.length ? `\\uses{${ts.map(texLabel).join(', ')}}\n` : '';
   };
 
+  // A Lean name is written into `\lean{…}` as it stands: one with a character
+  // that means something to TeX there (`{}%#\`, a comma, a line break) would
+  // break the document, so those go, and the export says so.
+  const leanNames = (o) => (Array.isArray(o.attrs.lean) ? o.attrs.lean : []).map((name) => {
+    const clean = String(name).replace(/[{}%#\\,\s]/g, '');
+    if (clean !== name) warn('lean-name', `the Lean name ${JSON.stringify(String(name))} of ${o.id} is written as ${clean || 'nothing'}`, o.id);
+    return clean;
+  }).filter(Boolean);
+
   const writeStatement = (o) => {
     if (written.has(o.id)) return;
     written.add(o.id);
@@ -194,7 +205,7 @@ export function exportBlueprintTex(snapshot, { title = null } = {}) {
     const env = envOf(o);
     envs.add(env);
     let s = `\\begin{${env}}${optTitle(o.attrs.title)}\n\\label{${texLabel(o.id)}}\n`;
-    const lean = Array.isArray(o.attrs.lean) ? o.attrs.lean : [];
+    const lean = leanNames(o);
     if (lean.length) s += `\\lean{${lean.join(', ')}}\n`;
     if (lean.length && leanOk(o.id)) s += '\\leanok\n';
     s += usesLine(o.id);
@@ -317,7 +328,7 @@ export function exportBlueprintTex(snapshot, { title = null } = {}) {
   for (const u of unknown) warn('unknown-character', `${u} has no LaTeX form and is set as a placeholder`);
   const unicode = unicodeLines.map((l) => l.replace(/\\bpglyph\{([^}]*)\}/, '\\fbox{\\scriptsize $1}'));
   const tex = [
-    `% ${docTitle}: the blueprint as reorganised in the graph editor.`,
+    `% ${docTitle.replace(/\s+/g, ' ')}: the blueprint as reorganised in the graph editor.`,
     `% Written by ${GENERATOR}.  Read back with`,
     '%   blueprint import-latex <this file> --out blueprint --toml blueprint.toml',
     '\\documentclass{report}',

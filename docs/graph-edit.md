@@ -13,17 +13,17 @@ off the site downloads, draws and does exactly what it did before.
 
 ## Entering and leaving
 
-* the `e` key, anywhere that is not taking text;
 * *Edit graph*, behind the graph's *Filters* button;
 * `?edit=1` in the page's address: `http://…/?edit=1#/graph`.
 
-`e` again, or *Done*, leaves it.  Within a tab edit mode stays on across
+No bare key enters it, so a reader cannot stumble into it.  *Done*, or `e`
+once in, leaves it.  Within a tab edit mode stays on across
 reloads until it is left.  The edits themselves are kept either way (below).
 
 Only then are `edit.js`, `edit-model.js`, `edit.css` and the TeX writer
-loaded; a reader who never presses `e` never fetches them.  A past snapshot
-(the progress page's time slider) is not edited: going to one leaves edit
-mode.
+loaded; a reader who never asks for edit mode never fetches them.  A past
+snapshot (the progress page's time slider) is not edited: going to one leaves
+edit mode, and asking for it there says so in the snapshot's banner.
 
 ## What it looks like
 
@@ -92,9 +92,10 @@ all* in the changes panel undoes every step (Redo brings them back).
     { "op": "split", "label": "Split lem-boxes out of lem-tube", "at": "2026-11-20T09:58:12.000Z",
       "ids": ["lem-tube", "lem-boxes"],
       "changes": [
-        { "put": { "id": "lem-boxes", "kind": "lemma", "boundary": [], "attrs": { "order": 3.5 }, "body": "…" } },
-        { "put": { "id": "uses/proof~lem-tube/lem-boxes", "kind": "uses", "boundary": [ … ] } },
-        { "del": "uses/lem-tube/def-compact" },
+        { "put": { "id": "lem-boxes", "kind": "lemma", "boundary": [], "attrs": { "order": 3.5 }, "body": "…" }, "was": null },
+        { "put": { "id": "lem-tube", … }, "was": "9a1c03fe" },   // the version it was made on
+        { "put": { "id": "uses/proof~lem-tube/lem-boxes", "kind": "uses", "boundary": [ … ] }, "was": null },
+        { "del": "uses/lem-tube/def-compact", "was": "52be0d11" },
         { "rename": { "from": "thm-fip", "to": "thm-closed" } }
       ] } ] }
 ```
@@ -104,10 +105,25 @@ to put in place and ids to delete, computed against the blueprint as edited
 by the steps before it; `rename` carries a derived status along.  The edited
 blueprint is the snapshot with every op's changes applied in turn
 (`applyOps` in `web/edit-model.js`).  `base` names the snapshot the log was
-made on — its project and a hash of its node ids.  A log loaded onto another
-version of the blueprint (the next commit, say) is replayed all the same,
-and the editor says it was made on another version: puts and deletes of whole
-objects replay as long as the objects they name are still there.
+made on — its project and a hash of its node ids — and each change's `was`
+the version of the object it was made against (`versionOf`: a hash of its
+kind, boundary, attributes and body; `null` for an object the step created).
+
+A file made on another project is refused.  A log loaded onto another version
+of the blueprint (the next commit, say) is replayed all the same; but a put
+puts back the whole object as the step left it, so an object changed
+upstream since would lose that change.  The editor finds them
+(`replayConflicts`: every object whose version, on this snapshot as edited by
+the steps before, is not the `was` the change was made against) and lists them
+in a dialog — changed, removed, or added under an id the edits give a new
+object — so they can be checked or the steps re-made.
+
+An edit file, and the log in `localStorage`, can come from anyone: every op is
+checked field by field before it is replayed (`checkOps`; an unknown kind of
+step, an id that is no id, a body that is not a string are refused with what
+is wrong), and the prose of every object the log puts in place, edited or
+imported, is rendered through the sanitiser comments go through
+(`app.untrustedOf`), the editor's preview included.
 
 ## Export TeX
 
@@ -131,7 +147,15 @@ objects replay as long as the objects they name are still there.
   project's KaTeX macros as `\newcommand`s, the Unicode characters declared,
   `\lean`, `\leanok` and `\uses` as no-ops).
 
-Every label is the object's id, so reading it back gives the same ids:
+Every label is the object's id, so reading it back gives the same ids.
+`import-latex` keeps the labels of a file whose opening comments say
+`Written by blueprint-edit-tex/…` as they are (any other file's it slugs, as
+it always did).  That is why an id the editor gives — a new node's, or a
+rename — is lower case letters, digits, `.`, `_` and `-`, not ending in `-`
+or `.`; and why a Lean name must be one (identifiers joined by `.`, or
+«quoted» parts, nothing of `{}%#\` in it), one the blueprint already had
+with such a character in it being written without it, with a note.  Read it
+back with
 
 ```bash
 blueprint import-latex paper-edited.tex --out blueprint --toml blueprint.toml

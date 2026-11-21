@@ -235,12 +235,26 @@ def slugify (s : String) : String := Id.run do
   while out.endsWith "-" do out := (out.dropEnd 1).copy
   return (if out.isEmpty then "x" else out)
 
-/-- The id a `\label` gives: the label itself when it is already an id (as the
-labels the graph editor writes are, `sec-rings--lemma-1` included), else its
-slug. -/
-def labelId (l : String) : String :=
+/-- The id a `\label` gives: its slug.  In a file the graph editor wrote
+(`keep`, see `editorGenerated`) a label that is already an id is kept as it
+is, so that a derived id like `sec-rings--lemma-1` survives a round trip; in
+any other file a label is slugged as it always was, so that re-importing an
+existing source never renames an id (`a--b` stays `a-b`).  A label that is
+its own slug is the same either way. -/
+def labelId (l : String) (keep : Bool := false) : String :=
   let l := trim l
-  if !l.isEmpty && l.all slugOk && !l.startsWith "-" && !l.endsWith "-" then l else slugify l
+  if keep && !l.isEmpty && l.all slugOk && !l.startsWith "-" && !l.endsWith "-" then l
+  else slugify l
+
+/-- The line the graph editor's *Export TeX* (`web/export/blueprint-tex.js`,
+`GENERATOR`) writes in the comments it opens its file with. -/
+def editorMarker : String := "% Written by blueprint-edit-tex/"
+
+/-- Was this file written by the graph editor: does a line of the comment
+block it opens with carry `editorMarker`? -/
+def editorGenerated (text : String) : Bool :=
+  ((text.splitOn "\n").takeWhile (fun l => (trim l).startsWith "%")).any
+    (fun l => ((trim l).splitOn editorMarker).length > 1)
 
 /-- Strip LaTeX markup crudely, for turning a title into a slug. -/
 def plainish (s : String) : String := Id.run do
@@ -1098,8 +1112,9 @@ def uniqueId (used : HashMap String Unit) (base : String) : String × HashMap St
 
 /-- Assign ids and section paths to every item, and build the label map.
 Returns the objects in document order, the label map, the labels that were
-declared twice, and how many environments had no label. -/
-def buildObjects (items : Array Item) :
+declared twice, and how many environments had no label.  `keepLabels`: the
+file is the graph editor's, whose labels are ids already (`labelId`). -/
+def buildObjects (items : Array Item) (keepLabels : Bool := false) :
     Array RawObj × HashMap String String × Array String × Nat := Id.run do
   -- content before the first sectioning command needs a section to live in
   let mut needRoot := false
@@ -1123,7 +1138,7 @@ def buildObjects (items : Array Item) :
     match it with
     | .sec lvl rawTitle label =>
       let base := match label with
-        | some l => labelId l
+        | some l => labelId l keepLabels
         | none => slugify (plainish rawTitle)
       let (id, u) := uniqueId used base
       used := u
@@ -1141,7 +1156,7 @@ def buildObjects (items : Array Item) :
       let label := firstLabel cs
       let sec := path.back?.getD "x"
       let base ← match label with
-        | some l => pure (labelId l)
+        | some l => pure (labelId l keepLabels)
         | none => do
           unlabelled := unlabelled + 1
           let key := sec ++ "\u0000" ++ env
@@ -1453,7 +1468,9 @@ def runImport (o : ImportOpts) : IO ImportReport := do
   decls := { decls with macros := decls.macros.filter (fun (n, _) => !annotationMacros.contains n) }
   let thmEnvs := sortDedup (builtinTheoremEnvs ++ decls.theorems)
   let items := scanDoc thmEnvs (documentBody cs)
-  let (objs, labels, dups, unlabelled) := buildObjects items
+  -- A file the graph editor wrote keeps its labels as ids (`labelId`).
+  let keep := editorGenerated (← IO.FS.readFile o.entry)
+  let (objs, labels, dups, unlabelled) := buildObjects items keep
   let ctx : Ctx := { labels }
   let (files, st, rep) := emitFiles ctx objs
   let macros := katexTable decls.macros
