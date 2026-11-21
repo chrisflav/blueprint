@@ -355,7 +355,7 @@ function fillPreview(app, doc, n, target) {
   const word = e && e.number != null ? [M.kindWord(o.kind), ' ', e.number] : o.kind === 'proof' ? 'Proof' : M.kindWord(o.kind);
   const lead = e && e.text ? null : el('strong', link(word), t ? [' (', t, ')'] : null, '. ');
   const body = target.appendChild(el('div.prose.body-prose'));
-  app.renderBody(body, M.displayBody(o), app.knownIds());
+  app.renderBody(body, M.displayBody(o), app.knownIds(), undefined, { untrusted: app.untrustedOf(o) });
   if (!lead) return;
   // Run in, as a paper sets it, when the prose opens with a paragraph.
   const first = body.firstChild;

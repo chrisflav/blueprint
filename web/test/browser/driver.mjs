@@ -230,7 +230,7 @@ export async function firefox({ width = 1400, height = 900, port = 4444, launch 
 // Chromium, over the DevTools protocol
 // ---------------------------------------------------------------------------
 
-export async function chromium({ width = 1400, height = 900, port = 9222, launch = true, binary = 'chromium' } = {}) {
+export async function chromium({ width = 1400, height = 900, port = 9222, launch = true, binary = 'chromium', profile = null } = {}) {
   let child = null;
   if (launch) {
     child = spawn(binary, [
@@ -238,7 +238,7 @@ export async function chromium({ width = 1400, height = 900, port = 9222, launch
       '--disable-extensions', '--hide-scrollbars',
       `--remote-debugging-port=${port}`,
       `--window-size=${width},${height}`,
-      `--user-data-dir=/tmp/bp-sweep-chromium-${port}`,
+      `--user-data-dir=${profile || `/tmp/bp-sweep-chromium-${port}`}`,
       'about:blank',
     ], { stdio: 'ignore' });
     await waitForPort(`http://127.0.0.1:${port}/json/version`, 25000);
@@ -330,6 +330,9 @@ export async function chromium({ width = 1400, height = 900, port = 9222, launch
       }
       return out;
     },
+    // Raw DevTools protocol, for input the helpers here do not cover (a
+    // right click, a drag with Shift held): edit-sweep.mjs.
+    async cdp(method, params) { return send(method, params); },
     async move(x, y) { await mouse('mouseMoved', x, y); },
     async click(x, y) {
       await mouse('mouseMoved', x, y);

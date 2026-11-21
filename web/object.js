@@ -60,7 +60,7 @@ export function render(root, app) {
   // ---------------------------------------------------------------- prose
   const prose = el('div.body-prose');
   page.appendChild(el('div.panel', prose));
-  app.renderBody(prose, M.displayBody(o), app.knownIds());
+  app.renderBody(prose, M.displayBody(o), app.knownIds(), undefined, { untrusted: app.untrustedOf(o) });
 
   // ---------------------------------------------------- its proofs, if any
   // A statement's proofs follow it, as in the document; a click on "Proof"
@@ -73,7 +73,7 @@ export function render(root, app) {
     page.appendChild(el('div.panel', app.proofDisclosure(
       el('span.proof-word', 'Proof' + M.proofLeadRest(p)),
       el('div.proof-body', prose))));
-    app.renderBody(prose, p.body, app.knownIds());
+    app.renderBody(prose, p.body, app.knownIds(), undefined, { untrusted: app.untrustedOf(p) });
   }
 
   // ------------------------------------------------------------ attributes
@@ -133,6 +133,8 @@ export function render(root, app) {
 
   // -------------------------------------------------------------- comments
   page.appendChild(commentsPanel(app, o.id));
+  // Edit mode (edit.js) puts its commands above the heading; null in reading mode.
+  if (app.editor) app.editor.objectPage(page, o);
 }
 
 // ---------------------------------------------------------------------------

@@ -183,6 +183,9 @@ const SLUG_TEST = new RegExp(LINK_PATTERN);
  * `refs` says how a reference reads and where it leads (see `linkifySlugs`);
  * left out, it is `pageReferences`, the numbering of the active collapse
  * order with links to object pages.
+ * `untrusted`: a comment's prose (true), or prose edit mode's log put in place
+ * ('edited', `app.untrustedOf`), goes through `setSanitizedHtml`; an edited
+ * one keeps its quiet links and folds its proofs as the snapshot's own do.
  */
 export function renderBody(target, text, known, refs, { untrusted = false } = {}) {
   clear(target);
@@ -198,7 +201,7 @@ export function renderBody(target, text, known, refs, { untrusted = false } = {}
       // maths or emphasis ("[del74, Thm. $x$]") is still one citation.
       const cited = untrusted ? text : markCitations(text, refs === undefined ? pageReferences : refs);
       const html = restore(window.marked.parse(cited, { gfm: true, breaks: false }));
-      if (untrusted) setSanitizedHtml(target, html);
+      if (untrusted) setSanitizedHtml(target, html, { quiet: untrusted === 'edited' });
       else target.innerHTML = html;
     } catch (e) {
       target.innerHTML = '<pre>' + escapeHtml(src) + '</pre>';
@@ -209,7 +212,7 @@ export function renderBody(target, text, known, refs, { untrusted = false } = {}
   renderMath(target);
   linkifySlugs(target, known, refs === undefined ? pageReferences : refs);
   quietLinks(target, known, refs === undefined ? pageReferences : refs);
-  if (!untrusted) foldProofs(target);
+  if (!untrusted || untrusted === 'edited') foldProofs(target);
   return target;
 }
 
@@ -217,16 +220,18 @@ export function renderBody(target, text, known, refs, { untrusted = false } = {}
  * Render one line of Markdown into `target` inline, without the paragraph
  * around it, as `renderBody` renders a body: maths, citations, `[slug]`
  * references and quiet links.  Without marked the line is its text, whose
- * references and citations are linked all the same.
+ * references and citations are linked all the same.  `untrusted` as for
+ * `renderBody`.
  */
-export function renderInline(target, text, known, refs) {
+export function renderInline(target, text, known, refs, { untrusted = false } = {}) {
   clear(target);
   const src = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
   const r = refs === undefined ? pageReferences : refs;
   if (window.marked && typeof window.marked.parseInline === 'function') {
     try {
       const { text, restore } = shieldMath(src);
-      target.innerHTML = restore(window.marked.parseInline(markCitations(text, r), { gfm: true }));
+      if (untrusted) setSanitizedHtml(target, restore(window.marked.parseInline(text, { gfm: true })), { quiet: untrusted === 'edited' });
+      else target.innerHTML = restore(window.marked.parseInline(markCitations(text, r), { gfm: true }));
     } catch (e) {
       target.textContent = src;
     }
@@ -252,7 +257,7 @@ export function headingSource(o, known, refs) {
   if (!src) return null;
   const titled = model.ownTitle(o) !== null;
   return el('span.heading-source', titled ? ' (' : '(',
-    renderInline(el('span.heading-source-text'), src, known, refs), ')');
+    renderInline(el('span.heading-source-text'), src, known, refs, { untrusted: app.untrustedOf(o) }), ')');
 }
 
 // ---------------------------------------------------------------------------
@@ -266,12 +271,17 @@ const SAFE_TAGS = new Set(['P', 'BR', 'HR', 'EM', 'STRONG', 'DEL', 'CODE', 'PRE'
   'UL', 'OL', 'LI', 'A', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
   'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SPAN']);
 
+// The address marked gives a quiet link, `[text](@slug)`.
+const QUIET_HREF = /^@[A-Za-z0-9][A-Za-z0-9._~\/-]*$/;
+
 /**
  * Put `html` into `target` keeping only `SAFE_TAGS`.  The HTML is parsed in an
  * inert document, where nothing loads and no handler runs, and only what
  * survives is moved over.  Without a DOMParser the source is shown as text.
+ * `quiet`: a link may keep an `@slug` address, for `quietLinks` to make a quiet
+ * link of (an edited object's prose; never a comment's).
  */
-function setSanitizedHtml(target, html) {
+function setSanitizedHtml(target, html, { quiet = false } = {}) {
   if (typeof DOMParser !== 'function') {
     target.textContent = html.replace(/<[^>]*>/g, '');
     return;
@@ -290,7 +300,8 @@ function setSanitizedHtml(target, html) {
         continue;
       }
       for (const a of [...c.attributes]) {
-        const keep = c.tagName === 'A' && a.name === 'href' && /^(https?:|#|\/|\.)/i.test(a.value.trim());
+        const keep = c.tagName === 'A' && a.name === 'href'
+          && (/^(https?:|#|\/|\.)/i.test(a.value.trim()) || (quiet && QUIET_HREF.test(a.value.trim())));
         if (!keep) c.removeAttribute(a.name);
       }
       if (c.tagName === 'A') c.setAttribute('rel', 'nofollow noopener');
@@ -923,6 +934,8 @@ const app = {
 
   /** Load a different snapshot file (time slider). */
   async showSnapshot(entry) {
+    // Edits are made on the current snapshot, not on a past one.
+    if (app.editor) await setEditing(false, { draw: false });
     if (!entry) {
       await loadInto(app.dataUrlOriginal, { sha: null });
     } else {
@@ -940,6 +953,24 @@ const app = {
 
   /** Put `text` in the top bar's search box (the search page's query). */
   setQuickSearch: (text) => setQuickSearch(text),
+
+  /**
+   * Edit mode (edit.js): the editor while it is on, null in reading mode.
+   * The pages call into it only when it is set, so with it off they draw
+   * and behave exactly as they do without it.
+   */
+  editor: null,
+  /**
+   * How far to trust the prose of `o` (`renderBody`'s `untrusted`): false for
+   * the snapshot's own, always so in reading mode; 'edited' for an object
+   * edit mode's log put in place (from an edit file, the browser's store or
+   * the editor), whose prose goes through the sanitiser.
+   */
+  untrustedOf: (o) => (app.editor ? app.editor.untrusted(o) : false),
+  /** Enter or leave edit mode. */
+  setEditing: (on) => setEditing(on),
+  /** Draw the page on screen again, for the editor after a change. */
+  refresh: () => render(),
 
   /** Known object ids, for `[slug]` link resolution. */
   knownIds() {
@@ -1341,6 +1372,62 @@ function takesText(node) {
   return node.tagName === 'TEXTAREA' || node.tagName === 'SELECT' || !!node.isContentEditable;
 }
 
+// ---------------------------------------------------------------------------
+// edit mode
+// ---------------------------------------------------------------------------
+
+// Edit mode (edit.js, docs/graph-edit.md) is opt-in: its module, its sheet
+// and its log are loaded only when the reader asks for it — *Edit graph*
+// behind the graph's Filters, or `?edit=1` in the page's URL; no bare key
+// does it — and while it is off nothing on the page differs from a site
+// without it.  Within a tab it stays on across reloads
+// (`sessionStorage`) until the reader leaves it.
+const EDIT_SESSION_KEY = 'blueprint.editing';
+let editModule = null;
+
+async function setEditing(on, { draw = true } = {}) {
+  on = !!on;
+  if (on === !!app.editor) return;
+  if (on) {
+    if (!app.model) return;
+    if (app.viewingSha) { refuseEditing(); return; } // only the current snapshot is edited
+    if (!editModule) editModule = import('./edit.js');
+    let mod;
+    try {
+      mod = await editModule;
+    } catch (e) {
+      editModule = null;
+      console.error(e);
+      return;
+    }
+    if (app.editor) return;
+    app.editor = mod.enter(app);
+  } else {
+    app.editor.exit();
+    app.editor = null;
+  }
+  try {
+    if (on) sessionStorage.setItem(EDIT_SESSION_KEY, 'on');
+    else sessionStorage.removeItem(EDIT_SESSION_KEY);
+  } catch (e) { /* storage refused: it lasts as long as the page */ }
+  if (draw) render();
+}
+
+function wantsEditing() {
+  if (new URLSearchParams(location.search).get('edit') === '1') return true;
+  try { return sessionStorage.getItem(EDIT_SESSION_KEY) === 'on'; } catch (e) { return false; }
+}
+
+/** Say, in the past snapshot's banner, why edit mode did not open. */
+function refuseEditing() {
+  const banner = document.getElementById('banner');
+  if (!banner) return;
+  const old = banner.querySelector('.edit-refused');
+  if (old) old.remove();
+  banner.appendChild(el('span.small.edit-refused',
+    'Edit mode works on the current blueprint only: go back to current to edit.'));
+}
+
 /**
  * Search for `text` from the top bar: an object's id opens its page, anything
  * else the search page.  On the search page its choices (all objects or
@@ -1547,6 +1634,7 @@ async function boot() {
     render();
   });
   render();
+  if (wantsEditing()) setEditing(true);
 }
 
 /**

@@ -419,6 +419,20 @@ previous and next posts and *All posts*. Without `blog.json`, or with no
 posts in it, the tab stays hidden (`index.html` has it `hidden`) and the
 page, opened all the same, says there is no blog.
 
+### Edit mode
+
+The graph can be reorganised in the browser and written out as LaTeX
+(`../docs/graph-edit.md`).  It is opt-in: *Edit graph* behind the graph's
+Filters, or `?edit=1` in the page's address (before the `#`); no bare key
+enters it.  Until then nothing of it is fetched, and the pages
+call into it only through `app.editor`, which is `null`: the graph, its side
+panel and the object pages draw exactly what they draw without it.  While it
+is on, `app.snapshot` and `app.model` are the edited blueprint (the snapshot
+with the edit log replayed), so every page shows the edits; leaving it puts
+the snapshot back.  It stays on across reloads of the tab
+(`sessionStorage`, `blueprint.editing`), and the log is kept in
+`localStorage` (`blueprint.edits:<project>:<snapshot address>`).
+
 ### Comments
 
 Every object page ends with a comment section, after the Stacks project's: a
@@ -851,7 +865,10 @@ the pages knowing about it.
 | `prefetch.js` | fetching what the reader may open next, one file at a time, while the browser is idle |
 | `preview.js` | the card a link to an object opens while the pointer rests on it, and the card of Lean names the document's "object" link opens |
 | `pdf.js` | the Export PDF button and dialog: the part, the detail, finding or making the PDF, the TeX source |
+| `edit.js`, `edit.css` | edit mode (`../docs/graph-edit.md`): loaded only when the reader enters it (*Edit graph* behind the graph's Filters, `?edit=1`); the bar, the menus, the dialogs, the side panel's editor, the log in `localStorage` |
+| `edit-model.js` | **pure**: the editor's operations as a log of changes over the snapshot, replayed by `applyOps`; the summary, the checks, the edit file |
 | `export/latex.js` | **pure**: a part of the document as a LaTeX document — the request, the plan (order, shared objects, depth), the TeX. Imported by the dialog and by the command line |
+| `export/blueprint-tex.js` | **pure**: the whole (edited) blueprint as a `leanblueprint` LaTeX document that `blueprint import-latex` reads back: the editor's *Export TeX* |
 | `export/markdown-tex.js`, `export/unicode.js` | **pure**: a body's Markdown and maths as LaTeX; the characters pdfLaTeX is told about |
 | `export/sha256.js` | SHA-256, where the browser has no `crypto.subtle`; the name of a snapshot's export directory |
 | `export/cli.mjs`, `export/store.mjs`, `export/compile.mjs`, `export/zip.mjs` | node only: the command line, the `data/exports` store, TeX in a sandbox, the source archive |
@@ -868,6 +885,8 @@ the pages knowing about it.
 | `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, the document pages and their lazy rendering, the ELK worker and its fallbacks, the progress filters, the top bar's search and the search page, the link previews, the Export PDF dialog and the intro |
 | `test/export.test.mjs` | the PDF export without TeX: selection, order, numbers, depth, shared objects, proofs, text, appendices, references, maths, escaping, images, the store and the command line's errors |
 | `test/export-compile.test.mjs` | the PDF export with TeX (skipped without pdflatex): real PDFs read back, TeX errors, the sandbox, the time limit |
+| `test/edit.test.mjs` | the editor's operations, undo, the edit file and the TeX export; with `BLUEPRINT_BIN`, the round trip through `import-latex` and `build`, and with pdflatex, that the TeX compiles |
+| `test/browser/edit-sweep.mjs` | edit mode in headless Chromium with real input, reading mode compared with a site built without it (`test/browser/README.md`) |
 
 Both samples can be opened directly:
 

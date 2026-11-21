@@ -141,6 +141,18 @@ proof, `remark` included.  `\leanok`, `\notready` and `\mathlibok` are
 dropped: derived status comes from Lean in this tool, never from the text.
 `\discussion{n}` becomes the tag `discussion:n`.
 
+**Whole documents.**  A file with `\begin{document}` — such as the graph
+editor's *Export TeX* (`docs/graph-edit.md`) — is read from there to
+`\end{document}`; its preamble is read only for the declarations below.  The
+blueprint annotations' own declarations there (`\providecommand{\lean}[1]{}`
+and the like, which make the document compile outside `leanblueprint`) are
+not KaTeX macros and are left out of the table.  In a file the editor wrote
+(its opening comments say `Written by blueprint-edit-tex/…`) a `\label` that
+is already an id (lower case, `a-z0-9-_.`, not starting or ending with `-`) is
+kept as it is, so an id like `sec-rings--lemma-1` survives a round trip.  In
+any other file every label is slugged as above, as it always was, so
+re-importing an existing source keeps its ids (`a--b` is still `a-b`).
+
 **Unresolved dependencies.**  A `\uses` target that names no label would be a
 `dangling-ref` error, so it never becomes an edge.  It is listed at the end
 of the body it was written in, statement or proof, after `Unresolved

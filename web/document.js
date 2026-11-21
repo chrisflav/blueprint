@@ -224,13 +224,13 @@ export function render(root, app) {
         const item = el('section', { class: 'doc-entry is-text is-reference kind-' + o.kind, id: 'doc-' + cssId(o.id) });
         item.appendChild(el('span.bib-label', '[' + (entry.label || o.id) + ']'));
         const prose = item.appendChild(el('div.prose.body-prose.bib-text'));
-        defer(prose, () => app.renderBody(prose, M.referenceMarkdown(o), known, refs));
+        defer(prose, () => app.renderBody(prose, M.referenceMarkdown(o), known, refs, { untrusted: app.untrustedOf(o) }));
         flow.appendChild(item);
         return;
       }
       const text = el('section', { class: 'doc-entry is-text kind-' + o.kind, id: 'doc-' + cssId(o.id) });
       const prose = text.appendChild(el('div.prose.body-prose'));
-      defer(prose, () => app.renderBody(prose, o.body, known, refs));
+      defer(prose, () => app.renderBody(prose, o.body, known, refs, { untrusted: app.untrustedOf(o) }));
       for (const step of outline.steps.get(o.id) || []) text.appendChild(stepBlock(app, step, outline, known, refs));
       flow.appendChild(text);
       return;
@@ -331,7 +331,7 @@ export function render(root, app) {
       if (o.body && o.body.trim()) {
         const prose = el('div.prose.body-prose');
         section.appendChild(prose);
-        defer(prose, () => app.renderBody(prose, o.body, known, refs));
+        defer(prose, () => app.renderBody(prose, o.body, known, refs, { untrusted: app.untrustedOf(o) }));
       }
       for (const proof of outline.proofs.get(o.id) || []) {
         section.appendChild(proofBlock(app, proof, outline, known, refs));
@@ -548,7 +548,7 @@ function stepBlock(app, o, outline, known, refs, seen = new Set()) {
   if (o.body && o.body.trim()) {
     const prose = el('div.body-prose.step-prose');
     block.appendChild(prose);
-    defer(prose, () => app.renderBody(prose, o.body, known, refs));
+    defer(prose, () => app.renderBody(prose, o.body, known, refs, { untrusted: app.untrustedOf(o) }));
   }
   seen.add(o.id);
   for (const step of outline.steps.get(o.id) || []) {
@@ -570,7 +570,7 @@ function proofBlock(app, o, outline, known, refs, rest = M.proofLeadRest(o)) {
   if (o.body && o.body.trim()) {
     const prose = el('div.body-prose.proof-prose');
     body.appendChild(prose);
-    defer(prose, () => app.renderBody(prose, o.body, known, refs));
+    defer(prose, () => app.renderBody(prose, o.body, known, refs, { untrusted: app.untrustedOf(o) }));
   }
   for (const step of outline.steps.get(o.id) || []) {
     body.appendChild(stepBlock(app, step, outline, known, refs));
