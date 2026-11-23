@@ -103,9 +103,10 @@ private def scanLinks : Nat → List Char → Char → Array String → Array St
       | none => scanLinks fuel rest c acc
     else scanLinks fuel rest c acc
 
-/-- The `[slug]` references in a body, in order of appearance. -/
+/-- The `[slug]` references in a body, in order of appearance.  Fenced code is
+skipped: `[Ring R]` in a ```` ```lean ```` block is no link. -/
 def extractLinks (body : String) : Array String :=
-  let cs := body.toList
+  let cs := (proseOf body).toList
   scanLinks cs.length cs ' ' #[]
 
 /-- Scan a body for the targets of quiet links, `[text](@slug)`: the address
@@ -128,10 +129,10 @@ private def scanQuietLinks : Nat → List Char → Char → Array String → Arr
     else scanQuietLinks fuel rest c acc
 
 /-- The targets of the quiet links, `[text](@slug)`, in a body, in order of
-appearance.  The website sets one as the words around it, followed only by a
-click with Ctrl held. -/
+appearance, fenced code skipped.  The website sets one as the words around
+it, followed only by a click with Ctrl held. -/
 def extractQuietLinks (body : String) : Array String :=
-  let cs := body.toList
+  let cs := (proseOf body).toList
   scanQuietLinks cs.length cs ' ' #[]
 
 /-- Scan for the first parts of bracketed lists, `[a, …]`, that read as an

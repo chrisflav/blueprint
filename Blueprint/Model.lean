@@ -571,4 +571,52 @@ def splitLines (s : String) : Array String :=
   (s.splitOn "\n").toArray.map fun l =>
     if l.endsWith "\r" then l.dropEnd 1 |>.copy else l
 
+/-! ## Fenced code
+
+A body may hold code as CommonMark fences it: a line of three or more
+backticks or tildes, indented at most three spaces and followed by an
+optional info string naming the language (```` ```lean ````), then the code,
+then a line of at least as many of the same character and nothing else.  An
+unclosed fence runs to the end of the body.  What is inside is code, kept as
+written: no maths, no `[slug]` links, no headings. -/
+
+/-- The fence a line opens or closes: its character, its length and its info
+string.  `none` for a line that is no fence. -/
+def fenceOf? (l : String) : Option (Char × Nat × String) :=
+  let cs := l.toList
+  let ind := (cs.takeWhile (· == ' ')).length
+  match cs.drop ind with
+  | rest@(c :: _) =>
+    let n := (rest.takeWhile (· == c)).length
+    let info := String.ofList (rest.drop n)
+    -- a backtick fence's info string may not contain a backtick (it would
+    -- be a code span)
+    if ind ≤ 3 && (c == '`' || c == '~') && n ≥ 3 && !(c == '`' && info.contains '`') then
+      some (c, n, trim info)
+    else none
+  | [] => none
+
+/-- Which lines are fenced code, the fences included. -/
+def fencedLines (lines : Array String) : Array Bool := Id.run do
+  let mut out : Array Bool := #[]
+  let mut open_ : Option (Char × Nat) := none
+  for l in lines do
+    match open_, fenceOf? l with
+    | none, some (c, n, _) =>
+      open_ := some (c, n)
+      out := out.push true
+    | none, none => out := out.push false
+    | some (c, n), some (c', n', info) =>
+      if c' == c && n' ≥ n && info.isEmpty then open_ := none
+      out := out.push true
+    | some _, none => out := out.push true
+  return out
+
+/-- A body with its fenced code blocks blanked out, line for line: the prose
+alone, for what reads links or maths out of it. -/
+def proseOf (body : String) : String :=
+  let lines := splitLines body
+  let fenced := fencedLines lines
+  "\n".intercalate (lines.mapIdx fun i l => if fenced[i]! then "" else l).toList
+
 end Blueprint

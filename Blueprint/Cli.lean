@@ -423,7 +423,10 @@ def cmdRename (root : System.FilePath) (args : Args) : IO UInt32 := do
           front := recordAlias front old
           unless hasExplicitId front do
             front := #[s!"id       = \"{new}\""] ++ front
-        let rest := rest.map (renameInMarkdown isRef old new)
+        -- fenced code is kept as written: `[old]` there is no reference
+        let fenced := fencedLines rest
+        let rest := rest.mapIdx fun i l =>
+          if fenced[i]! then l else renameInMarkdown isRef old new l
         let out := String.intercalate "\n"
           (["+++"] ++ front.toList ++ ["+++"] ++ rest.toList)
         if out != text then

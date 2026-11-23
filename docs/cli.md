@@ -1077,6 +1077,29 @@ when `slug` does not resolve (maths is skipped) and creates no edge.
 Every [compact Hausdorff space](@def-compact-hausdorff) is normal.
 ```
 
+**Code.**  A fenced block is code, shown as written.  The info string after
+the opening fence names its language:
+
+````markdown
+In Lean:
+
+```lean
+@[simp] theorem add_zero (m : ℕ) : add m 0 = m := by
+  simp [add]  -- `[add]` here is Lean's, not a reference
+```
+````
+
+Nothing inside is read as prose: no maths, no macros, no `[slug]` links or
+citations, so `check` reports no `bad-link` there and `rename` leaves it
+alone.  A fence is three or more backticks or tildes, indented at most three
+spaces, and closes on a line of at least as many of the same character with
+nothing after them; one left open runs to the end of the body.  The website
+highlights `lean` (or `lean4`) code: keywords, comments, strings, numbers,
+attributes, `sorry` and Unicode symbols, each in a colour of its own in light
+and dark mode.  Code in any other language, or with none, is plain monospace.
+The PDF sets every block verbatim.  The snapshot keeps the body as it is, so
+a block is in `blueprint.json` as the Markdown that wrote it.
+
 **References.**  Each entry of the bibliography is an object of kind
 `reference`, with the fields BibTeX gives it: `author` and `editor` (a list
 of names, or one name; "A and B" is two, "and others" ends a list),

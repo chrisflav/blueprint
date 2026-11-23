@@ -167,6 +167,19 @@ check('edit: rename carries edges, proof, details and references along', () => {
   eq(E.checkGraph(snap).dangling, [], 'nothing dangling');
 });
 
+check('edit: fenced code keeps its brackets through a rename and is no broken link', () => {
+  const base = fresh();
+  const body = 'By [thm-fip] and [no-such_a].\n\n```lean\nexample := by simp [thm-fip, no-such_b]\n```\n\nAgain [thm-fip].';
+  const { snap } = run(base,
+    (s) => E.opEdit(s, 'thm-product', { statement: body }),
+    (s) => E.opEdit(s, 'thm-fip', { id: 'thm-closed' }));
+  eq(byId(snap, 'thm-product').body,
+    'By [thm-closed] and [no-such_a].\n\n```lean\nexample := by simp [thm-fip, no-such_b]\n```\n\nAgain [thm-closed].',
+    'prose rewritten, code as written');
+  eq(E.checkGraph(snap).brokenLinks.filter((l) => l.id === 'thm-product'), [{ id: 'thm-product', ref: 'no-such_a' }],
+    'only the link in prose is broken');
+});
+
 check('edit: statement and proof text, an emptied proof keeps its dependencies', () => {
   const base = fresh();
   const { snap } = run(base, (s) => E.opEdit(s, 'lem-tube', { statement: 'New statement.', proof: '' }));

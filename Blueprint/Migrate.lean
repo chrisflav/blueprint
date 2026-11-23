@@ -101,13 +101,7 @@ def splitProofs? (body : String) : Option (String × Array CutProof) := Id.run d
   let n := lines.size
   -- lines inside a fenced code block (the fences included) are never
   -- headings or markers
-  let mut fenced : Array Bool := #[]
-  let mut open_ := false
-  for l in lines do
-    let t := trim l
-    let fence := t.startsWith "```" || t.startsWith "~~~"
-    fenced := fenced.push (open_ || fence)
-    if fence then open_ := !open_
+  let fenced := fencedLines lines
   let level? (j : Nat) : Option Nat := if fenced[j]! then none else headingLevel? lines[j]!
   let marker? (j : Nat) : Option (Option String × String) :=
     if fenced[j]! then none else inlineProofMarker? lines[j]!
