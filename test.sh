@@ -1165,6 +1165,34 @@ else
   bad "the renamed project still checks out"
 fi
 
+# ------------------------------------------------------------ fenced code
+# A fenced block is code, kept as written in the snapshot: `[slug]`, quiet
+# links and maths inside it are neither read nor rewritten (docs/cli.md,
+# "Code")
+head_ "fenced code"
+wants "$TMP/minimal.json" \
+  '"body": "Addition on [nat] is defined by recursion on the second argument:\n\n```lean\n/-- Addition, by recursion on the second argument. -/\n'
+if grep -q 'simp \[add\]  -- the' "$TMP/scratch/blueprint/add.md" \
+   && grep -q 'Addition on \[nat\]' "$TMP/scratch/blueprint/add.md"; then
+  ok "rename leaves fenced code as it is"
+else
+  bad "rename leaves fenced code as it is"; cat "$TMP/scratch/blueprint/add.md"
+fi
+cp -r examples/minimal "$TMP/fenced"
+printf '%s\n' '+++' 'kind = "remark"' '+++' 'Before [nosuch-a].' '' \
+  '```lean' 'example : True := by simp [nosuch-b]  -- $x [nosuch-c] [t](@nosuch-d)' '```' '' \
+  '~~~~' '[nosuch-e]' '```' '[nosuch-f]' '~~~~' '' \
+  'After [nosuch-g], and an unclosed fence:' '````' '[nosuch-h]' \
+  > "$TMP/fenced/blueprint/code.md"
+"$BP" check --root "$TMP/fenced" > "$TMP/fenced.out" 2>&1
+if grep -q "links to \[nosuch-a\]" "$TMP/fenced.out" \
+   && grep -q "links to \[nosuch-g\]" "$TMP/fenced.out" \
+   && [ "$(grep -c "bad-link" "$TMP/fenced.out")" -eq 2 ]; then
+  ok "check reads no links in fenced code, and a fence closes only on its own kind"
+else
+  bad "check reads no links in fenced code, and a fence closes only on its own kind"; cat "$TMP/fenced.out"
+fi
+
 # ------------------------------------------------------------------- diff
 # Two copies of examples/induction, one of them edited, exercise every
 # category of the semantic diff at once: a renamed object (through the alias
@@ -1370,7 +1398,7 @@ if "$BP" site --root examples/induction -o "$TMP/site" > "$TMP/site.log" 2>&1; t
 else
   bad "site exits 0"; cat "$TMP/site.log"
 fi
-for f in index.html blueprint.json app.js model.js style.css; do
+for f in index.html blueprint.json app.js model.js highlight.js style.css; do
   if [ -s "$TMP/site/$f" ]; then
     ok "site wrote $f"
   else

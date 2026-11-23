@@ -2392,6 +2392,40 @@ export function mathRegExp() {
   return /(```[\s\S]*?```|`[^`\n]*`)|(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?!\s)(?:[^$\\]|\\[\s\S])+?\$)/g;
 }
 
+// A line that opens or closes fenced code: up to three spaces, three or more
+// backticks or tildes, and the info string (```` ```lean ````).
+const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+
+/**
+ * Which lines of `lines` are fenced code, the fences included, as the tool's
+ * `fencedLines` reads them: a fence closes on a line of at least as many of
+ * its own character and nothing else, and an unclosed one runs to the end.
+ * Nothing in fenced code is prose: no `[slug]` links, no maths.
+ */
+export function fencedLines(lines) {
+  const out = [];
+  let open = null;
+  for (const l of lines) {
+    const m = FENCE_LINE.exec(l);
+    const fence = m && !(m[1][0] === '`' && m[2].includes('`')) ? m : null;
+    if (!open) {
+      if (fence) open = fence[1];
+      out.push(!!fence);
+    } else {
+      if (fence && fence[1][0] === open[0] && fence[1].length >= open.length && !fence[2].trim()) open = null;
+      out.push(true);
+    }
+  }
+  return out;
+}
+
+/** `body` with every line outside fenced code mapped by `f`. */
+export function mapProseLines(body, f) {
+  const lines = String(body).split('\n');
+  const fenced = fencedLines(lines);
+  return lines.map((l, i) => (fenced[i] ? l : f(l))).join('\n');
+}
+
 /**
  * Whether an object says `hide_content = true` (or `"yes"`) in its front
  * matter: the document leaves it off its parent's page, heading and prose,

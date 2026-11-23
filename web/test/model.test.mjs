@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as M from '../model.js';
+import * as H from '../highlight.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const snapshot = JSON.parse(
@@ -2196,6 +2197,59 @@ check('provenance: a hidden statement\'s proof is lifted through, a statement is
   const all = M.graphModel(m, { hideValues: ['published', 'new'] });
   sameSet(M.visibleNodes(M.makeView(all, 'refines', [])).map((o) => o.id), ['ch1', 'ch3'], 'ch1 kept by ut');
 });
+
+// ---------------------------------------------------------------------------
+// highlight.js: fenced code
+
+check('fenced code: the lines it takes, as the tool reads them', () => {
+  const lines = ['a', '```lean', '[x]', '~~~', '```', 'b', '~~~~', '```', '~~~', '~~~~~', 'c', '````', 'd'];
+  eq(M.fencedLines(lines).map((f) => (f ? 1 : 0)).join(''), '0111101111011', 'opened by an info string, closed by its own kind, an unclosed one to the end');
+  eq(M.fencedLines(['```a`b', '[x]']).join(), 'false,false', 'a backtick in the info string makes no fence');
+  eq(M.mapProseLines('[a]\n```\n[a]\n```\n[a]', (l) => l.replace('[a]', '[b]')), '[b]\n```\n[a]\n```\n[b]', 'only prose is mapped');
+});
+
+check('highlight: Lean code is cut into runs that put it back together', () => {
+  const src = [
+    '/-- Addition. /- nested -/ still a comment -/',
+    '@[simp, to_additive (attr := simp)] theorem add_zero\' (m : ℕ) : m + 0 = m := by',
+    '  simp [Nat.add_zero] -- the end',
+    'def s : String := "a \\" [b] $x$"',
+    'example : \'a\'.toNat = 0x61 ∧ 2.5e3 > 1 := ⟨rfl, sorry⟩',
+    '#check fun x₁ => λ y => x₁',
+  ].join('\n');
+  const runs = H.tokens(src, 'lean');
+  eq(runs.map((r) => r.text).join(''), src, 'the text is kept');
+  ok(runs.every((r, i) => i === 0 || runs[i - 1].type !== r.type), 'neighbours differ in type');
+  const of = (type) => runs.filter((r) => r.type === type).map((r) => r.text);
+  eq(of('comment')[0], '/-- Addition. /- nested -/ still a comment -/', 'a nested block comment is one comment');
+  eq(of('comment')[1], '-- the end', 'a line comment');
+  eq(of('attribute')[0], '@[simp, to_additive (attr := simp)]', 'an attribute, brackets balanced');
+  ok(of('keyword').some((t) => t.includes('theorem')), 'theorem is a keyword');
+  ok(of('keyword').some((t) => t.includes('#check')), '#check is a keyword');
+  ok(of('keyword').some((t) => t.includes('λ')) && of('keyword').some((t) => t.includes('fun')), 'fun and λ are keywords');
+  ok(!of('keyword').some((t) => t.includes('add_zero')), 'a name is not a keyword');
+  ok(of('text').some((t) => t.includes("add_zero'")), 'a primed name stays one name');
+  ok(of('text').some((t) => t.includes('Nat.add_zero')), 'a dotted name is text');
+  eq(of('string')[0], '"a \\" [b] $x$"', 'a string, escapes and all');
+  eq(of('string')[1], "'a'", 'a character');
+  sameSet(of('number'), ['0', '0x61', '2.5e3', '1'], 'numbers, hex and scientific');
+  eq(of('sorry').join(), 'sorry', 'sorry stands out');
+  ok(!of('symbol').join('').includes('ℕ'), 'ℕ is a letter, part of the text');
+  ok(['∧', '⟨', '⟩'].every((s) => of('symbol').join('').includes(s)), 'unicode symbols');
+  ok(of('text').some((t) => t.includes('x₁')), 'a subscript is part of its name');
+});
+
+check('highlight: languages', () => {
+  ok(H.knowsLanguage('lean') && H.knowsLanguage('Lean4'), 'lean, by either name, any case');
+  eq(H.tokens('def x := 1', 'python'), null, 'an unknown language is left alone');
+  eq(H.tokens('def x := 1', ''), null, 'and so is code without one');
+  eq(H.languageOfClass('language-lean'), 'lean', 'the language marked writes');
+  eq(H.languageOfClass('hljs other'), null, 'none');
+  const open = H.tokens('/- never closed\ndef', 'lean');
+  eq(open.length, 1, 'an unclosed comment runs to the end');
+  eq(H.tokens('"never closed', 'lean')[0].type, 'string', 'as does a string');
+});
+
 
 // ---------------------------------------------------------------------------
 

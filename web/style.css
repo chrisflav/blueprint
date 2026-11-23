@@ -41,6 +41,15 @@
      lighter on a dark background), at the same width. */
   --graph-edge-strong: color-mix(in srgb, var(--graph-edge) 40%, var(--fg));
 
+  /* Fenced code (`highlight.js`): one colour per kind of run. */
+  --hl-keyword: #8a2b8f;
+  --hl-comment: #6b7480;
+  --hl-string: #1f7a3d;
+  --hl-number: #a35200;
+  --hl-sorry: #c62828;
+  --hl-attribute: #8a6a00;
+  --hl-symbol: #2f5fb0;
+
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
           "Liberation Mono", monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
@@ -84,6 +93,14 @@
     --graph-edge: #8c959e;
     --graph-junction: #aab3bb;
     --graph-hl: #f0a202;
+
+    --hl-keyword: #d49be0;
+    --hl-comment: #8a939c;
+    --hl-string: #8fd19e;
+    --hl-number: #e8a866;
+    --hl-sorry: #ff7b72;
+    --hl-attribute: #e0c264;
+    --hl-symbol: #8cb4f0;
   }
 }
 
@@ -120,6 +137,16 @@ code:not(pre code) {
   border-radius: 4px;
   padding: .08em .35em;
 }
+
+/* Fenced code in a language `highlight.js` knows: `app.highlightCode` cuts it
+   into `span.hl-<type>` runs.  Any other language is plain monospace. */
+pre code .hl-keyword { color: var(--hl-keyword); font-weight: 600; }
+pre code .hl-comment { color: var(--hl-comment); font-style: italic; }
+pre code .hl-string { color: var(--hl-string); }
+pre code .hl-number { color: var(--hl-number); }
+pre code .hl-sorry { color: var(--hl-sorry); font-weight: 700; }
+pre code .hl-attribute { color: var(--hl-attribute); }
+pre code .hl-symbol { color: var(--hl-symbol); }
 
 h1, h2, h3, h4 { line-height: 1.25; margin: 1.4em 0 .5em; font-weight: 620; }
 h1 { font-size: 1.6rem; margin-top: 0; }

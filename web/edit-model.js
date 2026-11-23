@@ -20,7 +20,7 @@
 //
 // Pure: no DOM, no fetch, so the tests run it under node.
 
-import { SLUG_PATTERN, isSectionKind, TEXT_KIND } from './model.js';
+import { SLUG_PATTERN, isSectionKind, TEXT_KIND, mapProseLines, fencedLines } from './model.js';
 
 export const EDIT_FORMAT = 'blueprint-edits';
 export const EDIT_VERSION = 1;
@@ -377,7 +377,7 @@ export class Draft {
   /**
    * Rewrite `[old]` references (and quiet links `[text](@old)`) in every body:
    * `map` from id to a new id, or to `{text}` for a reference that is to read
-   * as plain text from now on.
+   * as plain text from now on.  Fenced code is kept as written.
    */
   rewriteRefs(map) {
     if (!map.size) return;
@@ -386,18 +386,19 @@ export class Draft {
     for (const o of this.objects()) {
       if (!o.body || o.body.indexOf('[') < 0) continue;
       let changed = false;
-      let body = o.body.replace(quiet, (whole, text, id) => {
-        if (!map.has(id)) return whole;
-        changed = true;
-        const to = map.get(id);
-        return typeof to === 'string' ? `[${text}](@${to})` : text;
-      });
-      body = body.replace(slug, (whole, id) => {
-        if (!map.has(id)) return whole;
-        changed = true;
-        const to = map.get(id);
-        return typeof to === 'string' ? `[${to}]` : to.text;
-      });
+      const body = mapProseLines(o.body, (line) => line
+        .replace(quiet, (whole, text, id) => {
+          if (!map.has(id)) return whole;
+          changed = true;
+          const to = map.get(id);
+          return typeof to === 'string' ? `[${text}](@${to})` : text;
+        })
+        .replace(slug, (whole, id) => {
+          if (!map.has(id)) return whole;
+          changed = true;
+          const to = map.get(id);
+          return typeof to === 'string' ? `[${to}]` : to.text;
+        }));
       if (changed) this.setBody(o.id, body);
     }
   }
@@ -879,7 +880,11 @@ export function checkGraph(snapshot) {
   for (const o of snapshot.objects) {
     for (const b of o.boundary || []) if (!ids.has(b.id)) dangling.push({ id: o.id, ref: b.id });
     if (o.body && o.body.indexOf('[') >= 0) {
-      for (const m of o.body.matchAll(slug)) if (!ids.has(m[1]) && /[-_]/.test(m[1])) brokenLinks.push({ id: o.id, ref: m[1] });
+      // fenced code is no prose: `simp [add_zero]` there is no link
+      const lines = o.body.split('\n');
+      const fenced = fencedLines(lines);
+      const prose = lines.filter((_, i) => !fenced[i]).join('\n');
+      for (const m of prose.matchAll(slug)) if (!ids.has(m[1]) && /[-_]/.test(m[1])) brokenLinks.push({ id: o.id, ref: m[1] });
     }
   }
   return { cycles: findCycles(usesRelation(snapshot)), dangling, brokenLinks };

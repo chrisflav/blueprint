@@ -854,6 +854,7 @@ the pages knowing about it.
 | `style.css` | everything visual, light and dark via `prefers-color-scheme` |
 | `model.js` | **pure** logic: indexing, collapse orders, views, the quotient, consistency states, the document outline and its pages, progress, search (the substring matcher and the search page's full-text one), the progress listing's filters. No DOM, no fetch |
 | `app.js` | data loading, hash router, the top bar's search box, and the DOM helpers handed to the pages in the `app` context object |
+| `highlight.js` | **pure**: syntax highlighting for fenced code (Lean), the runs `app.highlightCode` colours; the site's own, no library |
 | `graph.js` | ELK compound layout plus hand-written SVG rendering, pan/zoom, filters, side panel |
 | `object.js` | the object page |
 | `comments.js` | the comment section, at the foot of an object page and of every page of the document |
@@ -881,7 +882,7 @@ the pages knowing about it.
 | `test/bench.mjs` | the performance harness (indexing, quotient, ELK, pages) |
 | `sample/real/blueprint.json` | a snapshot produced by the Lean tool itself, kept as a second fixture, regenerated with `lake exe blueprint build --root examples/induction --facts examples/induction/lean-facts.json -o web/sample/real/blueprint.json` and checked by `./test.sh` |
 | `test/browser/` | the pre-deploy sweep: the whole site driven in real headless Firefox and Chromium (`test/browser/README.md`) |
-| `test/model.test.mjs` | unit tests for `model.js` |
+| `test/model.test.mjs` | unit tests for `model.js` and `highlight.js` |
 | `test/app.test.mjs` | tests for the parts that need a DOM: KaTeX options, the document pages and their lazy rendering, the ELK worker and its fallbacks, the progress filters, the top bar's search and the search page, the link previews, the Export PDF dialog and the intro |
 | `test/export.test.mjs` | the PDF export without TeX: selection, order, numbers, depth, shared objects, proofs, text, appendices, references, maths, escaping, images, the store and the command line's errors |
 | `test/export-compile.test.mjs` | the PDF export with TeX (skipped without pdflatex): real PDFs read back, TeX errors, the sandbox, the time limit |
@@ -984,6 +985,20 @@ If a CDN is unreachable the app degrades rather than dies: without marked the
 prose is shown as preformatted text, without KaTeX the maths is left as source,
 and without elkjs the graph page explains that it needs it while the other
 pages keep working.
+
+## Code
+
+A body's fenced block is code (`../docs/cli.md`, *Code*): marked writes it as
+`<pre><code class="language-lean">`, maths and `[slug]` links are never looked
+for in it, and `renderBody` hands it to `highlightCode`, which cuts the code
+of a language `highlight.js` knows into `span.hl-<type>` runs (`keyword`,
+`comment`, `string`, `number`, `sorry`, `attribute`, `symbol`).  `style.css`
+colours them with the `--hl-*` tokens, set for light and dark mode.  The
+tokenizer is some 150 lines of the site's own rather than a highlighting
+library: the site stays static files with nothing new to pin, and it only
+needs the snippets a blueprint shows.  Any other language is left plain
+monospace.  A comment keeps its code block's `language-…` class through the
+sanitiser, so code in a comment is highlighted too.
 
 ## Tests
 

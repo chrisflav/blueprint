@@ -8,6 +8,7 @@ import * as model from './model.js';
 import { setupPreviews, closePreviews } from './preview.js';
 import { setupExport, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
+import { tokens as codeTokens, languageOfClass } from './highlight.js';
 import { setupPrefetch, pausePrefetch, resumePrefetch, prefetchModule } from './prefetch.js';
 import { introOf, wantsIntro, showIntro, replayIntro, earlyIntro, introDecided, proseReady,
   resolveUrl, snapshotBase } from './intro.js';
@@ -179,6 +180,8 @@ const SLUG_TEST = new RegExp(LINK_PATTERN);
  *      object page
  *   4. `[text](@slug)` -> a quiet link, the text set as the prose around it
  *      (see `quietLinks`)
+ *   5. fenced code in a language `highlight.js` knows (```` ```lean ````) is
+ *      highlighted (see `highlightCode`)
  * `known` is a Set of existing ids; unknown slugs get a `broken` class.
  * `refs` says how a reference reads and where it leads (see `linkifySlugs`);
  * left out, it is `pageReferences`, the numbering of the active collapse
@@ -209,6 +212,7 @@ export function renderBody(target, text, known, refs, { untrusted = false } = {}
   } else {
     target.innerHTML = '<pre>' + escapeHtml(src) + '</pre>';
   }
+  highlightCode(target);
   renderMath(target);
   linkifySlugs(target, known, refs === undefined ? pageReferences : refs);
   quietLinks(target, known, refs === undefined ? pageReferences : refs);
@@ -265,7 +269,8 @@ export function headingSource(o, known, refs) {
 // ---------------------------------------------------------------------------
 
 // What a comment may contain once marked has turned it into HTML: the tags
-// markdown itself produces, and of the attributes only a link's address.
+// markdown itself produces, and of the attributes only a link's address and a
+// code block's language.
 // Everything else (scripts, styles, event handlers, images, iframes) goes.
 const SAFE_TAGS = new Set(['P', 'BR', 'HR', 'EM', 'STRONG', 'DEL', 'CODE', 'PRE', 'BLOCKQUOTE',
   'UL', 'OL', 'LI', 'A', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
@@ -273,6 +278,8 @@ const SAFE_TAGS = new Set(['P', 'BR', 'HR', 'EM', 'STRONG', 'DEL', 'CODE', 'PRE'
 
 // The address marked gives a quiet link, `[text](@slug)`.
 const QUIET_HREF = /^@[A-Za-z0-9][A-Za-z0-9._~\/-]*$/;
+// The class marked gives the code of a fenced block with an info string.
+const CODE_CLASS = /^language-[A-Za-z0-9_+#.-]+$/;
 
 /**
  * Put `html` into `target` keeping only `SAFE_TAGS`.  The HTML is parsed in an
@@ -301,7 +308,9 @@ function setSanitizedHtml(target, html, { quiet = false } = {}) {
       }
       for (const a of [...c.attributes]) {
         const keep = c.tagName === 'A' && a.name === 'href'
-          && (/^(https?:|#|\/|\.)/i.test(a.value.trim()) || (quiet && QUIET_HREF.test(a.value.trim())));
+          && (/^(https?:|#|\/|\.)/i.test(a.value.trim()) || (quiet && QUIET_HREF.test(a.value.trim())))
+          // a code block's language, for `highlightCode`
+          || (c.tagName === 'CODE' && a.name === 'class' && CODE_CLASS.test(a.value));
         if (!keep) c.removeAttribute(a.name);
       }
       if (c.tagName === 'A') c.setAttribute('rel', 'nofollow noopener');
@@ -542,6 +551,25 @@ export function katexOptions() {
     },
     ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
   };
+}
+
+/**
+ * Highlight the fenced code under `root`: every `<pre><code
+ * class="language-…">` marked has written for a language `highlight.js`
+ * knows has its text cut into `span.hl-<type>` runs, which `style.css`
+ * colours.  The text itself is not changed, and code in any other language
+ * is left plain.  Maths and `[slug]` links are never looked for in code.
+ */
+export function highlightCode(root) {
+  for (const code of root.querySelectorAll('pre code')) {
+    const runs = codeTokens(code.textContent, languageOfClass(code.className));
+    if (!runs) continue;
+    clear(code);
+    for (const r of runs) {
+      code.appendChild(r.type === 'text' ? document.createTextNode(r.text) : el('span.hl-' + r.type, r.text));
+    }
+  }
+  return root;
 }
 
 export function renderMath(root) {

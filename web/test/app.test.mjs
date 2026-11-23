@@ -80,7 +80,7 @@ await tick(20);
 await app.rendered;
 
 const root = dom.document.getElementById('app');
-const { shieldMath, currentShowProgress } = await import(path.join(webDir, 'app.js'));
+const { shieldMath, currentShowProgress, highlightCode, linkifySlugs } = await import(path.join(webDir, 'app.js'));
 
 await check('math shielding preserves wrapped formulas and numeric starts', () => {
   for (const formula of [
@@ -99,6 +99,36 @@ await check('math shielding preserves wrapped formulas and numeric starts', () =
   }
   const code = '`$A[n]$`\n\n```tex\n$B[2]$\n```';
   eq(shieldMath(code).text, code, 'code remains with Markdown');
+});
+
+await check('fenced Lean code is highlighted, other code left plain', () => {
+  const div = dom.document.createElement('div');
+  const block = (lang, text) => {
+    const pre = dom.document.createElement('pre');
+    const code = dom.document.createElement('code');
+    if (lang) code.className = 'language-' + lang;
+    code.textContent = text;
+    pre.appendChild(code);
+    div.appendChild(pre);
+    return code;
+  };
+  const src = '@[simp] theorem t : 1 = 1 := by\n  sorry -- [def-compact] $x$';
+  const lean = block('lean', src);
+  const py = block('python', 'def f(): pass');
+  const plain = block(null, 'def f := 1');
+  highlightCode(div);
+  eq(lean.textContent, src, 'the code reads as written');
+  eq(lean.querySelector('span.hl-attribute').textContent, '@[simp]', 'the attribute');
+  eq(lean.querySelector('span.hl-keyword').textContent, 'theorem', 'a keyword');
+  eq(lean.querySelector('span.hl-sorry').textContent, 'sorry', 'sorry');
+  eq(lean.querySelector('span.hl-comment').textContent, '-- [def-compact] $x$', 'a comment, its link and maths left as they are');
+  eq(py.children.length, 0, 'an unknown language is plain');
+  eq(plain.children.length, 0, 'and so is code without one');
+  // Run again (a body is rendered once, but the pass is safe to repeat).
+  highlightCode(div);
+  eq(lean.textContent, src, 'twice, still the same text');
+  linkifySlugs(div, app.knownIds());
+  eq(div.querySelectorAll('a.objlink').length, 0, 'no link is made in code');
 });
 
 const go = async (hash) => {
