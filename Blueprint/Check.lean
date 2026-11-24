@@ -127,12 +127,15 @@ private def scanQuietLinks : Nat → List Char → Char → Array String → Arr
       | _ => scanQuietLinks fuel rest c acc
     else scanQuietLinks fuel rest c acc
 
-/-- The targets of the quiet links, `[text](@slug)`, in a body, in order of
-appearance.  The website sets one as the words around it, followed only by a
-click with Ctrl held. -/
+/-- The targets of the quiet links in a body: `[text](@slug)` in prose, in
+order of appearance, then `\href{@slug}{…}`, which links part of a formula.
+The website sets one as the words or the formula around it, followed only by
+a click with Ctrl held. -/
 def extractQuietLinks (body : String) : Array String :=
   let cs := body.toList
-  scanQuietLinks cs.length cs ' ' #[]
+  let inMaths := ((body.splitOn "\\href{@").drop 1).map fun s =>
+    String.ofList (s.toList.takeWhile (· != '}'))
+  scanQuietLinks cs.length cs ' ' #[] ++ inMaths.toArray
 
 /-- Scan for the first parts of bracketed lists, `[a, …]`, that read as an
 id (not a number): what a citation `[id, locator]` or `[a, b]` cites first.
@@ -200,11 +203,13 @@ private def renameBrackets (f : String → String) : Nat → List Char → Strin
 
 /-- A line of Markdown, a body's or a `source`'s, with every reference to
 `old` renamed `new`: `[old]`, the ids of a citation (`renameInBracket`) and
-the target of a quiet link, `[text](@old)` and `[text](@old "title")`.
-`blueprint rename` rewrites bodies and sources alike with it. -/
+the target of a quiet link, `[text](@old)` and `[text](@old "title")`, and
+`\href{@old}{…}` in a formula.  `blueprint rename` rewrites bodies and
+sources alike with it. -/
 def renameInMarkdown (isRef : String → Bool) (old new line : String) : String :=
   let line := replaceAll line ("](@" ++ old ++ ")") ("](@" ++ new ++ ")")
   let line := replaceAll line ("](@" ++ old ++ " ") ("](@" ++ new ++ " ")
+  let line := replaceAll line ("\\href{@" ++ old ++ "}") ("\\href{@" ++ new ++ "}")
   let cs := line.toList
   renameBrackets (renameInBracket isRef old new) cs.length cs ""
 

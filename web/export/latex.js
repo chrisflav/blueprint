@@ -1057,7 +1057,10 @@ export function mathToLatex(span, { title = false } = {}) {
     // A blank line ends a paragraph in TeX, and with it the formula.
     .replace(/\n[ \t]*(?:\n[ \t]*)+/g, '\n')
     // KaTeX ignores labels; LaTeX would complain about every duplicate.
-    .replace(/\\label\s*\{[^{}]*\}/g, '');
+    .replace(/\\label\s*\{[^{}]*\}/g, '')
+    // A quiet link, `\href{@slug}{…}`, is the part it links, a group as KaTeX
+    // sets it: the website follows it, a PDF has nowhere to.
+    .replace(/\\href\s*\{@[^{}]*\}/g, '');
   // A letter LaTeX knows only in text: `\mathrm{ét}`.
   let fixed = '';
   for (const ch of body) fixed += isTextLetter(ch.codePointAt(0)) ? `\\text{${ch}}` : ch;

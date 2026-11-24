@@ -177,8 +177,8 @@ const SLUG_TEST = new RegExp(LINK_PATTERN);
  *   2. KaTeX auto-render (so maths is out of the way)
  *   3. `[slug]` -> a cross reference ("Definition 1.2.1") linking to the
  *      object page
- *   4. `[text](@slug)` -> a quiet link, the text set as the prose around it
- *      (see `quietLinks`)
+ *   4. `[text](@slug)`, and `\href{@slug}{…}` in a formula -> a quiet link,
+ *      set as the prose or the formula around it (see `quietLinks`)
  * `known` is a Set of existing ids; unknown slugs get a `broken` class.
  * `refs` says how a reference reads and where it leads (see `linkifySlugs`);
  * left out, it is `pageReferences`, the numbering of the active collapse
@@ -209,7 +209,7 @@ export function renderBody(target, text, known, refs, { untrusted = false } = {}
   } else {
     target.innerHTML = '<pre>' + escapeHtml(src) + '</pre>';
   }
-  renderMath(target);
+  renderMath(target, { prose: !untrusted || untrusted === 'edited' });
   linkifySlugs(target, known, refs === undefined ? pageReferences : refs);
   quietLinks(target, known, refs === undefined ? pageReferences : refs);
   if (!untrusted || untrusted === 'edited') foldProofs(target);
@@ -238,7 +238,7 @@ export function renderInline(target, text, known, refs, { untrusted = false } = 
   } else {
     target.textContent = src;
   }
-  renderMath(target);
+  renderMath(target, { prose: !untrusted || untrusted === 'edited' });
   linkifySlugs(target, known, r);
   quietLinks(target, known, r);
   return target;
@@ -544,10 +544,24 @@ export function katexOptions() {
   };
 }
 
-export function renderMath(root) {
+// A quiet link inside a formula, `\href{@slug}{…}`: the one `\href` KaTeX is
+// trusted with, its address one `QUIET_HREF` takes, as marked's for
+// `[text](@slug)`.  KaTeX sets the part of the formula it links in an
+// `<a href="@slug">`, which `quietLinks` then takes as it takes the other.
+function trustQuietHref(context) {
+  return context.command === '\\href' && QUIET_HREF.test(context.url);
+}
+
+/**
+ * KaTeX over every formula in `root`.  In `prose`, a body `renderBody` renders
+ * or a line `renderInline` does, the snapshot's or prose edit mode's, a formula
+ * may hold quiet links (`trustQuietHref`); in a title, which is often a link of
+ * its own, or a comment, `\href` stays unsupported.
+ */
+export function renderMath(root, { prose = false } = {}) {
   if (typeof window.renderMathInElement !== 'function') return;
   try {
-    window.renderMathInElement(root, katexOptions());
+    window.renderMathInElement(root, prose ? { ...katexOptions(), trust: trustQuietHref } : katexOptions());
   } catch (e) {
     // The raw text stays on the page, but a failure here is a site bug and
     // must not be silent: it once hid every formula on every page.
@@ -718,8 +732,13 @@ const FOLLOW_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.te
  * that resolves to no object leaves its words alone, leading nowhere.  A
  * comment's links have lost an `@` address to `setSanitizedHtml` already, so
  * none is quiet.
+ *
+ * In a formula, `\href{@slug}{…}` links part of it the same way
+ * (`trustQuietHref`): KaTeX's `<a>` around that part becomes a quiet link,
+ * and the address it also gives its MathML, for screen readers, goes.
  */
 export function quietLinks(root, known, refs) {
+  for (const n of root.querySelectorAll('.katex-mathml [href^="@"]')) n.removeAttribute('href');
   for (const a of root.querySelectorAll('a[href^="@"]')) {
     const slug = a.getAttribute('href').slice(1);
     const ok = slug !== '' && (!known || known.has(slug));
