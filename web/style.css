@@ -956,6 +956,11 @@ html.quiet-follow a.quietlink[data-href]:hover { cursor: pointer; }
    below its sub- and superscripts and limits, is the underline. */
 .katex a.quietlink { display: inline-block; }
 .katex a.quietlink[data-href]:hover { text-decoration: none; box-shadow: inset 0 -1px 0 currentColor; }
+/* A Stacks link, `[text](stacks:00DV)` (app.js `stacksLinks`), is a quiet link
+   whose Ctrl+click shows a card instead of leading anywhere: set as one. */
+a.stackslink[data-stacks]:hover { text-decoration: underline; }
+html.quiet-follow a.stackslink[data-stacks]:hover { cursor: pointer; }
+.katex a.stackslink[data-stacks]:hover { text-decoration: none; box-shadow: inset 0 -1px 0 currentColor; }
 
 /* The card a link to an object shows while the pointer rests on it
    (preview.js): its head, the prose, scrolling when it is long, and a foot.
@@ -1031,6 +1036,18 @@ ul.lean-names li {
 ul.lean-names li:last-child { border-bottom: 0; }
 ul.lean-names code { font-family: var(--mono); font-size: .85rem; overflow-wrap: anywhere; }
 ul.lean-names .lean-docs { margin-left: auto; font-size: .78rem; white-space: nowrap; }
+
+/* The card of a Stacks project statement that a Stacks link shows on a click
+   with Ctrl held (preview.js `stacksCard`): its lists and displayed formulas
+   as the Stacks project sets them. */
+.stacks-card .preview-head .stacks-chip { margin-left: auto; align-self: center; }
+.stacks-body p { margin: 0 0 .5em; }
+.stacks-body ol, .stacks-body ul { margin: 0 0 .5em; padding-left: 1.6em; }
+.stacks-body li > p { margin: 0 0 .25em; }
+.stacks-body .stacks-equation { margin: .4em 0; overflow-x: auto; overflow-y: hidden; }
+.stacks-body .stacks-diagram { font-size: .86rem; font-style: italic; }
+/* The item a link to an item's tag names, in the whole statement. */
+.stacks-body li.stacks-item { background: var(--accent-soft); box-shadow: 0 0 0 .25em var(--accent-soft); border-radius: 3px; }
 
 /* Each declaration of the object page's Lean panel: its number, then what it
    says in words (its docstring), set left as prose is, with the Lean name,

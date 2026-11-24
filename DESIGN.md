@@ -389,6 +389,7 @@ blueprint serve   [--port p] [--site dir]  assemble it and serve it locally
 blueprint history add <snapshot> --dir d   file a snapshot, update the index
 blueprint export  [--scope id] [--depth n]  the document, or a part, as LaTeX and PDF
 blueprint migrate [--facts f]             sketches to statements, proofs out of bodies
+blueprint stacks  [--refresh]             fetch linked Stacks project statements into stacks.json
 ```
 
 `serve` borrows a static file server (`python3 -m http.server` and three

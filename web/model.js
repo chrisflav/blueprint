@@ -111,6 +111,9 @@ export function buildModel(snapshot) {
     progress: (snapshot.derived && snapshot.derived.progress) || {},
     facts: snapshot.facts || null,
     project: snapshot.project || {},
+    // The statements of the Stacks project tags the prose links to, tag to
+    // {kind, html}, as `blueprint stacks` fetched them (`stacksLinks`).
+    stacks: snapshot.stacks && typeof snapshot.stacks === 'object' ? snapshot.stacks : {},
     _orders: new Map(), // memoised collapse orders
     _views: new Map(), // memoised views, keyed by kind + normalised expanded set
     _search: null, // lowercase search index, built on first search

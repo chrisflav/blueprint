@@ -5,7 +5,7 @@
 // to import each other.
 
 import * as model from './model.js';
-import { setupPreviews, closePreviews } from './preview.js';
+import { setupPreviews, closePreviews, showStacksCard, stacksStatement } from './preview.js';
 import { setupExport, closeExport } from './pdf.js';
 import { sha256 } from './export/sha256.js';
 import { setupPrefetch, pausePrefetch, resumePrefetch, prefetchModule } from './prefetch.js';
@@ -179,6 +179,9 @@ const SLUG_TEST = new RegExp(LINK_PATTERN);
  *      object page
  *   4. `[text](@slug)`, and `\href{@slug}{…}` in a formula -> a quiet link,
  *      set as the prose or the formula around it (see `quietLinks`)
+ *   5. `[text](stacks:00DV)`, and `\href{stacks:00DV}{…}` in a formula -> a
+ *      Stacks link, a quiet link whose Ctrl+click shows the statement of that
+ *      Stacks project tag (see `stacksLinks`)
  * `known` is a Set of existing ids; unknown slugs get a `broken` class.
  * `refs` says how a reference reads and where it leads (see `linkifySlugs`);
  * left out, it is `pageReferences`, the numbering of the active collapse
@@ -212,6 +215,7 @@ export function renderBody(target, text, known, refs, { untrusted = false } = {}
   renderMath(target, { prose: !untrusted || untrusted === 'edited' });
   linkifySlugs(target, known, refs === undefined ? pageReferences : refs);
   quietLinks(target, known, refs === undefined ? pageReferences : refs);
+  stacksLinks(target);
   if (!untrusted || untrusted === 'edited') foldProofs(target);
   return target;
 }
@@ -241,6 +245,7 @@ export function renderInline(target, text, known, refs, { untrusted = false } = 
   renderMath(target, { prose: !untrusted || untrusted === 'edited' });
   linkifySlugs(target, known, r);
   quietLinks(target, known, r);
+  stacksLinks(target);
   return target;
 }
 
@@ -273,13 +278,17 @@ const SAFE_TAGS = new Set(['P', 'BR', 'HR', 'EM', 'STRONG', 'DEL', 'CODE', 'PRE'
 
 // The address marked gives a quiet link, `[text](@slug)`.
 const QUIET_HREF = /^@[A-Za-z0-9][A-Za-z0-9._~\/-]*$/;
+// The address of a Stacks link, `[text](stacks:00DV)`: a Stacks project tag,
+// four digits and letters.
+const STACKS_HREF = /^stacks:[0-9A-Za-z]{4}$/;
 
 /**
  * Put `html` into `target` keeping only `SAFE_TAGS`.  The HTML is parsed in an
  * inert document, where nothing loads and no handler runs, and only what
  * survives is moved over.  Without a DOMParser the source is shown as text.
  * `quiet`: a link may keep an `@slug` address, for `quietLinks` to make a quiet
- * link of (an edited object's prose; never a comment's).
+ * link of, or a `stacks:00DV` one, for `stacksLinks` (an edited object's
+ * prose; never a comment's).
  */
 function setSanitizedHtml(target, html, { quiet = false } = {}) {
   if (typeof DOMParser !== 'function') {
@@ -301,7 +310,8 @@ function setSanitizedHtml(target, html, { quiet = false } = {}) {
       }
       for (const a of [...c.attributes]) {
         const keep = c.tagName === 'A' && a.name === 'href'
-          && (/^(https?:|#|\/|\.)/i.test(a.value.trim()) || (quiet && QUIET_HREF.test(a.value.trim())));
+          && (/^(https?:|#|\/|\.)/i.test(a.value.trim())
+            || (quiet && (QUIET_HREF.test(a.value.trim()) || STACKS_HREF.test(a.value.trim()))));
         if (!keep) c.removeAttribute(a.name);
       }
       if (c.tagName === 'A') c.setAttribute('rel', 'nofollow noopener');
@@ -548,8 +558,9 @@ export function katexOptions() {
 // trusted with, its address one `QUIET_HREF` takes, as marked's for
 // `[text](@slug)`.  KaTeX sets the part of the formula it links in an
 // `<a href="@slug">`, which `quietLinks` then takes as it takes the other.
+// A Stacks link, `\href{stacks:00DV}{…}`, likewise, for `stacksLinks`.
 function trustQuietHref(context) {
-  return context.command === '\\href' && QUIET_HREF.test(context.url);
+  return context.command === '\\href' && (QUIET_HREF.test(context.url) || STACKS_HREF.test(context.url));
 }
 
 /**
@@ -754,6 +765,35 @@ export function quietLinks(root, known, refs) {
     a.setAttribute('data-href', (ref && ref.href) || objectHref(slug));
     a.setAttribute('data-quiet', slug);
     a.setAttribute('title', `${name} (${FOLLOW_KEY}+click to open)`);
+  }
+}
+
+/**
+ * A Stacks link, `[text](stacks:00DV)` in prose or `\href{stacks:00DV}{…}` in
+ * a formula: words, or part of a formula, that cite a statement of the Stacks
+ * project, set as a quiet link is (`quietLinks`), the same `quietlink` class:
+ * the prose around it, underlined only under the pointer, a press and a drag
+ * selecting it, a plain click doing nothing.  A click with Ctrl held, ⌘ on a
+ * Mac, shows the statement of the tag in a card beside it (`watchQuietLinks`,
+ * `showStacksCard`), from the snapshot's `stacks`, which `blueprint stacks`
+ * fetched.  The tag is kept in `data-stacks`, in capitals; an address that is
+ * no tag leaves its words alone, leading nowhere.
+ */
+export function stacksLinks(root) {
+  for (const n of root.querySelectorAll('.katex-mathml [href^="stacks:"]')) n.removeAttribute('href');
+  for (const a of root.querySelectorAll('a[href^="stacks:"]')) {
+    const raw = a.getAttribute('href').slice('stacks:'.length);
+    a.removeAttribute('href');
+    if (!STACKS_HREF.test('stacks:' + raw)) {
+      a.setAttribute('class', 'quietlink broken');
+      a.setAttribute('title', `${raw} is not a Stacks project tag`);
+      continue;
+    }
+    const tag = raw.toUpperCase();
+    const s = stacksStatement(app.model, tag);
+    a.setAttribute('class', 'quietlink stackslink');
+    a.setAttribute('data-stacks', tag);
+    a.setAttribute('title', `${s ? s.lead : 'Tag ' + tag}, Stacks project (${FOLLOW_KEY}+click to show)`);
   }
 }
 
@@ -1194,7 +1234,9 @@ export function watchAnchors(root = typeof document !== 'undefined' && document)
 /**
  * A quiet link (`quietLinks`) is followed only by a click with Ctrl held, or
  * ⌘ on a Mac, and then in this tab, as a click on a `[slug]` reference is
- * followed; any other click on it does nothing.  A page that follows one
+ * followed; any other click on it does nothing.  A Stacks link (`stacksLinks`)
+ * shows its statement instead, in a card that stays until the reader moves on
+ * (`showStacksCard`).  A page that follows one
  * itself (the document, to an entry on the page on screen) has prevented the
  * click before it gets here.  While either key is down `<html>` carries
  * `quiet-follow`, so that the pointer over a quiet link shows that it can be
@@ -1207,6 +1249,11 @@ export function watchQuietLinks(root = typeof document !== 'undefined' && docume
     if (!a || ev.defaultPrevented) return;
     ev.preventDefault();
     if (ev.button || ev.shiftKey || ev.altKey || !(ev.ctrlKey || ev.metaKey)) return;
+    const tag = a.getAttribute('data-stacks');
+    if (tag) {
+      showStacksCard(a, tag);
+      return;
+    }
     const href = a.getAttribute('data-href');
     if (href) location.hash = href;
   });

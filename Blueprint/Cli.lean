@@ -951,6 +951,51 @@ def cmdMigrate (root : System.FilePath) (args : Args) : IO UInt32 := do
     IO.eprintln "usage: blueprint migrate [--facts f] [--dry-run]"
     return 1
 
+/-! ## `blueprint stacks` -/
+
+/-- `blueprint stacks [--refresh]`: fetch the statement of every Stacks
+project tag the prose links to, `[text](stacks:00DV)`, that `stacks.json` does
+not have yet (with `--refresh`, of every one), and write `stacks.json` with
+the statements of the tags linked to, and no others; an item's tag gets the
+statement it is in.  A tag that is no statement, a section say, or that
+cannot be fetched is said and leaves the exit status 1; one fetched before
+keeps its old statement. -/
+def cmdStacks (root : System.FilePath) (args : Args) : IO UInt32 := do
+  let l ← load root
+  let tags := linkedStacksTags l.blueprint
+  let old := l.blueprint.project.stacks
+  let file := root / "stacks.json"
+  if tags.isEmpty && !(← file.pathExists) then
+    IO.println "stacks: the blueprint links to no Stacks project tag"
+    return 0
+  let refresh := args.has "--refresh"
+  let wanted := tags.filter fun t => refresh || !old.any (·.tag == t)
+  unless wanted.isEmpty || (← haveExe "curl") do
+    throw <| IO.userError "curl is needed to fetch from the Stacks project, and is not on PATH"
+  let src ← StacksSources.new
+  let mut out : Array StacksStatement := #[]
+  let mut failed := 0
+  let mut fetched := 0
+  for t in tags do
+    let before := old.find? (·.tag == t)
+    unless wanted.contains t do
+      if let some s := before then out := out.push s
+      continue
+    match ← fetchStacksStatement src t with
+    | .ok s =>
+      out := out.push s
+      fetched := fetched + 1
+      IO.println s!"{t}: {if s.parent.isEmpty then s.kind else s!"an item of {s.kind} {s.parent}"}, {stacksTagUrl t}"
+    | .error e =>
+      failed := failed + 1
+      IO.eprintln s!"blueprint: Stacks project tag {t}: {e}"
+      if let some s := before then out := out.push s
+  let dropped := (old.filter fun s => !tags.contains s.tag).size
+  IO.FS.writeFile file (renderStacksFile out)
+  IO.println s!"wrote {file} ({out.size} statement(s): {fetched} fetched, \
+    {out.size - fetched} kept, {dropped} no longer linked to dropped)"
+  return if failed > 0 then 1 else 0
+
 /-! ## Entry point -/
 
 /-- The `--help` text. -/
@@ -996,6 +1041,9 @@ commands:
   migrate [--facts f] [--dry-run]          sketch sections become statements,
                                            proofs objects of their own, and
                                            uses only a proof needs move to it
+  stacks [--refresh]                       fetch the statements of the Stacks
+                                           project tags the prose links to
+                                           into stacks.json
 
 global options:
   --root <dir>   project root (default: the working directory)
@@ -1034,6 +1082,7 @@ def run (argv : List String) : IO UInt32 := do
                       "--tex-only", "--snapshot", "--facts", "--list", "--json", "--timeout", "--label"]
       | "history" => #["--dir", "--sha", "--date"]
       | "migrate" => #["--facts", "--dry-run"]
+      | "stacks" => #["--refresh"]
       | _ => #[])
     for o in args.unknown known do
       IO.eprintln s!"blueprint: warning: ignoring unknown option {o}"
@@ -1054,6 +1103,7 @@ def run (argv : List String) : IO UInt32 := do
     | "export" => cmdExport root args
     | "history" => cmdHistory root args
     | "migrate" => cmdMigrate root args
+    | "stacks" => cmdStacks root args
     | c => do
       IO.eprintln s!"blueprint: unknown command '{c}'"
       IO.eprintln usage

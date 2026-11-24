@@ -12,6 +12,11 @@
 // page.  Moving off the link and its cards closes them after a moment; so do
 // Escape, a click, a scroll and a change of route.
 //
+// A Stacks link (`stacksLinks` in app.js) shows a card of the same kind, with
+// the statement of its Stacks project tag, on a click with Ctrl held, not on
+// hover.  Asked for, it stays when the pointer moves off, until Escape, a
+// click elsewhere, a scroll or a change of route.
+//
 // It is one set of listeners on the document, so it covers links drawn at any
 // time by any page without the pages knowing about it.  A touch has no hover:
 // a tap on a link follows it, as before.  A link reached with the keyboard
@@ -26,8 +31,9 @@ const MARGIN = 8; // between a card and the edge of the window, px
 
 let app = null;
 // The open cards, outermost first: `stack[i + 1]` was opened from a link in
-// `stack[i].card`.  Each entry is {anchor, id, build, card, keyboard}, `anchor`
-// being the link it was opened from.
+// `stack[i].card`.  Each entry is {anchor, id, build, card, keyboard, sticky},
+// `anchor` being the link it was opened from, `sticky` saying a click asked
+// for it (`showStacksCard`).
 const stack = [];
 let pending = null; // {anchor, id, build, level, keyboard}: waiting out SHOW_MS
 let showTimer = null;
@@ -145,6 +151,181 @@ export function leanCard(ctx, id) {
 }
 
 // ---------------------------------------------------------------------------
+// Stacks project statements
+// ---------------------------------------------------------------------------
+
+const STACKS = 'https://stacks.math.columbia.edu';
+
+// The statements read out of a model's `stacks` (`stacksStatement`), per model:
+// tag to the statement, null for a tag it does not have.
+const stacksRead = new WeakMap();
+
+/**
+ * The statement of Stacks project tag `tag` that the snapshot carries, read:
+ * {tag, kind, lead, name, body, item}, null when it has none.  `lead` is what
+ * the Stacks project calls it, "Lemma 10.20.1", and `name` its name,
+ * "Nakayama's lemma", or null; `body` is the rest of the article, its heading
+ * taken out.  The tag of an item of a statement's list (`in`, the statement's
+ * tag) stands for the whole statement: `item` is then the tag, the item being
+ * the element of the article with that id, and `lead` says its number,
+ * "Lemma 10.20.1 (1)"; for a statement it is null.
+ * The article is what the Stacks project's API hands out, which `blueprint
+ * stacks` fetched; it is parsed in an inert document, where nothing loads and
+ * no script runs, and `stacksCard` copies only harmless markup out of it.
+ */
+export function stacksStatement(m, tag) {
+  if (!m || !m.stacks || typeof DOMParser !== 'function') return null;
+  let read = stacksRead.get(m);
+  if (!read) stacksRead.set(m, (read = new Map()));
+  if (read.has(tag)) return read.get(tag);
+  const e = Object.prototype.hasOwnProperty.call(m.stacks, tag) ? m.stacks[tag] : null;
+  let s = null;
+  if (e && typeof e.html === 'string') {
+    const doc = new DOMParser().parseFromString(e.html, 'text/html');
+    const body = doc.body.querySelector('article') || doc.body;
+    const id = body.querySelector('a.environment-identifier');
+    let lead = '';
+    let name = null;
+    if (id) {
+      const named = id.querySelector('.named');
+      if (named) {
+        name = named.textContent.replace(/\s+/g, ' ').trim().replace(/^\((.*)\)$/, '$1') || null;
+        named.remove();
+      }
+      lead = id.textContent.replace(/\s+/g, ' ').replace(/\s*\.\s*$/, '').trim();
+      id.remove();
+    }
+    const kind = typeof e.kind === 'string' ? e.kind : '';
+    if (!lead) lead = (kind ? kind[0].toUpperCase() + kind.slice(1) : 'Statement') + ' ' + tag;
+    const item = typeof e.in === 'string' && e.in
+      ? [...body.querySelectorAll('[id]')].find((n) => n.getAttribute('id') === tag) : null;
+    if (item && item.parentNode) {
+      const n = [...item.parentNode.children].filter((c) => c.tagName === 'LI').indexOf(item) + 1;
+      if (n > 0) lead += ` (${n})`;
+    }
+    s = { tag, kind, lead, name, body, item: item ? tag : null };
+  }
+  read.set(tag, s);
+  return s;
+}
+
+// What a Stacks statement keeps of its markup in a card: paragraphs, lists,
+// emphasis and the like.  Any other element keeps its text, as in a comment.
+const STACKS_TAGS = new Set(['P', 'BR', 'EM', 'STRONG', 'I', 'B', 'U', 'SPAN', 'DIV', 'OL', 'UL',
+  'LI', 'A', 'SUB', 'SUP', 'CODE', 'BLOCKQUOTE', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD']);
+
+/** Where a link of a Stacks statement goes: on the Stacks project, or null. */
+function stacksHref(h) {
+  const v = String(h || '').trim();
+  if (/^\/(?!\/)/.test(v)) return STACKS + v; // "/tag/016E", "/bibliography/LM-B"
+  if (/^https?:\/\//i.test(v)) return v;
+  return null;
+}
+
+/**
+ * The prose of a Stacks statement for its card: `src`'s text, in new elements
+ * of `STACKS_TAGS` alone, none of its attributes but a link's address, made
+ * absolute, which opens the Stacks project in a tab of its own.  A displayed
+ * formula is set as the Stacks project sets it, `\[ … \]` in its own block.
+ * The element whose id is `item`, an item the link names, is marked.
+ */
+function stacksBody(src, item) {
+  const out = document.createElement('div');
+  out.className = 'preview-body body-prose stacks-body';
+  const copy = (from, to) => {
+    for (const c of from.childNodes) {
+      if (c.nodeType === 3) {
+        to.appendChild(document.createTextNode(c.nodeValue));
+        continue;
+      }
+      if (c.nodeType !== 1 || c.tagName === 'SCRIPT' || c.tagName === 'STYLE') continue;
+      if (!STACKS_TAGS.has(c.tagName)) {
+        copy(c, to);
+        continue;
+      }
+      const n = document.createElement(c.tagName.toLowerCase());
+      if (c.tagName === 'A') {
+        const href = stacksHref(c.getAttribute('href'));
+        if (href) {
+          n.setAttribute('href', href);
+          n.setAttribute('target', '_blank');
+          n.setAttribute('rel', 'noopener');
+        }
+      }
+      if (c.tagName === 'DIV' && c.classList.contains('equation')) n.className = 'stacks-equation';
+      if (item && c.getAttribute('id') === item) n.className = 'stacks-item';
+      copy(c, n);
+      to.appendChild(n);
+    }
+  };
+  copy(src, out);
+  return out;
+}
+
+/**
+ * The card of Stacks project tag `tag`: what the Stacks project calls it and
+ * its name, its statement with the maths set, and a link to its page there.
+ * A tag whose statement the snapshot lacks (not fetched by `blueprint
+ * stacks`) gets the link alone.
+ */
+export function stacksCard(ctx, tag) {
+  const { el } = ctx;
+  const s = stacksStatement(ctx.model, tag);
+  const lead = s ? s.lead : 'Tag ' + tag;
+  const head = el('div.preview-head',
+    el('span.preview-lead', lead),
+    s && s.name ? el('span.preview-title', s.name) : null,
+    el('span.chip.stacks-chip', 'Stacks project'));
+  const body = s ? stacksBody(s.body, s.item)
+    : el('div.preview-body', el('p.muted', 'The statement of this tag was not fetched for this blueprint.'));
+  const card = el('div.preview.stacks-card', {
+    role: 'dialog', 'aria-label': `${lead}${s && s.name ? ' (' + s.name + ')' : ''}, Stacks project`,
+    'data-preview': 'stacks:' + tag,
+  },
+  head,
+  body,
+  el('div.preview-foot',
+    el('code.preview-id', 'Tag ' + tag),
+    el('a.preview-open', { href: `${STACKS}/tag/${tag}`, target: '_blank', rel: 'noopener' }, 'On the Stacks project \u2197')));
+  ctx.renderMath(head);
+  ctx.renderMath(body);
+  // A commutative diagram, `\xymatrix{…}`, is beyond KaTeX: rather than its
+  // source in red, a word that the Stacks project draws it.
+  for (const e of body.querySelectorAll('.katex-error')) {
+    if (!/\\xymatrix/.test(e.textContent)) continue;
+    e.replaceWith(el('a.stacks-diagram', { href: `${STACKS}/tag/${tag}`, target: '_blank', rel: 'noopener' },
+      'A diagram, drawn on the Stacks project \u2197'));
+  }
+  // An item further down than the card shows is scrolled to, once the card
+  // is placed and has its height.
+  const mark = body.querySelector('.stacks-item');
+  if (mark && typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      if (!mark.isConnected) return;
+      const b = body.getBoundingClientRect();
+      const r = mark.getBoundingClientRect();
+      if (r.bottom > b.bottom) body.scrollTop += r.top - b.top - 8;
+    });
+  }
+  return card;
+}
+
+/**
+ * Show the card of Stacks project tag `tag` against `anchor`, a Stacks link
+ * clicked with Ctrl held: over the page, or beside the card the link is in.
+ * It stays when the pointer moves off (`hover`).
+ */
+export function showStacksCard(anchor, tag) {
+  if (!app || !anchor) return;
+  cancelPending();
+  clearTimeout(hideTimer);
+  hideTimer = null;
+  takeTitle(anchor);
+  open({ anchor, id: 'stacks:' + tag, build: () => stacksCard(app, tag), level: levelOf(anchor) + 1,
+    keyboard: false, sticky: true });
+}
+
+// ---------------------------------------------------------------------------
 // the controller
 // ---------------------------------------------------------------------------
 
@@ -177,7 +358,8 @@ export function setupPreviews(ctx) {
   on('pointerdown', (ev) => { if (levelOf(ev.target) < 0) closePreviews(); }, true);
   on('click', (ev) => {
     const t = triggerOf(ev.target);
-    if (t && levelOf(t) >= 0) {
+    // A Stacks link is not followed: clicked with Ctrl held, it shows a card.
+    if (t && levelOf(t) >= 0 && !t.hasAttribute('data-stacks')) {
       setTimeout(closePreviews, 0);
     }
   });
@@ -210,9 +392,11 @@ export function hover(target) {
   if (!untitled || untitled.anchor !== a) restoreTitle();
   const level = levelOf(target);
   const opened = a ? stack.findIndex((e) => e.anchor === a) : -1;
-  // Keep the cards up to the one the pointer is in, and the one opened from
-  // the link it is on; the rest go once it has been elsewhere a moment.
-  const keep = Math.max(level, opened);
+  // Keep the cards up to the one the pointer is in, the one opened from the
+  // link it is on and the last one a click asked for; the rest go once it has
+  // been elsewhere a moment.
+  const sticky = lastSticky();
+  const keep = Math.max(level, opened, sticky);
   clearTimeout(hideTimer);
   hideTimer = keep < stack.length - 1 ? setTimeout(() => closeFrom(keep + 1), HIDE_MS) : null;
 
@@ -221,9 +405,21 @@ export function hover(target) {
     if (!pending || !pending.keyboard) cancelPending();
     return;
   }
+  // Nor does a link the pointer passes over put a card in place of one a
+  // click asked for.
+  if (level + 1 <= sticky) {
+    if (!pending || !pending.keyboard) cancelPending();
+    return;
+  }
   takeTitle(a);
   if (pending && pending.anchor === a) return;
   schedule({ anchor: a, ...c, level: level + 1, keyboard: false });
+}
+
+/** The index of the last card a click asked for (`showStacksCard`), -1 for none. */
+function lastSticky() {
+  for (let i = stack.length - 1; i >= 0; i -= 1) if (stack[i].sticky) return i;
+  return -1;
 }
 
 function focus(target) {
@@ -256,8 +452,8 @@ function cancelPending() {
   pending = null;
 }
 
-function open({ anchor, id, build, level, keyboard }) {
-  if (!app || !app.model || !app.model.byId.has(id)) return;
+function open({ anchor, id, build, level, keyboard, sticky = false }) {
+  if (!app || !app.model || (!sticky && !app.model.byId.has(id))) return;
   if (anchor.isConnected === false) return; // the page was redrawn meanwhile
   if (level > stack.length) return; // the card it was in has gone
   closeFrom(level);
@@ -272,7 +468,7 @@ function open({ anchor, id, build, level, keyboard }) {
   card.style.zIndex = String(60 + level);
   (document.body || document.documentElement).appendChild(card);
   place(card, anchor);
-  stack.push({ anchor, id, build, card, keyboard });
+  stack.push({ anchor, id, build, card, keyboard, sticky });
 }
 
 function closeFrom(level) {

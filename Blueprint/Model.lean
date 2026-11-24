@@ -306,6 +306,23 @@ structure ProvenanceValue where
   dark : String := ""
   deriving Inhabited, BEq, Repr
 
+/-- The statement of a Stacks project tag, as the Stacks project's API hands
+it out (`https://stacks.math.columbia.edu/data/tag/<tag>/content/statement`):
+the `<article>` of a lemma, a definition, a theorem and so on, its heading
+("Lemma 10.20.1 (Nakayama's lemma).") included, its maths raw TeX.  The
+website takes the words out of it, keeping only harmless markup. -/
+structure StacksStatement where
+  /-- The tag, four digits and capital letters: `00DV`. -/
+  tag : String
+  /-- The environment, `lemma` for `<article class="env-lemma">`. -/
+  kind : String
+  /-- The article, as fetched: for an item, the statement's. -/
+  html : String
+  /-- For the tag of an item of a statement's list, `00DW`, the tag of the
+  statement it is in, `00DV`, whose article `html` is; empty for a statement. -/
+  parent : String := ""
+  deriving Inhabited, BEq, Repr
+
 /-- Project level configuration from `blueprint.toml`. -/
 structure Project where
   /-- Short name. -/
@@ -367,6 +384,12 @@ structure Project where
   `load` from the manifest, not from `blueprint.toml`; empty without one.
   Handed to the website as `project.sources`. -/
   sources : Array (String × String × String) := #[]
+  /-- The statements of the Stacks project tags the prose links to, as
+  `blueprint stacks` fetched them into `stacks.json` next to
+  `blueprint.toml`, sorted by tag.  Read by `load` from that file, not from
+  `blueprint.toml`; empty without one.  The snapshot carries those of the
+  tags still linked to, as `stacks`. -/
+  stacks : Array StacksStatement := #[]
   /-- `[site] docgen`: where the doc-gen4 documentation of the Lean code is
   served, the address its module pages hang off
   (`<docgen>/Mathlib/Order/Basic.html`).  The website links a declaration's
