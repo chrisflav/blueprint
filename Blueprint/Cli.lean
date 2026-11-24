@@ -956,9 +956,10 @@ def cmdMigrate (root : System.FilePath) (args : Args) : IO UInt32 := do
 /-- `blueprint stacks [--refresh]`: fetch the statement of every Stacks
 project tag the prose links to, `[text](stacks:00DV)`, that `stacks.json` does
 not have yet (with `--refresh`, of every one), and write `stacks.json` with
-the statements of the tags linked to, and no others.  A tag that is no
-statement, a section say, or that cannot be fetched is said and leaves the
-exit status 1; one fetched before keeps its old statement. -/
+the statements of the tags linked to, and no others; an item's tag gets the
+statement it is in.  A tag that is no statement, a section say, or that
+cannot be fetched is said and leaves the exit status 1; one fetched before
+keeps its old statement. -/
 def cmdStacks (root : System.FilePath) (args : Args) : IO UInt32 := do
   let l ← load root
   let tags := linkedStacksTags l.blueprint
@@ -971,6 +972,7 @@ def cmdStacks (root : System.FilePath) (args : Args) : IO UInt32 := do
   let wanted := tags.filter fun t => refresh || !old.any (·.tag == t)
   unless wanted.isEmpty || (← haveExe "curl") do
     throw <| IO.userError "curl is needed to fetch from the Stacks project, and is not on PATH"
+  let src ← StacksSources.new
   let mut out : Array StacksStatement := #[]
   let mut failed := 0
   let mut fetched := 0
@@ -979,11 +981,11 @@ def cmdStacks (root : System.FilePath) (args : Args) : IO UInt32 := do
     unless wanted.contains t do
       if let some s := before then out := out.push s
       continue
-    match ← fetchStacksStatement t with
+    match ← fetchStacksStatement src t with
     | .ok s =>
       out := out.push s
       fetched := fetched + 1
-      IO.println s!"{t}: {s.kind}, {stacksTagUrl t}"
+      IO.println s!"{t}: {if s.parent.isEmpty then s.kind else s!"an item of {s.kind} {s.parent}"}, {stacksTagUrl t}"
     | .error e =>
       failed := failed + 1
       IO.eprintln s!"blueprint: Stacks project tag {t}: {e}"

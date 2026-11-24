@@ -568,20 +568,28 @@ Only a tag missing from the file is fetched; `--refresh` fetches every one
 again, after the Stacks project has changed a statement.  The file is
 written with the tags linked to and no others, so a link taken out drops its
 statement.  Only a statement will do, the tag of a lemma, a proposition, a
-theorem, a definition, a remark, an example and so on; a tag that is a
-chapter, a section or an item of a statement's list, or no tag at all, is
-reported and left out, and so is one that cannot be fetched (one fetched
-before keeps its old statement).  Either leaves the exit status `1`.
+theorem, a definition, a remark, an example and so on.  The tag of an item of
+a statement's list, `00DW` in Nakayama's lemma `00DV`, stands for the whole
+statement, the website marking the item.  The API hands out the item alone,
+so the statement it is in is found in the Stacks project's sources on GitHub:
+the `tags` file names the item's label, the chapter's LaTeX the statement
+around it, whose statement must then hold the item.  A tag that is a
+chapter, a section, an item of a list in a proof or in a section's own
+text, or no tag at all, is reported and left out, and so is one that cannot
+be fetched (one fetched before keeps its old statement).  Either leaves the
+exit status `1`.
 
 ```
 $ blueprint stacks
 00DV: lemma, https://stacks.math.columbia.edu/tag/00DV
+00DW: an item of lemma 00DV, https://stacks.math.columbia.edu/tag/00DW
 blueprint: Stacks project tag 01QM: a section, not a statement
-wrote ./stacks.json (1 statement(s): 1 fetched, 0 kept, 0 no longer linked to dropped)
+wrote ./stacks.json (2 statement(s): 2 fetched, 0 kept, 0 no longer linked to dropped)
 ```
 
 The file is an object `tags` from tag to `{"kind": "lemma", "html": "<article …>"}`,
-the article as the Stacks project hands it out, its maths raw TeX; the
+the article as the Stacks project hands it out, its maths raw TeX, and for
+an item `"in": "00DV"`, the statement it is in, whose article it has; the
 snapshot carries the statements of the tags linked to as `stacks`
 (`snapshot-format.md`).
 
@@ -1125,7 +1133,9 @@ prose.  The website sets them as a quiet link: the words around them,
 underlined only under the pointer, a plain click doing nothing.  A click
 with Ctrl held (⌘ on a Mac) shows the statement in a card beside them,
 "Lemma 10.20.1 (Nakayama's lemma)" with its maths set, and a link to the
-tag's page.  The card stays until Escape, a click elsewhere or a scroll.
+tag's page.  The card stays until Escape, a click elsewhere or a scroll.  A
+link to an item of a statement's list, `[…](stacks:00DW)`, shows the whole
+statement, "Lemma 10.20.1 (1)", with the item marked.
 Inside maths, `\href{stacks:00DV}{…}` links part of a formula the same way.
 The PDF sets the words, or the formula, alone.
 

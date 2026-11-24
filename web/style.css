@@ -1046,6 +1046,8 @@ ul.lean-names .lean-docs { margin-left: auto; font-size: .78rem; white-space: no
 .stacks-body li > p { margin: 0 0 .25em; }
 .stacks-body .stacks-equation { margin: .4em 0; overflow-x: auto; overflow-y: hidden; }
 .stacks-body .stacks-diagram { font-size: .86rem; font-style: italic; }
+/* The item a link to an item's tag names, in the whole statement. */
+.stacks-body li.stacks-item { background: var(--accent-soft); box-shadow: 0 0 0 .25em var(--accent-soft); border-radius: 3px; }
 
 /* Each declaration of the object page's Lean panel: its number, then what it
    says in words (its docstring), set left as prose is, with the Lean name,

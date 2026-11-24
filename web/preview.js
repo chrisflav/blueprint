@@ -162,9 +162,13 @@ const stacksRead = new WeakMap();
 
 /**
  * The statement of Stacks project tag `tag` that the snapshot carries, read:
- * {tag, kind, lead, name, body}, null when it has none.  `lead` is what the
- * Stacks project calls it, "Lemma 10.20.1", and `name` its name, "Nakayama's
- * lemma", or null; `body` is the rest of the article, its heading taken out.
+ * {tag, kind, lead, name, body, item}, null when it has none.  `lead` is what
+ * the Stacks project calls it, "Lemma 10.20.1", and `name` its name,
+ * "Nakayama's lemma", or null; `body` is the rest of the article, its heading
+ * taken out.  The tag of an item of a statement's list (`in`, the statement's
+ * tag) stands for the whole statement: `item` is then the tag, the item being
+ * the element of the article with that id, and `lead` says its number,
+ * "Lemma 10.20.1 (1)"; for a statement it is null.
  * The article is what the Stacks project's API hands out, which `blueprint
  * stacks` fetched; it is parsed in an inert document, where nothing loads and
  * no script runs, and `stacksCard` copies only harmless markup out of it.
@@ -193,7 +197,13 @@ export function stacksStatement(m, tag) {
     }
     const kind = typeof e.kind === 'string' ? e.kind : '';
     if (!lead) lead = (kind ? kind[0].toUpperCase() + kind.slice(1) : 'Statement') + ' ' + tag;
-    s = { tag, kind, lead, name, body };
+    const item = typeof e.in === 'string' && e.in
+      ? [...body.querySelectorAll('[id]')].find((n) => n.getAttribute('id') === tag) : null;
+    if (item && item.parentNode) {
+      const n = [...item.parentNode.children].filter((c) => c.tagName === 'LI').indexOf(item) + 1;
+      if (n > 0) lead += ` (${n})`;
+    }
+    s = { tag, kind, lead, name, body, item: item ? tag : null };
   }
   read.set(tag, s);
   return s;
@@ -217,8 +227,9 @@ function stacksHref(h) {
  * of `STACKS_TAGS` alone, none of its attributes but a link's address, made
  * absolute, which opens the Stacks project in a tab of its own.  A displayed
  * formula is set as the Stacks project sets it, `\[ … \]` in its own block.
+ * The element whose id is `item`, an item the link names, is marked.
  */
-function stacksBody(src) {
+function stacksBody(src, item) {
   const out = document.createElement('div');
   out.className = 'preview-body body-prose stacks-body';
   const copy = (from, to) => {
@@ -242,6 +253,7 @@ function stacksBody(src) {
         }
       }
       if (c.tagName === 'DIV' && c.classList.contains('equation')) n.className = 'stacks-equation';
+      if (item && c.getAttribute('id') === item) n.className = 'stacks-item';
       copy(c, n);
       to.appendChild(n);
     }
@@ -264,7 +276,7 @@ export function stacksCard(ctx, tag) {
     el('span.preview-lead', lead),
     s && s.name ? el('span.preview-title', s.name) : null,
     el('span.chip.stacks-chip', 'Stacks project'));
-  const body = s ? stacksBody(s.body)
+  const body = s ? stacksBody(s.body, s.item)
     : el('div.preview-body', el('p.muted', 'The statement of this tag was not fetched for this blueprint.'));
   const card = el('div.preview.stacks-card', {
     role: 'dialog', 'aria-label': `${lead}${s && s.name ? ' (' + s.name + ')' : ''}, Stacks project`,
@@ -283,6 +295,17 @@ export function stacksCard(ctx, tag) {
     if (!/\\xymatrix/.test(e.textContent)) continue;
     e.replaceWith(el('a.stacks-diagram', { href: `${STACKS}/tag/${tag}`, target: '_blank', rel: 'noopener' },
       'A diagram, drawn on the Stacks project \u2197'));
+  }
+  // An item further down than the card shows is scrolled to, once the card
+  // is placed and has its height.
+  const mark = body.querySelector('.stacks-item');
+  if (mark && typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      if (!mark.isConnected) return;
+      const b = body.getBoundingClientRect();
+      const r = mark.getBoundingClientRect();
+      if (r.bottom > b.bottom) body.scrollTop += r.top - b.top - 8;
+    });
   }
   return card;
 }

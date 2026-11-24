@@ -103,7 +103,8 @@ by editing this file first. Version 1.
   "facts": null | { ...contents of lean-facts.json "decls"... },
 
   "stacks": {                                    // optional, see below
-    "00DV": { "kind": "lemma", "html": "<article class=\"env-lemma\" id=\"00DV\">…</article>" }
+    "00DV": { "kind": "lemma", "html": "<article class=\"env-lemma\" id=\"00DV\">…</article>" },
+    "00DW": { "kind": "lemma", "html": "<article class=\"env-lemma\" id=\"00DV\">…</article>", "in": "00DV" }
   },
 
   "derived": {
@@ -210,8 +211,11 @@ Notes
   `stacks.json` has (`blueprint stacks` fetches them): tag to `kind`, the
   environment (`lemma` for `<article class="env-lemma">`), and `html`, the
   article as the Stacks project's API hands it out, heading included, maths
-  raw TeX.  The website takes the words out of it and keeps only harmless
-  markup.  Left out when there are none.
+  raw TeX.  The tag of an item of a statement's list has the statement's
+  article, `in` saying the statement's tag; the website marks the item,
+  the element of the article with the item's tag as its id.  The website
+  takes the words out of it and keeps only harmless markup.  Left out when
+  there are none.
 - `derived.status` has an entry for every object whose kind permits `lean`.
 - Check codes (levels in brackets):
   `unknown-kind` [error], `unknown-attr` [error], `bad-boundary` [error],

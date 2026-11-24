@@ -316,8 +316,11 @@ structure StacksStatement where
   tag : String
   /-- The environment, `lemma` for `<article class="env-lemma">`. -/
   kind : String
-  /-- The article, as fetched. -/
+  /-- The article, as fetched: for an item, the statement's. -/
   html : String
+  /-- For the tag of an item of a statement's list, `00DW`, the tag of the
+  statement it is in, `00DV`, whose article `html` is; empty for a statement. -/
+  parent : String := ""
   deriving Inhabited, BEq, Repr
 
 /-- Project level configuration from `blueprint.toml`. -/

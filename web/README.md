@@ -816,6 +816,12 @@ under the pointer, a plain click doing nothing.
   project. Its maths is raw TeX that KaTeX sets, but a commutative diagram,
   `\xymatrix`, which KaTeX lacks, becomes a link to the tag's page, where
   the Stacks project draws it.
+* An item's tag, `00DW` in Nakayama's lemma, stands for the whole
+  statement: its entry in `stacks` has the statement's article and says
+  the statement's tag as `in`. The card and the tooltip name the item's
+  number after the statement's, "Lemma 10.20.1 (1)"; the item, the element
+  of the article with its tag as id, is marked (`li.stacks-item`), and
+  when it lies below what the card shows, the card scrolls to it.
 * A tag whose statement the snapshot lacks still gets a card, which says so,
   with the link; an address that is no tag leaves the words plain, as a
   broken quiet link (`blueprint check` reports both). Comments have no Stacks
