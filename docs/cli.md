@@ -553,6 +553,38 @@ with a proof in its body.  The facts are `--facts`, else
 `<root>/lean-facts.json` when it is there; without them the command only
 splits.  `--dry-run` prints what it would do and writes nothing.
 
+### `blueprint stacks [--refresh]`
+
+Fetches the statements of the Stacks project tags the prose links to,
+`[text](stacks:00DV)` (see *Stacks links* below), into `stacks.json` next to
+`blueprint.toml`, for the website to show.  The website cannot ask the
+Stacks project itself: its API (`https://stacks.math.columbia.edu/data/tag/<tag>/content/statement`)
+does not let another site's pages read it.  So the statements are fetched
+once, here, with `curl`, and `build`, `site`, `serve` and `export` read the
+file when it is there, as they read `lean-facts.json`.  Commit it with the
+sources, and a build, CI's among them, needs no network.
+
+Only a tag missing from the file is fetched; `--refresh` fetches every one
+again, after the Stacks project has changed a statement.  The file is
+written with the tags linked to and no others, so a link taken out drops its
+statement.  Only a statement will do, the tag of a lemma, a proposition, a
+theorem, a definition, a remark, an example and so on; a tag that is a
+chapter, a section or an item of a statement's list, or no tag at all, is
+reported and left out, and so is one that cannot be fetched (one fetched
+before keeps its old statement).  Either leaves the exit status `1`.
+
+```
+$ blueprint stacks
+00DV: lemma, https://stacks.math.columbia.edu/tag/00DV
+blueprint: Stacks project tag 01QM: a section, not a statement
+wrote ./stacks.json (1 statement(s): 1 fetched, 0 kept, 0 no longer linked to dropped)
+```
+
+The file is an object `tags` from tag to `{"kind": "lemma", "html": "<article …>"}`,
+the article as the Stacks project hands it out, its maths raw TeX; the
+snapshot carries the statements of the tags linked to as `stacks`
+(`snapshot-format.md`).
+
 ## `blueprint.toml`
 
 At the project root.  Everything is optional.
@@ -1086,6 +1118,26 @@ reports and `rename` rewrites this form too.
 ```markdown
 $$\href{@def-norm}{\|x\|} = \sqrt{\langle x, x \rangle}$$
 ```
+
+**Stacks links.**  `[text](stacks:00DV)` cites the statement of a Stacks
+project tag (https://stacks.math.columbia.edu/tag/00DV) in words of the
+prose.  The website sets them as a quiet link: the words around them,
+underlined only under the pointer, a plain click doing nothing.  A click
+with Ctrl held (⌘ on a Mac) shows the statement in a card beside them,
+"Lemma 10.20.1 (Nakayama's lemma)" with its maths set, and a link to the
+tag's page.  The card stays until Escape, a click elsewhere or a scroll.
+Inside maths, `\href{stacks:00DV}{…}` links part of a formula the same way.
+The PDF sets the words, or the formula, alone.
+
+```markdown
+By [Nakayama's lemma](stacks:00DV), $M = 0$.
+```
+
+The statements come from `stacks.json`, which `blueprint stacks` fills.
+`check` reports a link whose address is no tag (four digits and letters,
+such as `00DV`) as `bad-link`, and one to a tag whose statement the
+file lacks as `stacks-unfetched`.  Maths is skipped.  A Stacks link creates
+no edge.
 
 **References.**  Each entry of the bibliography is an object of kind
 `reference`, with the fields BibTeX gives it: `author` and `editor` (a list

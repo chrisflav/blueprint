@@ -1059,8 +1059,9 @@ export function mathToLatex(span, { title = false } = {}) {
     // KaTeX ignores labels; LaTeX would complain about every duplicate.
     .replace(/\\label\s*\{[^{}]*\}/g, '')
     // A quiet link, `\href{@slug}{…}`, is the part it links, a group as KaTeX
-    // sets it: the website follows it, a PDF has nowhere to.
-    .replace(/\\href\s*\{@[^{}]*\}/g, '');
+    // sets it: the website follows it, a PDF has nowhere to.  A Stacks link,
+    // `\href{stacks:00DV}{…}`, likewise: the website shows its statement.
+    .replace(/\\href\s*\{(?:@|stacks:)[^{}]*\}/g, '');
   // A letter LaTeX knows only in text: `\mathrm{ét}`.
   let fixed = '';
   for (const ch of body) fixed += isTextLetter(ch.codePointAt(0)) ? `\\text{${ch}}` : ch;

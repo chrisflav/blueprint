@@ -263,6 +263,7 @@ Blueprint/Diff.lean      the semantic diff, and one file at a time for `log`
 Blueprint/Site.lean      site assembly, the snapshot history index
 Blueprint/Attr.lean      the @[blueprint] attribute (Lean core only)
 Blueprint/Extract.lean   environment walk, lean-facts.json
+Blueprint/Stacks.lean    Stacks project tags: stacks.json, fetching statements
 Blueprint/Cli.lean       the commands
 Main.lean                the executable
 BlueprintExamples/       the Lean development examples/ talks about

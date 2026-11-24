@@ -101,6 +101,9 @@ structure Snapshot where
   progress : Array (String × Array (String × Progress)) := #[]
   /-- Every check produced by `blueprint check`. -/
   checks : Array Check := #[]
+  /-- The statements of the Stacks project tags the prose links to, of those
+  `stacks.json` has, sorted by tag. -/
+  stacks : Array StacksStatement := #[]
   deriving Inhabited
 
 /-- The snapshot of an analysis. -/
@@ -111,7 +114,10 @@ def Analysis.snapshot (a : Analysis) (facts : Option Facts := none) : Snapshot :
     facts := facts.map (·.json)
     statuses := a.statuses
     progress := a.progress
-    checks := a.checks }
+    checks := a.checks
+    stacks := if a.blueprint.project.stacks.isEmpty then #[] else
+      let linked := linkedStacksTags a.blueprint
+      a.blueprint.project.stacks.filter (linked.contains ·.tag) }
 
 /-- The project's intro as JSON, `project.intro` in the snapshot (and in the
 site's `intro.json`).  Each optional field is left out when it is not set. -/
@@ -140,9 +146,11 @@ def Project.provenanceJson (p : Project) : Json :=
       ("value", Json.str v.value), ("label", Json.str v.label), ("color", Json.str v.color)] ++
       (if v.dark.isEmpty then [] else [("dark", Json.str v.dark)]))))]
 
-/-- A snapshot as JSON, exactly as `docs/snapshot-format.md` describes it. -/
+/-- A snapshot as JSON, exactly as `docs/snapshot-format.md` describes it.
+`stacks` is left out when the prose links to no Stacks project tag that
+`stacks.json` has. -/
 def Snapshot.toJson (s : Snapshot) : Json :=
-  Json.mkObj [
+  Json.mkObj <| (if s.stacks.isEmpty then [] else [("stacks", stacksJson s.stacks)]) ++ [
     ("version", Json.num (JsonNumber.fromInt s.version)),
     -- `katexMacros`, `numbering`, `logo`, `docgen`, `provenance`, `sources` and `intro` are left out when the project
     -- declares none, `pdfDetails` unless it is `false`, `pdfScopes` unless it
@@ -384,7 +392,8 @@ def Snapshot.ofJson (j : Json) : Except String Snapshot := do
   let checks := match field? derived "checks" with
     | some (.arr xs) => xs.map Check.ofJson
     | _ => #[]
-  return { version, project, schema, objects, facts, statuses, progress, checks }
+  let stacks := stacksOfJson ((field? j "stacks").getD Json.null)
+  return { version, project, schema, objects, facts, statuses, progress, checks, stacks }
 
 /-- Parse a snapshot from text. -/
 def Snapshot.parse (text : String) : Except String Snapshot := do

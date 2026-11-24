@@ -4,6 +4,7 @@ import Blueprint.Schema
 import Blueprint.Parse
 import Blueprint.View
 import Blueprint.Status
+import Blueprint.Stacks
 import Blueprint.Check
 import Blueprint.Json
 import Blueprint.Git

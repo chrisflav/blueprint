@@ -791,6 +791,37 @@ exactly as the prose around it, in its colour and weight, with no underline
   sub- and superscripts and limits, is the underline; no glyph of the
   formula moves for it. The PDF sets the formula alone (`mathToLatex`).
 
+A *Stacks link*, `[text](stacks:00DV)` in prose or `\href{stacks:00DV}{…}`
+in a formula, cites a statement of the Stacks project in words of the prose
+(`stacksLinks` in `app.js`). It is set exactly as a quiet link: the same
+`quietlink` class, no address (the tag is in `data-stacks`), underlined only
+under the pointer, a plain click doing nothing.
+
+* A click with Ctrl held, ⌘ on a Mac, shows the statement in a card against
+  the link (`watchQuietLinks`, `showStacksCard` and `stacksCard` in
+  `preview.js`): what the Stacks project calls it and its name, "Lemma
+  10.20.1" and "Nakayama's lemma", the statement with its maths set, and
+  "On the Stacks project ↗" to the tag's page, in a tab of its own. Its
+  tooltip says it: "Lemma 10.20.1, Stacks project (Ctrl+click to show)".
+* Asked for by a click, the card is *sticky*: it stays when the pointer
+  moves off it, and a link the pointer passes over opens no card in its
+  place, until Escape, a click elsewhere, a scroll or a change of route. A
+  Stacks link inside a hover card opens its card beside it, and both stay.
+* The statement is the snapshot's `stacks`, which `blueprint stacks`
+  fetched: the website cannot ask the Stacks project itself, whose API
+  sends no CORS header. It is the article as the Stacks project hands it
+  out, parsed in an inert document (`stacksStatement`); the card copies its
+  text into new elements of a short list (paragraphs, lists, emphasis),
+  with no attribute but a link's address, made absolute on the Stacks
+  project. Its maths is raw TeX that KaTeX sets, but a commutative diagram,
+  `\xymatrix`, which KaTeX lacks, becomes a link to the tag's page, where
+  the Stacks project draws it.
+* A tag whose statement the snapshot lacks still gets a card, which says so,
+  with the link; an address that is no tag leaves the words plain, as a
+  broken quiet link (`blueprint check` reports both). Comments have no Stacks
+  links, as they have no quiet links; edited prose keeps them. The PDF sets
+  the words, or the formula, alone.
+
 ### Export PDF
 
 The top bar's **Export PDF** button (also on every document page, next to
@@ -875,7 +906,7 @@ the pages knowing about it.
 | `search.js` | the search page, after the Stacks project's: the form, the results as the document's tree, the pages, results per page and the query tips |
 | `intro.js` | the project's intro, shown over the landing page while the graph is laid out under it |
 | `prefetch.js` | fetching what the reader may open next, one file at a time, while the browser is idle |
-| `preview.js` | the card a link to an object opens while the pointer rests on it, and the card of Lean names the document's "object" link opens |
+| `preview.js` | the card a link to an object opens while the pointer rests on it, the card of Lean names the document's "object" link opens, and the card of a Stacks project statement a Stacks link shows on Ctrl+click |
 | `pdf.js` | the Export PDF button and dialog: the part, the detail, finding or making the PDF, the TeX source |
 | `edit.js`, `edit.css` | edit mode (`../docs/graph-edit.md`): loaded only when the reader enters it (*Edit graph* behind the graph's Filters, `?edit=1`); the bar, the menus, the dialogs, the side panel's editor, the log in `localStorage` |
 | `edit-model.js` | **pure**: the editor's operations as a log of changes over the snapshot, replayed by `applyOps`; the summary, the checks, the edit file |

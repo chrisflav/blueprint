@@ -1,4 +1,5 @@
 import Blueprint.Status
+import Blueprint.Stacks
 
 /-!
 # Validation
@@ -108,24 +109,28 @@ def extractLinks (body : String) : Array String :=
   let cs := body.toList
   scanLinks cs.length cs ' ' #[]
 
-/-- Scan a body for the targets of quiet links, `[text](@slug)`: the address
-after the `@`, up to the closing parenthesis or a title.  Maths is skipped, as
+/-- Scan a body for the addresses of links, `[text](<pre>address)`, that start
+with `pre`: `@` for a quiet link, `stacks:` for a Stacks link.  The address
+after `pre`, up to the closing parenthesis or a title.  Maths is skipped, as
 for `[slug]`. -/
-private def scanQuietLinks : Nat → List Char → Char → Array String → Array String
+private def scanAddresses (pre : List Char) : Nat → List Char → Char → Array String → Array String
   | 0, _, _, acc => acc
   | _, [], _, acc => acc
   | fuel + 1, c :: rest, prev, acc =>
     if c == '$' && prev != '\\' then
       match rest with
-      | '$' :: r => scanQuietLinks fuel (skipMath fuel r true) '$' acc
-      | r => scanQuietLinks fuel (skipMath fuel r false) '$' acc
+      | '$' :: r => scanAddresses pre fuel (skipMath fuel r true) '$' acc
+      | r => scanAddresses pre fuel (skipMath fuel r false) '$' acc
     else if c == ']' && prev != '\\' then
       match rest with
-      | '(' :: '@' :: r =>
-        let slug := String.ofList (r.takeWhile fun d => d != ')' && !d.isWhitespace)
-        scanQuietLinks fuel r '@' (acc.push slug)
-      | _ => scanQuietLinks fuel rest c acc
-    else scanQuietLinks fuel rest c acc
+      | '(' :: r =>
+        if pre.isPrefixOf r then
+          let r := r.drop pre.length
+          let a := String.ofList (r.takeWhile fun d => d != ')' && !d.isWhitespace)
+          scanAddresses pre fuel r '@' (acc.push a)
+        else scanAddresses pre fuel rest c acc
+      | _ => scanAddresses pre fuel rest c acc
+    else scanAddresses pre fuel rest c acc
 
 /-- The targets of the quiet links in a body: `[text](@slug)` in prose, in
 order of appearance, then `\href{@slug}{…}`, which links part of a formula.
@@ -135,7 +140,28 @@ def extractQuietLinks (body : String) : Array String :=
   let cs := body.toList
   let inMaths := ((body.splitOn "\\href{@").drop 1).map fun s =>
     String.ofList (s.toList.takeWhile (· != '}'))
-  scanQuietLinks cs.length cs ' ' #[] ++ inMaths.toArray
+  scanAddresses ['@'] cs.length cs ' ' #[] ++ inMaths.toArray
+
+/-- The addresses of the Stacks links in a body, the part after `stacks:`:
+`[text](stacks:00DV)` in prose, in order of appearance, then
+`\href{stacks:00DV}{…}`, which links part of a formula.  As written, for the
+checks to judge (`stacksTag?`).  The website sets one as the words or the
+formula around it, a click with Ctrl held showing the tag's statement. -/
+def extractStacksLinks (body : String) : Array String :=
+  let cs := body.toList
+  let inMaths := ((body.splitOn "\\href{stacks:").drop 1).map fun s =>
+    String.ofList (s.toList.takeWhile (· != '}'))
+  scanAddresses "stacks:".toList cs.length cs ' ' #[] ++ inMaths.toArray
+
+/-- The Stacks project tags a blueprint links to, in its bodies and its
+statements' `source`s, sorted: those whose statements `blueprint stacks`
+fetches and the snapshot carries. -/
+def linkedStacksTags (b : Blueprint) : Array String :=
+  sortDedup <| b.objects.flatMap fun o =>
+    let src := match o.attr? "source" with
+      | some (.str s) => s
+      | _ => ""
+    (extractStacksLinks o.body ++ extractStacksLinks src).filterMap stacksTag?
 
 /-- Scan for the first parts of bracketed lists, `[a, …]`, that read as an
 id (not a number): what a citation `[id, locator]` or `[a, b]` cites first.
@@ -391,6 +417,22 @@ def structuralChecks (b : Blueprint) : Array Check := Id.run do
       if !b.contains l then
         cs := cs.push <| Check.warning "bad-link"
           s!"{o.source.file}: '{o.id}' links to (@{l}), which is not an object" #[o.id]
+  -- Stacks links, `[text](stacks:00DV)`, in prose and in a `source`: a tag,
+  -- whose statement `blueprint stacks` has fetched into `stacks.json`
+  for o in b.objects do
+    let src := match o.attr? "source" with
+      | some (.str s) => s
+      | _ => ""
+    for (text, what) in #[(o.body, "links"), (src, "has a source linking")] do
+      for l in sortDedup (extractStacksLinks text) do
+        match stacksTag? l with
+        | none =>
+          cs := cs.push <| Check.warning "bad-link"
+            s!"{o.source.file}: '{o.id}' {what} to (stacks:{l}), which is not a Stacks project tag (four digits and capital letters, such as 00DV)" #[o.id]
+        | some t =>
+          unless b.project.stacks.any (·.tag == t) do
+            cs := cs.push <| Check.warning "stacks-unfetched"
+              s!"{o.source.file}: '{o.id}' {what} to Stacks project tag {t}, whose statement stacks.json does not have; 'blueprint stacks' fetches it" #[o.id]
   return cs
 
 /-! ## View consistency lints -/

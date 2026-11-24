@@ -102,6 +102,10 @@ by editing this file first. Version 1.
 
   "facts": null | { ...contents of lean-facts.json "decls"... },
 
+  "stacks": {                                    // optional, see below
+    "00DV": { "kind": "lemma", "html": "<article class=\"env-lemma\" id=\"00DV\">…</article>" }
+  },
+
   "derived": {
     "status": { "key-prop": "proved" },          // absent|missing|stated|proved|proved_with_axioms
     "progress": {                                // per collapse kind, per object
@@ -201,6 +205,13 @@ Notes
 - Sugar-created objects have `source.anonymous = true` and `source.file` set
   to the file that created them. Their `body` is `""`.
 - `facts` is `null` when no `lean-facts.json` was available.
+- `stacks` holds the statements of the Stacks project tags the prose links
+  to, `[text](stacks:00DV)` or `\href{stacks:00DV}{…}`, of those
+  `stacks.json` has (`blueprint stacks` fetches them): tag to `kind`, the
+  environment (`lemma` for `<article class="env-lemma">`), and `html`, the
+  article as the Stacks project's API hands it out, heading included, maths
+  raw TeX.  The website takes the words out of it and keeps only harmless
+  markup.  Left out when there are none.
 - `derived.status` has an entry for every object whose kind permits `lean`.
 - Check codes (levels in brackets):
   `unknown-kind` [error], `unknown-attr` [error], `bad-boundary` [error],
@@ -209,6 +220,8 @@ Notes
   `missing-lean` [error, only with facts], `status-regression` [error, diff only],
   `multi-parent` [warning], `undeclared-edge` [info], `unwitnessed-edge` [info],
   `declared-not-actual` [info], `actual-not-declared` [warning], `bad-link` [warning],
+  `stacks-unfetched` [warning: a Stacks link to a tag `stacks.json` has no
+  statement of],
   `bad-attr` [error: `hide_content` other than `true`, `false`, `"yes"`, `"no"`;
   `serial` other than a string, a whole number or `false`; `source` other
   than a string; the attribute of `[site.provenance]` other than one of its

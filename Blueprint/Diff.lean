@@ -54,10 +54,20 @@ def readLakeSources (root : System.FilePath) : IO (Array (String × String × St
     out := out.push (s!"{packagesDir}/{name}/", url, rev)
   return out.qsort (fun a b => a.1 < b.1)
 
-/-- Read `blueprint.toml` and every Markdown source under the project root. -/
+/-- The statements `blueprint stacks` fetched into `<root>/stacks.json`, for
+`Project.stacks`; none without that file. -/
+def readStacksFile (root : System.FilePath) : IO (Array StacksStatement) := do
+  let file := root / "stacks.json"
+  unless ← file.pathExists do return #[]
+  match parseStacksFile (← IO.FS.readFile file) with
+  | .ok xs => return xs
+  | .error e => throw <| IO.userError s!"{file}: {e}"
+
+/-- Read `blueprint.toml` and every Markdown source under the project root,
+with `stacks.json` when it is there. -/
 def load (root : System.FilePath) : IO Loaded := do
   let (project, schema) ← loadConfig root
-  let project := { project with sources := ← readLakeSources root }
+  let project := { project with sources := ← readLakeSources root, stacks := ← readStacksFile root }
   let r ← parseProject root project schema
   return { blueprint := Blueprint.ofObjects project schema r.objects, checks := r.checks }
 
