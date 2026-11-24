@@ -951,6 +951,11 @@ a.objlink.broken { color: var(--lv-missing, var(--st-missing)); text-decoration:
 a.quietlink, a.quietlink:hover { color: inherit; text-decoration: none; cursor: text; }
 a.quietlink[data-href]:hover { text-decoration: underline; }
 html.quiet-follow a.quietlink[data-href]:hover { cursor: pointer; }
+/* In a formula, `\href{@slug}{…}`, an underline would reach only the glyphs
+   on the baseline, in pieces: there the part linked is one box, and its foot,
+   below its sub- and superscripts and limits, is the underline. */
+.katex a.quietlink { display: inline-block; }
+.katex a.quietlink[data-href]:hover { text-decoration: none; box-shadow: inset 0 -1px 0 currentColor; }
 
 /* The card a link to an object shows while the pointer rests on it
    (preview.js): its head, the prose, scrolling when it is long, and a foot.

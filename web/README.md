@@ -778,6 +778,18 @@ exactly as the prose around it, in its colour and weight, with no underline
   `blueprint check` reports it as `bad-link`. The PDF sets the words alone.
   Comments have no quiet links: their sanitiser drops the `@` address, as
   it drops every address it does not keep.
+* Inside a formula, `\href{@slug}{…}` links part of it the same way:
+  `$$\href{@def-norm}{\|x\|} = \sqrt{\langle x, x\rangle}$$` links the
+  left-hand side alone, with no need to cut the formula in two. It is the
+  one `\href` KaTeX is trusted with, and only in prose, a body or a
+  statement's `source`, edited or not (`trustQuietHref`,
+  `renderMath(…, {prose})`); in a title, often a link itself, and in a
+  comment, `\href` stays unsupported as before. KaTeX sets the part linked
+  in an `<a>` that `quietLinks` takes as it takes the words' one. A text
+  underline would reach only the glyphs on the baseline, in pieces, so there
+  the part linked is one box (`.katex a.quietlink`), whose foot, below its
+  sub- and superscripts and limits, is the underline; no glyph of the
+  formula moves for it. The PDF sets the formula alone (`mathToLatex`).
 
 ### Export PDF
 

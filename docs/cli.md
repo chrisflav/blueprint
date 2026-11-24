@@ -68,8 +68,8 @@ Rewrites every reference to `old` in every source file: front matter strings
 (including `old` appearing as one `/` or `~` separated segment of a derived
 id), sugar values, and in bodies and `source` values `[old]` links, the
 ids of citations (`[old, Thm. 1]`, `[a, old]`: every leading id that names a
-reference) and `[text](@old)` quiet links.  A link's text, `[old](url)`,
-is prose and is left alone.  The file that declares the
+reference), and `[text](@old)` and `\href{@old}` quiet links.  A link's
+text, `[old](url)`, is prose and is left alone.  The file that declares the
 object gets `new` as its `id` and `old` appended to its `aliases`.  Files are
 never renamed or moved; if the id used to come from the file name, an
 explicit `id` key is inserted instead.
@@ -1075,6 +1075,16 @@ when `slug` does not resolve (maths is skipped) and creates no edge.
 
 ```markdown
 Every [compact Hausdorff space](@def-compact-hausdorff) is normal.
+```
+
+Inside maths, `\href{@slug}{…}` links part of a formula the same way, so
+that the left-hand side of an equation, say, is linked without cutting the
+formula in two.  Under the pointer the part linked is underlined as a whole,
+below its sub- and superscripts; the PDF sets the formula alone.  `check`
+reports and `rename` rewrites this form too.
+
+```markdown
+$$\href{@def-norm}{\|x\|} = \sqrt{\langle x, x \rangle}$$
 ```
 
 **References.**  Each entry of the bibliography is an object of kind
